@@ -301,6 +301,61 @@ textarea {
   color: var(--text-muted);
 }
 
+/* ── Upload drop zone ── */
+
+.optional {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.drop-zone {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  user-select: none;
+}
+
+.drop-zone:hover,
+.drop-zone.drag-over {
+  border-color: var(--primary);
+  background: #eff6ff;
+  color: var(--text);
+}
+
+.drop-zone svg { flex-shrink: 0; }
+
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--primary);
+  font-size: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.btn-link:hover { color: var(--primary-hover); }
+
+.file-status {
+  font-size: 0.8rem;
+  margin-top: 0.375rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.file-status.success { color: #16a34a; }
+.file-status.error   { color: var(--error); }
+
 /* ── Responsive ── */
 
 @media (max-width: 600px) {

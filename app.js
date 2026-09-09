@@ -2,17 +2,68 @@ if (typeof CONFIG === 'undefined') {
   console.error('MinuteHand: config.js not found. Copy config.example.js to config.js and fill in your Supabase credentials.');
 }
 
-const generateBtn   = document.getElementById('generate-btn');
-const notesInput    = document.getElementById('notes-input');
+const generateBtn    = document.getElementById('generate-btn');
+const notesInput     = document.getElementById('notes-input');
 const templateSelect = document.getElementById('template-select');
-const formSection   = document.getElementById('form-section');
-const resultSection = document.getElementById('result-section');
+const formSection    = document.getElementById('form-section');
+const resultSection  = document.getElementById('result-section');
 const minutesPreview = document.getElementById('minutes-preview');
-const downloadBtn   = document.getElementById('download-btn');
-const resetBtn      = document.getElementById('reset-btn');
-const errorMsg      = document.getElementById('error-msg');
+const downloadBtn    = document.getElementById('download-btn');
+const resetBtn       = document.getElementById('reset-btn');
+const errorMsg       = document.getElementById('error-msg');
+const dropZone       = document.getElementById('drop-zone');
+const docxInput      = document.getElementById('docx-input');
+const browseBtn      = document.getElementById('browse-btn');
+const fileStatus     = document.getElementById('file-status');
 
 let currentMinutesMarkdown = '';
+
+// ── .docx upload ──────────────────────────────────────────────────────────────
+
+browseBtn.addEventListener('click', () => docxInput.click());
+dropZone.addEventListener('click', (e) => { if (e.target !== browseBtn) docxInput.click(); });
+
+docxInput.addEventListener('change', () => {
+  if (docxInput.files[0]) loadDocx(docxInput.files[0]);
+});
+
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.classList.add('drag-over');
+});
+
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadDocx(file);
+});
+
+async function loadDocx(file) {
+  if (!file.name.endsWith('.docx')) {
+    setFileStatus('Only .docx files are supported.', 'error');
+    return;
+  }
+
+  setFileStatus('Reading…', '');
+
+  try {
+    const buffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+    notesInput.value = result.value.trim();
+    setFileStatus(`✓ ${file.name} imported`, 'success');
+  } catch {
+    setFileStatus('Could not read file. Is it a valid .docx?', 'error');
+  }
+}
+
+function setFileStatus(msg, type) {
+  fileStatus.textContent = msg;
+  fileStatus.className = `file-status ${type}`;
+  fileStatus.classList.remove('hidden');
+}
 
 // ── Generate ──────────────────────────────────────────────────────────────────
 
@@ -93,6 +144,8 @@ resetBtn.addEventListener('click', () => {
   resultSection.classList.add('hidden');
   formSection.classList.remove('hidden');
   currentMinutesMarkdown = '';
+  fileStatus.classList.add('hidden');
+  docxInput.value = '';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
