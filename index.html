@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MinuteHand — Meeting Minutes Generator</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://unpkg.com/html-docx-js@0.3.1/dist/html-docx.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="container">
+      <div class="logo">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <circle cx="14" cy="14" r="13" stroke="currentColor" stroke-width="2"/>
+          <line x1="14" y1="14" x2="14" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="14" y1="14" x2="19" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>MinuteHand</span>
+      </div>
+      <p class="tagline">Turn messy meeting notes into polished minutes.</p>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <section id="form-section" class="card">
+      <h1>Generate Meeting Minutes</h1>
+
+      <div class="form-group">
+        <label for="template-select">Meeting type</label>
+        <select id="template-select">
+          <option value="STRATA">Strata Council (BC)</option>
+          <option value="HOA_GENERIC">HOA Board</option>
+          <option value="NONPROFIT_BOARD">Nonprofit Board</option>
+          <option value="TEAM_INFORMAL">Team / Informal Meeting</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="notes-input">Meeting notes or transcript</label>
+        <textarea
+          id="notes-input"
+          placeholder="Paste your meeting notes, rough transcript, or any combination of both here…"
+          rows="18"
+          spellcheck="false"
+        ></textarea>
+        <p class="field-hint">Include date, location, attendees, and any motions made if you have them.</p>
+      </div>
+
+      <div class="form-footer">
+        <button id="generate-btn" class="btn-primary">Generate Minutes</button>
+        <p id="error-msg" class="error hidden"></p>
+      </div>
+    </section>
+
+    <section id="result-section" class="card hidden">
+      <div class="result-header">
+        <h1>Meeting Minutes</h1>
+        <div class="result-actions">
+          <button id="download-btn" class="btn-secondary">Download .docx</button>
+          <button id="reset-btn" class="btn-ghost">Start over</button>
+        </div>
+      </div>
+      <div id="minutes-preview" class="minutes-preview"></div>
+    </section>
+
+  </main>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
