@@ -95,11 +95,18 @@ audioDropZone.addEventListener('drop', (e) => {
   if (file) selectAudioFile(file);
 });
 
+const MAX_AUDIO_BYTES = 50 * 1024 * 1024; // 50 MB — Supabase Storage tier limit
+
 function selectAudioFile(file) {
   const allowed = ['audio/mpeg','audio/mp4','audio/wav','audio/ogg','audio/webm','video/mp4'];
   const byExt = /\.(mp3|m4a|wav|ogg|webm|mp4)$/i.test(file.name);
   if (!allowed.includes(file.type) && !byExt) {
     setFileStatus(audioStatus, 'Unsupported file type. Use .mp3, .m4a, or .wav.', 'error');
+    return;
+  }
+  if (file.size > MAX_AUDIO_BYTES) {
+    const mb = (file.size / 1024 / 1024).toFixed(0);
+    setFileStatus(audioStatus, `File is ${mb} MB — maximum is 50 MB. Re-export at a lower bitrate (64 kbps MP3 fits ~90 min).`, 'error');
     return;
   }
   audioFile = file;

@@ -4,7 +4,7 @@ VALUES (
   'audio',
   'audio',
   true,
-  209715200,
+  52428800,
   ARRAY['audio/mpeg','audio/mp4','audio/wav','audio/ogg','audio/webm','video/mp4']
 )
 ON CONFLICT (id) DO NOTHING;
