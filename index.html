@@ -41,6 +41,20 @@
       </div>
 
       <div class="form-group">
+        <label>Upload audio recording <span class="optional">(optional — .mp3, .m4a, .wav)</span></label>
+        <div id="audio-drop-zone" class="drop-zone">
+          <input type="file" id="audio-input" accept=".mp3,.m4a,.wav,.mp4,.ogg,.webm" hidden>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m0-9L7 6m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13v2a2 2 0 002 2h10a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span id="audio-drop-label">Drag an audio file here or <button type="button" id="audio-browse-btn" class="btn-link">browse</button></span>
+        </div>
+        <p id="audio-status" class="file-status hidden"></p>
+        <div id="upload-progress-wrap" class="upload-progress-wrap hidden">
+          <div class="upload-bar-track"><div id="upload-bar" class="upload-bar"></div></div>
+          <span id="upload-label" class="upload-label">Uploading…</span>
+        </div>
+      </div>
+
+      <div class="form-group">
         <label>Upload a .docx file <span class="optional">(optional)</span></label>
         <div id="drop-zone" class="drop-zone">
           <input type="file" id="docx-input" accept=".docx" hidden>
@@ -51,19 +65,30 @@
       </div>
 
       <div class="form-group">
-        <label for="notes-input">Meeting notes or transcript</label>
+        <label for="notes-input" id="notes-label">Meeting notes or transcript</label>
         <textarea
           id="notes-input"
           placeholder="Paste your meeting notes, rough transcript, or any combination of both here…"
           rows="14"
           spellcheck="false"
         ></textarea>
-        <p class="field-hint">Include date, location, attendees, and any motions made if you have them.</p>
+        <p class="field-hint" id="notes-hint">Include date, location, attendees, and any motions made if you have them.</p>
       </div>
 
       <div class="form-footer">
         <button id="generate-btn" class="btn-primary">Generate Minutes</button>
         <p id="error-msg" class="error hidden"></p>
+      </div>
+    </section>
+
+    <section id="speaker-section" class="card hidden">
+      <h1>Confirm Speaker Names</h1>
+      <p class="speaker-intro">We detected <strong id="speaker-count"></strong> speaker(s). Edit names below — pre-filled where introductions were detected in the first two minutes.</p>
+      <div id="speaker-list" class="speaker-list"></div>
+      <div class="form-footer">
+        <button id="confirm-speakers-btn" class="btn-primary">Generate Minutes</button>
+        <button id="back-to-form-btn" class="btn-ghost">← Back</button>
+        <p id="speaker-error-msg" class="error hidden"></p>
       </div>
     </section>
 
