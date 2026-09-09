@@ -578,6 +578,8 @@ input[type="email"]:focus {
 }
 
 .toast--success { background: #16a34a; color: #fff; }
+.toast--info    { background: #1e40af; color: #fff; }
+.toast--error   { background: var(--error); color: #fff; }
 
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateX(-50%) translateY(8px); }

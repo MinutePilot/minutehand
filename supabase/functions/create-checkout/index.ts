@@ -1,4 +1,3 @@
-import Stripe from "npm:stripe@^14";
 import { createClient } from "npm:@supabase/supabase-js@^2";
 
 const CORS = {
@@ -8,21 +7,31 @@ const CORS = {
 };
 
 const PACKS = {
-  "1_credit": {
-    name: "1 Meeting Credit",
-    description: "Generate one set of meeting minutes",
-    credits: 1,
-    amountCents: 700,
-    currency: "cad",
-  },
-  "5_credits": {
-    name: "5 Meeting Credits",
-    description: "Generate five sets of meeting minutes",
-    credits: 5,
-    amountCents: 2000,
-    currency: "cad",
-  },
+  "1_credit":  { name: "1 Meeting Credit",   credits: 1, amount: "7.00",  currency: "CAD" },
+  "5_credits": { name: "5 Meeting Credits",  credits: 5, amount: "20.00", currency: "CAD" },
 } as const;
+
+function paypalBase() {
+  return Deno.env.get("PAYPAL_MODE") === "sandbox"
+    ? "https://api-m.sandbox.paypal.com"
+    : "https://api-m.paypal.com";
+}
+
+async function getAccessToken(): Promise<string> {
+  const id     = Deno.env.get("PAYPAL_CLIENT_ID")!;
+  const secret = Deno.env.get("PAYPAL_CLIENT_SECRET")!;
+  const resp   = await fetch(`${paypalBase()}/v1/oauth2/token`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${btoa(`${id}:${secret}`)}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: "grant_type=client_credentials",
+  });
+  if (!resp.ok) throw new Error("Failed to get PayPal access token");
+  const { access_token } = await resp.json();
+  return access_token;
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
@@ -40,51 +49,54 @@ Deno.serve(async (req: Request) => {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return json({ error: "Invalid session" }, 401);
 
-  let pack: string;
-  let origin: string;
-
+  let pack: string, origin: string;
   try {
-    const body = await req.json();
-    pack = body.pack;
-    origin = body.origin;
+    ({ pack, origin } = await req.json());
   } catch {
     return json({ error: "Invalid request body" }, 400);
   }
 
   const packInfo = PACKS[pack as keyof typeof PACKS];
   if (!packInfo) return json({ error: "Invalid pack" }, 400);
-  if (!origin) return json({ error: "origin is required" }, 400);
-
-  const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!);
+  if (!origin)   return json({ error: "origin is required" }, 400);
 
   try {
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "payment",
-      allow_promotion_codes: true,
-      customer_email: user.email,
-      line_items: [
-        {
-          price_data: {
-            currency: packInfo.currency,
-            product_data: {
-              name: packInfo.name,
-              description: packInfo.description,
-            },
-            unit_amount: packInfo.amountCents,
-          },
-          quantity: 1,
+    const token = await getAccessToken();
+
+    const orderResp = await fetch(`${paypalBase()}/v2/checkout/orders`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        intent: "CAPTURE",
+        purchase_units: [{
+          amount: { currency_code: packInfo.currency, value: packInfo.amount },
+          description: packInfo.name,
+          custom_id: `${pack}:${user.id}`,
+        }],
+        application_context: {
+          brand_name: "MinuteHand",
+          user_action: "PAY_NOW",
+          return_url: `${origin}?payment=approved`,
+          cancel_url: `${origin}?payment=cancelled`,
         },
-      ],
-      metadata: { user_id: user.id, pack },
-      success_url: `${origin}?payment=success`,
-      cancel_url: `${origin}?payment=cancelled`,
+      }),
     });
 
-    return json({ url: session.url });
+    if (!orderResp.ok) {
+      console.error("PayPal order error:", await orderResp.text());
+      return json({ error: "Failed to create PayPal order" }, 500);
+    }
+
+    const order = await orderResp.json();
+    const approvalUrl = (order.links as { rel: string; href: string }[])
+      .find((l) => l.rel === "approve")?.href;
+
+    if (!approvalUrl) return json({ error: "No approval URL returned by PayPal" }, 500);
+
+    return json({ url: approvalUrl });
   } catch (err) {
-    console.error("Stripe error:", err);
-    return json({ error: "Failed to create checkout session" }, 500);
+    console.error("PayPal error:", err);
+    return json({ error: "Failed to create payment" }, 500);
   }
 });
 

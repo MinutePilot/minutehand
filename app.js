@@ -85,20 +85,38 @@ let currentMinutesMarkdown = '';
 
 supabaseClient.auth.onAuthStateChange(async (event, session) => {
   currentUser = session?.user ?? null;
-
   if (currentUser) {
     await refreshCreditBalance();
     updateAuthBar();
-    handlePostAuthRedirect();
-    // If we were on the sign-in screen, go back to the form
-    if (!signinSection.classList.contains('hidden')) {
-      showSection(formSection);
-    }
+    if (!signinSection.classList.contains('hidden')) showSection(formSection);
   } else {
     creditBalance = null;
     updateAuthBar();
   }
 });
+
+// On page load: handle returning from PayPal
+(async () => {
+  const params  = new URLSearchParams(window.location.search);
+  const payment = params.get('payment');
+  const orderId = params.get('token'); // PayPal passes the order ID as ?token=
+
+  if (payment === 'approved' && orderId) {
+    window.history.replaceState({}, '', window.location.pathname);
+    const toast = showToast('Processing payment…', 'info');
+    try {
+      await callEdgeFunction('capture-payment', { orderId });
+      toast.remove();
+      await refreshCreditBalance();
+      showPaymentSuccessToast();
+    } catch (err) {
+      toast.remove();
+      showToast(`Payment error: ${err.message || 'Please contact support.'}`, 'error');
+    }
+  } else if (payment === 'cancelled') {
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+})();
 
 async function refreshCreditBalance() {
   const { data } = await supabaseClient
@@ -130,21 +148,17 @@ function renderCreditsDisplay() {
   creditsDisplay.className = 'credits-badge' + (creditBalance === 0 ? ' empty' : '');
 }
 
-function handlePostAuthRedirect() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('payment') === 'success') {
-    window.history.replaceState({}, '', window.location.pathname);
-    // Balance was already refreshed above — just show a confirmation
-    showPaymentSuccessToast();
-  }
+function showPaymentSuccessToast() {
+  showToast(`Payment confirmed — you now have ${creditBalance} credit${creditBalance !== 1 ? 's' : ''}.`, 'success');
 }
 
-function showPaymentSuccessToast() {
+function showToast(message, type = 'success') {
   const toast = document.createElement('div');
-  toast.className = 'toast toast--success';
-  toast.textContent = `Credits added — you now have ${creditBalance} credit${creditBalance !== 1 ? 's' : ''}.`;
+  toast.className = `toast toast--${type}`;
+  toast.textContent = message;
   document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 4000);
+  if (type !== 'info') setTimeout(() => toast.remove(), 4000);
+  return toast;
 }
 
 // ── Auth UI event handlers ────────────────────────────────────────────────────
