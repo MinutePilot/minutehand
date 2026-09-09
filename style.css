@@ -356,6 +356,128 @@ textarea {
 .file-status.success { color: #16a34a; }
 .file-status.error   { color: var(--error); }
 
+/* ── Auth / account bar ── */
+
+input[type="email"] {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--card);
+  transition: border-color .15s, box-shadow .15s;
+}
+
+input[type="email"]:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+}
+
+.signin-intro,
+.buy-intro {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 1.25rem;
+}
+
+.signin-message {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  color: #16a34a;
+}
+
+.account-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  background: var(--bg);
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.account-bar--signedout { color: var(--text-muted); }
+.account-bar--signedin  { color: var(--text); }
+
+.account-sep { color: var(--border); }
+
+.account-email {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.credits-badge {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.credits-badge.empty { color: var(--error); }
+
+/* ── Credit packs ── */
+
+.credit-packs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.credit-pack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 1.25rem 1.25rem 1rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .15s, box-shadow .15s;
+  gap: 0.25rem;
+}
+
+.credit-pack:hover:not(:disabled) {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.08);
+}
+
+.credit-pack:disabled { opacity: .6; cursor: not-allowed; }
+
+.pack-amount {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pack-price {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1.2;
+}
+
+.pack-currency {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.pack-save {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #16a34a;
+  background: #dcfce7;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  margin-top: 0.125rem;
+}
+
 /* ── Upload progress ── */
 
 .upload-progress-wrap {
@@ -437,6 +559,29 @@ textarea {
 
 .speaker-row input.guessed {
   border-color: #16a34a;
+}
+
+/* ── Toast ── */
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0,0,0,.15);
+  z-index: 100;
+  animation: fadeInUp .2s ease;
+}
+
+.toast--success { background: #16a34a; color: #fff; }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 /* ── Responsive ── */

@@ -8,6 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://unpkg.com/html-docx-js@0.3.1/dist/html-docx.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
 
@@ -27,8 +28,55 @@
 
   <main class="container">
 
+    <section id="signin-section" class="card hidden">
+      <h1>Sign In</h1>
+      <p class="signin-intro">Enter your email and we'll send a magic link — no password needed.</p>
+      <div class="form-group">
+        <label for="signin-email">Email address</label>
+        <input type="email" id="signin-email" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="form-footer">
+        <button id="send-magic-link-btn" class="btn-primary">Send Magic Link</button>
+        <button id="back-from-signin-btn" class="btn-ghost">← Back</button>
+      </div>
+      <p id="signin-message" class="signin-message hidden"></p>
+      <p id="signin-error" class="error hidden"></p>
+    </section>
+
+    <section id="buy-credits-section" class="card hidden">
+      <h1>Buy Credits</h1>
+      <p class="buy-intro">Each credit generates one complete set of meeting minutes. Credits never expire.</p>
+      <div class="credit-packs">
+        <button class="credit-pack" data-pack="1_credit">
+          <span class="pack-amount">1 credit</span>
+          <span class="pack-price">$7 <span class="pack-currency">CAD</span></span>
+        </button>
+        <button class="credit-pack" data-pack="5_credits">
+          <span class="pack-amount">5 credits</span>
+          <span class="pack-price">$20 <span class="pack-currency">CAD</span></span>
+          <span class="pack-save">save 43%</span>
+        </button>
+      </div>
+      <p id="checkout-error" class="error hidden"></p>
+      <button id="back-from-credits-btn" class="btn-ghost" style="margin-top:1.25rem">← Back</button>
+    </section>
+
     <section id="form-section" class="card">
       <h1>Generate Meeting Minutes</h1>
+      <div id="account-bar" class="account-bar account-bar--signedout">
+        <span class="account-bar__signedout">
+          <button id="show-signin-btn" class="btn-link">Sign in</button> to manage your credits
+        </span>
+        <span class="account-bar__signedin hidden">
+          <span id="credits-display" class="credits-badge">— credits</span>
+          <span class="account-sep">·</span>
+          <button id="buy-credits-btn" class="btn-link">Buy more</button>
+          <span class="account-sep">·</span>
+          <span id="user-email-display" class="account-email"></span>
+          <span class="account-sep">·</span>
+          <button id="signout-btn" class="btn-link">Sign out</button>
+        </span>
+      </div>
 
       <div class="form-group">
         <label for="template-select">Meeting type</label>

@@ -1,4 +1,5 @@
 import Anthropic from "npm:@anthropic-ai/sdk@^0.36.3";
+import { createClient } from "npm:@supabase/supabase-js@^2";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -160,6 +161,41 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
   }
+
+  // ── Auth + credit check ───────────────────────────────────────────────────
+
+  const jwt = req.headers.get("Authorization")?.replace("Bearer ", "");
+  if (!jwt) return json({ error: "Authentication required" }, 401);
+
+  const supabaseUser = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: `Bearer ${jwt}` } } }
+  );
+
+  const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
+  if (authError || !user) return json({ error: "Invalid session" }, 401);
+
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  const { data: hasCredit, error: creditError } = await supabaseAdmin.rpc(
+    "check_and_deduct_credit",
+    { p_user_id: user.id }
+  );
+
+  if (creditError) {
+    console.error("Credit check error:", creditError);
+    return json({ error: "Failed to verify credits" }, 500);
+  }
+
+  if (!hasCredit) {
+    return json({ error: "No credits remaining", code: "NO_CREDITS" }, 402);
+  }
+
+  // ── Parse request ─────────────────────────────────────────────────────────
 
   let notes: string;
   let template: string;
