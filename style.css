@@ -808,6 +808,18 @@ body.landing {
   margin-bottom: 1.75rem;
 }
 
+.hero__resource {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.hero__resource a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.hero__resource a:hover { text-decoration: underline; }
+
 .hero__mockup {
   max-width: 500px;
   width: 100%;

@@ -156,6 +156,7 @@
           <p class="hero__sub">MinuteHand turns rough notes, Word docs, or audio recordings into polished, professional meeting minutes. Built for the volunteer secretaries who run strata councils, HOAs, and nonprofit boards.</p>
           <p class="hero__fact">MinuteHand converts meeting notes and audio recordings into professionally formatted meeting minutes for $7 CAD per meeting, with no subscription required.</p>
           <a href="/app.html" class="btn-primary btn-lg">Generate Your Minutes →</a>
+          <p class="hero__resource"><a href="#agenda-template" id="agenda-template-link">Free: strata council meeting agenda template →</a></p>
         </div>
         <div class="hero__mockup" aria-label="MinuteHand screenshots">
           <div class="mockup-carousel">
@@ -411,7 +412,7 @@
     </section>
 
     <!-- ── Agenda template ── -->
-    <section class="lp-agenda" aria-labelledby="agenda-heading">
+    <section class="lp-agenda" id="agenda-template" aria-labelledby="agenda-heading">
       <div class="container">
         <h2 id="agenda-heading">Free: Strata Council Meeting Agenda Template</h2>
         <p class="section-intro">Copy this template into your notes before the meeting. The cleaner your notes, the better your minutes.</p>
@@ -511,6 +512,13 @@ ATTENDEES:
 }());
 
 (function () {
+  var link = document.getElementById('agenda-template-link');
+  if (link) {
+    link.addEventListener('click', function () {
+      document.querySelector('.agenda-details').open = true;
+    });
+  }
+
   var btn = document.getElementById('agenda-copy-btn');
   if (!btn) return;
   btn.addEventListener('click', function () {
