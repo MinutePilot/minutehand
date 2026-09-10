@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — MinuteHand</title>
+  <meta name="description" content="MinuteHand Privacy Policy.">
+  <link rel="canonical" href="https://minutehand.ca/privacy.html">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .legal { max-width: 720px; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+    .legal h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    .legal .legal__meta { color: var(--text-muted); font-size: 0.875rem; margin-bottom: 2.5rem; }
+    .legal h2 { font-size: 1rem; font-weight: 600; margin: 2rem 0 0.5rem; }
+    .legal h3 { font-size: 0.9375rem; font-weight: 600; margin: 1.25rem 0 0.35rem; }
+    .legal p, .legal li { font-size: 0.9375rem; line-height: 1.7; color: var(--text); margin-bottom: 0.75rem; }
+    .legal ul, .legal ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+    .legal li { margin-bottom: 0.4rem; }
+    .legal table { width: 100%; border-collapse: collapse; font-size: 0.875rem; margin: 1rem 0 1.5rem; }
+    .legal th { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 2px solid var(--border); font-weight: 600; color: var(--text); }
+    .legal td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--text); }
+    .legal td:first-child { font-weight: 500; white-space: nowrap; }
+  </style>
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a href="/" class="logo" aria-label="MinuteHand home">
+        <svg width="26" height="26" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <circle cx="14" cy="14" r="13" stroke="currentColor" stroke-width="2"/>
+          <line x1="14" y1="14" x2="14" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="14" y1="14" x2="19" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        MinuteHand
+      </a>
+      <nav aria-label="Site navigation">
+        <a href="/#pricing" class="nav-link">Pricing</a>
+        <a href="/app.html" class="btn-primary btn-sm">Open App →</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="legal">
+
+      <h1>Privacy Policy</h1>
+      <p class="legal__meta">Last updated: September 10, 2026</p>
+
+      <p>MinuteHand is operated by Norman Robichaud ("we," "us," or "our"). This Privacy Policy explains what personal information we collect, how we use it, who we share it with, and what rights you have. It applies to minutehand.ca and any related services.</p>
+      <p>We are subject to Canada's <em>Personal Information Protection and Electronic Documents Act</em> (PIPEDA) and British Columbia's <em>Personal Information Protection Act</em> (PIPA). If you have questions, contact us at <a href="mailto:hello@minutehand.ca">hello@minutehand.ca</a>.</p>
+
+      <h2>1. What We Collect</h2>
+
+      <h3>Account information</h3>
+      <p>When you create an account, we collect your email address and an encrypted password, or the OAuth token issued when you sign in with Google. This is stored in our database (Supabase) for as long as your account is active.</p>
+
+      <h3>Meeting content you submit</h3>
+      <p>To generate minutes, you may submit one or more of the following:</p>
+      <ul>
+        <li><strong>Text notes or Word documents (.docx)</strong> — your text is sent to Anthropic's Claude API to generate a minutes draft, then returned to your browser. We do not store your notes or generated minutes in our database.</li>
+        <li><strong>Audio recordings</strong> — your audio file is uploaded temporarily to our file storage (Supabase Storage) solely to obtain a URL we can pass to our transcription provider (Deepgram). The audio file is deleted immediately after transcription is complete. We do not retain audio recordings.</li>
+      </ul>
+      <p>Generated minutes are returned to your browser and are not stored on our servers.</p>
+
+      <h3>Payment and credit information</h3>
+      <p>Purchases are processed by PayPal. We do not receive or store your credit card or banking details. We do store your credit balance and a record of credit purchases (date, amount, transaction ID) in our database.</p>
+
+      <h3>Usage and technical data</h3>
+      <p>Our infrastructure providers may log technical metadata such as request timestamps, IP addresses, and error events as part of normal system operation. We do not log the content of your meeting notes, audio, or generated minutes.</p>
+
+      <h2>2. How We Use Your Information</h2>
+      <ul>
+        <li>To authenticate your account and maintain your session</li>
+        <li>To process your submitted content and return generated minutes</li>
+        <li>To track and deduct credits when you generate minutes</li>
+        <li>To process payments and issue purchase confirmations</li>
+        <li>To respond to support requests</li>
+        <li>To comply with legal obligations</li>
+      </ul>
+      <p>We do not use your meeting content to train AI models. We do not use it for advertising or analytics. We do not sell your personal information.</p>
+
+      <h2>3. Third-Party Service Providers</h2>
+      <p>We share data with the following providers only to the extent necessary to operate the Service:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Provider</th>
+            <th>Purpose</th>
+            <th>Data shared</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Supabase</td>
+            <td>Database, authentication, file storage</td>
+            <td>Account info, credit records, temporary audio files</td>
+          </tr>
+          <tr>
+            <td>Anthropic</td>
+            <td>AI minutes generation (Claude API)</td>
+            <td>Your meeting notes and text content</td>
+          </tr>
+          <tr>
+            <td>Deepgram</td>
+            <td>Audio transcription</td>
+            <td>URL of your audio file (Deepgram fetches and transcribes it)</td>
+          </tr>
+          <tr>
+            <td>PayPal</td>
+            <td>Payment processing</td>
+            <td>Payment details you provide directly to PayPal</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>Each provider operates under its own privacy policy and, where applicable, a data processing agreement. Anthropic's API terms state that API inputs are not used to train their models. Deepgram's API terms similarly restrict use of transcription data.</p>
+      <p>These providers may be located outside Canada, including in the United States. By using MinuteHand, you consent to your information being processed in those jurisdictions.</p>
+
+      <h2>4. Meeting Attendees and Third-Party Personal Information</h2>
+      <p>When you upload audio or notes from a meeting, that content may include personal information about people who are not MinuteHand users — for example, names, statements, or votes of meeting attendees. You are responsible for ensuring you have the necessary consents or authority to process and submit that information, in accordance with applicable privacy and recording-consent laws and your organization's governance requirements.</p>
+
+      <h2>5. Data Retention</h2>
+      <ul>
+        <li><strong>Audio files:</strong> deleted immediately after transcription</li>
+        <li><strong>Meeting notes and generated minutes:</strong> not stored — processed in memory and returned to your browser</li>
+        <li><strong>Account information:</strong> retained while your account is active; deleted upon request or account closure</li>
+        <li><strong>Credit and transaction records:</strong> retained for a minimum of seven years as required by Canadian tax and accounting obligations</li>
+      </ul>
+
+      <h2>6. Cookies and Local Storage</h2>
+      <p>MinuteHand uses browser local storage or session cookies to maintain your login session via Supabase Auth. We do not use advertising cookies or third-party tracking cookies. No consent banner is required for session-only storage that is strictly necessary to operate the Service.</p>
+
+      <h2>7. Security</h2>
+      <p>We use industry-standard measures to protect your information, including encrypted connections (HTTPS), encrypted credential storage, and access controls on our database. No system is perfectly secure. If you believe your account has been compromised, contact us at <a href="mailto:hello@minutehand.ca">hello@minutehand.ca</a>.</p>
+
+      <h2>8. Your Rights</h2>
+      <p>Under PIPEDA and BC PIPA, you have the right to:</p>
+      <ul>
+        <li>Request access to the personal information we hold about you</li>
+        <li>Request correction of inaccurate information</li>
+        <li>Withdraw consent to the collection or use of your personal information (subject to legal and contractual obligations), which may require closing your account</li>
+        <li>Request deletion of your account and associated personal information</li>
+      </ul>
+      <p>To exercise any of these rights, contact us at <a href="mailto:hello@minutehand.ca">hello@minutehand.ca</a>. We will respond within 30 days.</p>
+
+      <h2>9. Children's Privacy</h2>
+      <p>MinuteHand is not directed at persons under the age of majority in their province or territory. We do not knowingly collect personal information from minors.</p>
+
+      <h2>10. Changes to This Policy</h2>
+      <p>We may update this Privacy Policy from time to time. We will post the updated version with a new "Last updated" date. Continued use of the Service after a change takes effect constitutes acceptance of the updated policy.</p>
+
+      <h2>11. Contact</h2>
+      <p>Privacy questions or requests can be directed to:</p>
+      <p>
+        Norman Robichaud<br>
+        MinuteHand<br>
+        <a href="mailto:hello@minutehand.ca">hello@minutehand.ca</a>
+      </p>
+
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container site-footer__inner">
+      <div class="site-footer__brand">
+        <a href="/" class="logo" aria-label="MinuteHand home">
+          <svg width="20" height="20" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <circle cx="14" cy="14" r="13" stroke="currentColor" stroke-width="2"/>
+            <line x1="14" y1="14" x2="14" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="14" y1="14" x2="19" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          MinuteHand
+        </a>
+        <p class="site-footer__copy">&copy; 2026 Norman Robichaud. All rights reserved.</p>
+      </div>
+      <nav class="site-footer__nav" aria-label="Footer navigation">
+        <a href="/app.html">Open App</a>
+        <a href="/#pricing">Pricing</a>
+        <a href="/#faq">FAQ</a>
+        <a href="/terms.html">Terms</a>
+        <a href="/privacy.html">Privacy</a>
+        <a href="mailto:hello@minutehand.ca">Contact</a>
+      </nav>
+    </div>
+  </footer>
+
+</body>
+</html>
