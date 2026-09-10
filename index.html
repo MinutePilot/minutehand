@@ -92,6 +92,8 @@
           <span class="account-sep">·</span>
           <span id="user-email-display" class="account-email"></span>
           <span class="account-sep">·</span>
+          <button id="change-password-btn" class="btn-link">Change password</button>
+          <span class="account-sep">·</span>
           <button id="signout-btn" class="btn-link">Sign out</button>
         </span>
       </div>
@@ -156,6 +158,24 @@
         <button id="back-to-form-btn" class="btn-ghost">← Back</button>
         <p id="speaker-error-msg" class="error hidden"></p>
       </div>
+    </section>
+
+    <section id="change-password-section" class="card hidden">
+      <h1>Change Password</h1>
+      <div class="form-group">
+        <label for="new-password">New password</label>
+        <input type="password" id="new-password" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label for="confirm-password">Confirm new password</label>
+        <input type="password" id="confirm-password" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <div class="form-footer">
+        <button id="save-password-btn" class="btn-primary">Save Password</button>
+        <button id="back-from-password-btn" class="btn-ghost">← Back</button>
+      </div>
+      <p id="password-message" class="signin-message hidden"></p>
+      <p id="password-error" class="error hidden"></p>
     </section>
 
     <section id="result-section" class="card hidden">

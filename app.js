@@ -11,11 +11,12 @@ const supabaseClient = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabase
 // ── Element refs ──────────────────────────────────────────────────────────────
 
 // Sections
-const signinSection     = document.getElementById('signin-section');
-const buyCreditsSection = document.getElementById('buy-credits-section');
-const formSection       = document.getElementById('form-section');
-const speakerSection    = document.getElementById('speaker-section');
-const resultSection     = document.getElementById('result-section');
+const signinSection          = document.getElementById('signin-section');
+const buyCreditsSection      = document.getElementById('buy-credits-section');
+const formSection            = document.getElementById('form-section');
+const speakerSection         = document.getElementById('speaker-section');
+const resultSection          = document.getElementById('result-section');
+const changePasswordSection  = document.getElementById('change-password-section');
 
 // Form
 const generateBtn      = document.getElementById('generate-btn');
@@ -33,6 +34,7 @@ const creditsDisplay      = document.getElementById('credits-display');
 const userEmailDisplay    = document.getElementById('user-email-display');
 const showSigninBtn       = document.getElementById('show-signin-btn');
 const buyCreditsBtn       = document.getElementById('buy-credits-btn');
+const changePasswordBtn   = document.getElementById('change-password-btn');
 const signoutBtn          = document.getElementById('signout-btn');
 
 // Sign-in section
@@ -268,6 +270,54 @@ googleSigninBtn.addEventListener('click', async () => {
 
 signoutBtn.addEventListener('click', async () => {
   await supabaseClient.auth.signOut();
+});
+
+changePasswordBtn.addEventListener('click', () => {
+  document.getElementById('new-password').value = '';
+  document.getElementById('confirm-password').value = '';
+  document.getElementById('password-message').classList.add('hidden');
+  document.getElementById('password-error').classList.add('hidden');
+  showSection(changePasswordSection);
+});
+
+document.getElementById('back-from-password-btn').addEventListener('click', () => showSection(formSection));
+
+document.getElementById('save-password-btn').addEventListener('click', async () => {
+  const newPassword     = document.getElementById('new-password').value;
+  const confirmPassword = document.getElementById('confirm-password').value;
+  const saveBtn         = document.getElementById('save-password-btn');
+  const passwordError   = document.getElementById('password-error');
+  const passwordMessage = document.getElementById('password-message');
+
+  passwordError.classList.add('hidden');
+  passwordMessage.classList.add('hidden');
+
+  if (newPassword.length < 6) {
+    passwordError.textContent = 'Password must be at least 6 characters.';
+    passwordError.classList.remove('hidden');
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    passwordError.textContent = 'Passwords do not match.';
+    passwordError.classList.remove('hidden');
+    return;
+  }
+
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving…';
+
+  const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+  if (error) {
+    passwordError.textContent = error.message || 'Could not update password.';
+    passwordError.classList.remove('hidden');
+  } else {
+    passwordMessage.textContent = 'Password updated successfully.';
+    passwordMessage.classList.remove('hidden');
+    setTimeout(() => showSection(formSection), 1500);
+  }
+
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save Password';
 });
 
 buyCreditsBtn.addEventListener('click', () => showSection(buyCreditsSection));
@@ -597,7 +647,7 @@ async function callEdgeFunction(name, payload) {
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
 
-const SECTIONS = [signinSection, buyCreditsSection, formSection, speakerSection, resultSection];
+const SECTIONS = [signinSection, buyCreditsSection, formSection, speakerSection, resultSection, changePasswordSection];
 
 function showSection(section) {
   SECTIONS.forEach((s) => s.classList.add('hidden'));
