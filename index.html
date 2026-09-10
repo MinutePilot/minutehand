@@ -284,6 +284,37 @@
       </div>
     </section>
 
+    <!-- ── Review ── -->
+    <section class="lp-review" aria-labelledby="review-heading">
+      <div class="container">
+        <p class="review-kicker">Independent review</p>
+        <h2 id="review-heading">Built for B.C. Strata Councils — and stress-tested to prove it</h2>
+        <p class="section-intro">Under B.C. Standard Bylaw 19, councils must distribute minutes to all owners within two weeks of the meeting. MinuteHand produces a professional, legally structured draft in under 30 seconds.</p>
+        <div class="review-grid">
+          <div class="review-card">
+            <h3>Attendance &amp; voting accuracy</h3>
+            <p>Tracks when members arrive late and restricts their participation to votes held after they joined — preserving legally defensible voting records.</p>
+          </div>
+          <div class="review-card">
+            <h3>B.C. legal terminology</h3>
+            <p>Distinguishes "Units" from official "Strata Lots" and flags where numbers should be verified against the strata roll before warning letters or fines are issued.</p>
+          </div>
+          <div class="review-card">
+            <h3>Financial complexity</h3>
+            <p>Formats contractor quotes into clean comparison tables and correctly categorizes emergency expenditures (Section 98) versus items requiring a Special General Meeting.</p>
+          </div>
+          <div class="review-card">
+            <h3>Legal liability flags</h3>
+            <p>When council members make unverified claims, MinuteHand inserts professional caveats recommending engineer or legal review before the minutes are finalized.</p>
+          </div>
+        </div>
+        <blockquote class="review-quote">
+          <p>"For a few dollars per meeting, MinuteHand eliminates the hassle of formatting tables, aligning motions, and chasing down action items. It produces a professional, legally robust Word or PDF draft in under 30 seconds."</p>
+          <cite>— Tested with complex B.C. strata council scenarios, reviewed by Google Gemini</cite>
+        </blockquote>
+      </div>
+    </section>
+
     <!-- ── Pricing ── -->
     <section class="lp-pricing" id="pricing" aria-labelledby="pricing-heading">
       <div class="container">
@@ -379,6 +410,63 @@
       </div>
     </section>
 
+    <!-- ── Agenda template ── -->
+    <section class="lp-agenda" aria-labelledby="agenda-heading">
+      <div class="container">
+        <h2 id="agenda-heading">Free: Strata Council Meeting Agenda Template</h2>
+        <p class="section-intro">Copy this template into your notes before the meeting. The cleaner your notes, the better your minutes.</p>
+        <details class="agenda-details">
+          <summary class="agenda-summary">Show agenda template</summary>
+          <pre class="agenda-pre">Strata Council Meeting Agenda — [Corporation Name] (LMS XXXX)
+Date: [Insert Date] | Start Time: [Insert Time] | Location: [Insert Location]
+
+ATTENDEES:
+- Present: [Name, Name, Name]
+- Absent: [Name]
+- Quorum Status: [Confirmed / Not Met]
+
+1. CALL TO ORDER
+   Meeting called to order at [Time] by [Chair Name].
+
+2. APPROVAL OF AGENDA &amp; PREVIOUS MINUTES
+   Motion to approve the agenda: Moved by [Name], Seconded by [Name].
+   Motion to approve minutes from [Previous Meeting Date]: Moved by [Name], Seconded by [Name].
+
+3. FINANCIAL REPORT
+   Current Operating Balance: $__________
+   Current CRF Balance: $__________
+   Treasurer's Updates:
+     [Insert any budget overages, unexpected bills, or invoices here]
+   Financial Motions:
+     [Insert proposal, Mover, Seconder, and any dissenting votes/abstentions]
+
+4. CORRESPONDENCE &amp; BYLAW ENFORCEMENT
+   Correspondence received from owners:
+     [Summarize owner letters or emails here]
+   Ongoing Bylaw Violations:
+     [Unit/Strata Lot #]: [Summary of issue — e.g., noise, parking]
+     Council Discussion: [What was decided]
+     Action/Fine: [Moved by, Seconded by, Fine amount or warning letter status]
+
+5. OLD BUSINESS
+   Update on [Previous Project Name]:
+     [Status update, next steps, or completed tasks]
+
+6. NEW BUSINESS
+   New Project / Issue 1: [e.g., Gutter cleaning quotes]
+     Quotes received: [Contractor A $X, Contractor B $Y]
+     Council Decision/Motion: [Moved by, Seconded by, Approved Contractor]
+   New Project / Issue 2: [e.g., EV Charger request]
+     Discussion: [Summary of details]
+
+7. ADJOURNMENT &amp; NEXT MEETING
+   Meeting adjourned at [Time].
+   Next regular Strata Council Meeting: [Date] at [Time], [Location]</pre>
+          <button class="btn-secondary agenda-copy-btn" id="agenda-copy-btn">Copy to clipboard</button>
+        </details>
+      </div>
+    </section>
+
   </main>
 
   <footer class="site-footer">
@@ -420,6 +508,18 @@
   }
   dots.forEach(function (d, i) { d.addEventListener('click', function () { go(i); }); });
   setInterval(function () { go((cur + 1) % slides.length); }, 4000);
+}());
+
+(function () {
+  var btn = document.getElementById('agenda-copy-btn');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    var text = document.querySelector('.agenda-pre').textContent;
+    navigator.clipboard.writeText(text).then(function () {
+      btn.textContent = 'Copied!';
+      setTimeout(function () { btn.textContent = 'Copy to clipboard'; }, 2000);
+    });
+  });
 }());
 </script>
 </body>
