@@ -252,25 +252,56 @@ textarea {
   margin-bottom: 0.25rem;
 }
 
+/* h2 = org/corp name, h3 = meeting type/date — both share one header-block style */
 .minutes-preview h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--mh-heading);
+  margin-top: 1rem;
+  margin-bottom: 0;
+}
+
+.minutes-preview h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--mh-heading);
+  margin-top: 0.15rem;
+  margin-bottom: 0.6rem;
+}
+
+/* h4 = main section headers (QUORUM, CALL TO ORDER, etc.) */
+.minutes-preview h4 {
   font-size: 0.875rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .04em;
+  color: var(--mh-heading);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.2rem;
   margin-top: 1.75rem;
   margin-bottom: 0.5rem;
-  padding-bottom: 0.2rem;
-  border-bottom: 1px solid var(--border);
 }
 
-.minutes-preview h3 {
+/* h5 = subsections */
+.minutes-preview h5 {
   font-size: 0.9rem;
   font-weight: 600;
+  color: var(--mh-heading);
   margin-top: 1rem;
   margin-bottom: 0.25rem;
 }
 
 .minutes-preview p { margin-bottom: 0.7rem; }
+
+/* metadata blockquotes — de-emphasized, stacked one per line */
+.minutes-preview blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 0.75rem;
+  margin: 0.2rem 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
 
 .minutes-preview ul,
 .minutes-preview ol {
@@ -311,12 +342,6 @@ textarea {
   color: var(--text-muted);
 }
 
-.minutes-preview blockquote {
-  border-left: 3px solid var(--border);
-  padding-left: 1rem;
-  margin: 0.75rem 0;
-  color: var(--text-muted);
-}
 
 /* ── Upload drop zone ── */
 

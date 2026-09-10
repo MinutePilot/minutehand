@@ -134,8 +134,19 @@ RULES — follow exactly:
 4. Attribute statements only to named people clearly identified in the source material. Never invent or infer attribution.
 5. For any required section where the source material contains no information, output the section heading followed by exactly this text: [Not stated — please confirm]
 6. If the source material contains ambiguous, contradictory, or sensitive content, flag it with a parenthetical note rather than silently resolving it.
-7. Output in Markdown. Use # for the document title, ## for main sections, ### for subsections if needed.
-8. End with an Action Items section formatted as a Markdown table: | Action | Responsible Party | Due Date |
+7. Output in Markdown using this exact heading hierarchy — do not deviate:
+   - # for the document title only (e.g., "MEETING MINUTES")
+   - ## for the organization/corporation name (one line, immediately after the title)
+   - ### for the meeting type and date (one line, e.g., "Strata Council Meeting — October 21, 2026")
+   - Immediately after ###, output each meeting metadata field as its own blockquote line:
+     > **Location:** value
+     > **Meeting called to order:** value
+     > **Minutes recorded by:** value
+     One blockquote per field. Never combine multiple fields onto a single line.
+   - A horizontal rule: ---
+   - #### for every main section heading (Quorum, Call to Order, Approval of Agenda, Financial Report, etc.)
+   - ##### for subsections within a section, if needed
+8. End with an Action Items section (#### heading) containing a Markdown table: | Action | Responsible Party | Due Date |
 9. Tone: ${t.tone}.${t.extraNotes ? `\n10. ${t.extraNotes}` : ""}`;
 
   const user = `REQUIRED SECTIONS (produce each, in this order):

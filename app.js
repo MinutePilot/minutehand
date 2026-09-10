@@ -558,15 +558,22 @@ downloadBtn.addEventListener('click', () => {
   if (!currentMinutesMarkdown) return;
   const fullHtml = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>
-  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#000}
-  h1{font-size:13pt;text-align:center;text-transform:uppercase;margin-bottom:4pt}
-  h2{font-size:11pt;text-transform:uppercase;border-bottom:1px solid #ccc;padding-bottom:2pt;margin-top:14pt;margin-bottom:4pt}
-  h3{font-size:11pt;font-weight:bold;margin-top:8pt;margin-bottom:2pt}
-  p{margin-bottom:6pt}
-  table{width:100%;border-collapse:collapse;margin:8pt 0}
-  th,td{border:1px solid #aaa;padding:4pt 6pt;font-size:10pt;vertical-align:top}
-  th{background:#f0f0f0;font-weight:bold}
-  ul,ol{margin:4pt 0 6pt 18pt}
+  body    { font-family: Georgia, 'Times New Roman', serif; font-size: 10.5pt; line-height: 1.65; color: #000; }
+  h1      { font-size: 17pt; font-weight: bold; text-align: center; text-transform: uppercase; letter-spacing: .05em; margin: 0 0 8pt; }
+  h2      { font-size: 14pt; font-weight: bold; color: #111; margin: 0 0 1pt; }
+  h3      { font-size: 14pt; font-weight: bold; color: #111; margin: 0 0 8pt; }
+  h4      { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: .04em; color: #111; border-bottom: 1pt solid #555; padding-bottom: 2pt; margin: 16pt 0 5pt; }
+  h5      { font-size: 10.5pt; font-weight: bold; color: #222; margin: 8pt 0 3pt; }
+  p       { margin: 0 0 5pt; }
+  blockquote { margin: 1pt 0; padding: 0; border: none; color: #555; font-size: 10pt; }
+  hr      { border: none; border-top: 1pt solid #ccc; margin: 10pt 0; }
+  table   { width: 100%; border-collapse: collapse; margin: 8pt 0; font-size: 10pt; font-family: Georgia, 'Times New Roman', serif; }
+  th      { background: #e0e0e0; font-weight: bold; text-align: left; padding: 5pt 8pt; border: 1pt solid #999; color: #000; }
+  td      { padding: 5pt 8pt; border: 1pt solid #ccc; vertical-align: top; }
+  ul, ol  { margin: 3pt 0 6pt 20pt; }
+  li      { margin-bottom: 2pt; }
+  strong  { font-weight: bold; }
+  em      { font-style: italic; }
 </style></head><body>${marked.parse(currentMinutesMarkdown)}</body></html>`;
 
   const blob = htmlDocx.asBlob(fullHtml);
