@@ -1,4 +1,4 @@
-import Anthropic from "npm:@anthropic-ai/sdk@^0.36.3";
+import Anthropic from "npm:@anthropic-ai/sdk@0.124.0";
 import { createClient } from "npm:@supabase/supabase-js@^2";
 
 const CORS = {
@@ -214,14 +214,14 @@ Deno.serve(async (req: Request) => {
   if (!apiKey) return json({ error: "ANTHROPIC_API_KEY not configured" }, 500);
 
   const client = new Anthropic({ apiKey });
-  const { system, user } = buildPrompt(notes, template);
+  const { system, user: userPrompt } = buildPrompt(notes, template);
 
   try {
     const msg = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 4096,
       system,
-      messages: [{ role: "user", content: user }],
+      messages: [{ role: "user", content: userPrompt }],
     });
 
     const minutes = msg.content[0].type === "text" ? msg.content[0].text : "";
