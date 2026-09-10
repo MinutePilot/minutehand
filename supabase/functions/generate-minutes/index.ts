@@ -239,6 +239,8 @@ Deno.serve(async (req: Request) => {
     return json({ minutes, template });
   } catch (err) {
     console.error("Anthropic API error:", err);
+    const { error: restoreError } = await supabaseAdmin.rpc("restore_credit", { p_user_id: user.id });
+    if (restoreError) console.error("Credit restore failed:", restoreError);
     return json({ error: "Failed to generate minutes. Please try again." }, 500);
   }
 });
