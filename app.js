@@ -348,28 +348,40 @@ buyCreditsSection.addEventListener('click', async (e) => {
 
 browseBtn.addEventListener('click', () => docxInput.click());
 dropZone.addEventListener('click', (e) => { if (e.target !== browseBtn) docxInput.click(); });
-docxInput.addEventListener('change', () => { if (docxInput.files[0]) loadDocx(docxInput.files[0]); });
+docxInput.addEventListener('change', () => { if (docxInput.files.length) loadDocxFiles(docxInput.files); });
 dropZone.addEventListener('dragover',  (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
 dropZone.addEventListener('drop', (e) => {
   e.preventDefault();
   dropZone.classList.remove('drag-over');
-  if (e.dataTransfer.files[0]) loadDocx(e.dataTransfer.files[0]);
+  if (e.dataTransfer.files.length) loadDocxFiles(e.dataTransfer.files);
 });
 
-async function loadDocx(file) {
-  if (!file.name.endsWith('.docx')) {
+async function loadDocxFiles(files) {
+  const docxFiles = Array.from(files).filter((f) => f.name.endsWith('.docx'));
+  if (docxFiles.length === 0) {
     setFileStatus(fileStatus, 'Only .docx files are supported.', 'error');
     return;
   }
-  setFileStatus(fileStatus, 'Reading…', '');
+  if (docxFiles.length > 5) {
+    setFileStatus(fileStatus, 'Maximum 5 files at a time.', 'error');
+    return;
+  }
+  const plural = docxFiles.length > 1;
+  setFileStatus(fileStatus, `Reading ${plural ? docxFiles.length + ' files' : docxFiles[0].name}…`, '');
   try {
-    const buffer = await file.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-    notesInput.value = result.value.trim();
-    setFileStatus(fileStatus, `✓ ${file.name} imported`, 'success');
+    const texts = await Promise.all(docxFiles.map(async (file) => {
+      const buffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+      return result.value.trim();
+    }));
+    notesInput.value = texts.join('\n\n');
+    const label = plural
+      ? `✓ ${docxFiles.length} files imported: ${docxFiles.map((f) => f.name).join(', ')}`
+      : `✓ ${docxFiles[0].name} imported`;
+    setFileStatus(fileStatus, label, 'success');
   } catch {
-    setFileStatus(fileStatus, 'Could not read file. Is it a valid .docx?', 'error');
+    setFileStatus(fileStatus, 'Could not read one or more files. Are they valid .docx files?', 'error');
   }
 }
 
