@@ -1,0 +1,42 @@
+# MinuteHand
+
+MinuteHand (https://minutehand.ca) is an AI-powered meeting minutes generator for strata councils, homeowners associations (HOAs), and nonprofit boards.
+
+## What it does
+
+MinuteHand converts rough meeting notes, Microsoft Word documents (.docx), or audio recordings (.mp3, .m4a, .wav) into professionally formatted meeting minutes. Audio recordings are automatically transcribed with speaker diarization (individual speaker identification). Users can confirm speaker names before minutes are generated. Finished minutes are exported as .docx files.
+
+## Who it is for
+
+Volunteer secretaries and board members responsible for meeting minutes without administrative support. Primary users include:
+- BC strata council secretaries
+- Homeowners association (HOA) board secretaries
+- Nonprofit board secretaries and administrators
+
+## Pricing
+
+Pay-per-use. No subscription required.
+- 1 meeting credit: $7 CAD
+- 5 meeting credits: $20 CAD (approximately $4 per meeting)
+
+Credits never expire.
+
+## Key features
+
+- Accepts pasted notes, .docx file uploads, and audio recordings up to 50 MB
+- Automatic transcription using Deepgram Nova-2 with speaker diarization
+- Speaker name confirmation UI before minutes are generated
+- Tip: ask participants to state their name at the start of recordings for best speaker identification
+- Supports multiple meeting types: Strata Council (BC), HOA Board, Nonprofit Board, Team/Informal
+- Exports finished minutes as .docx
+- Sign in with email/password or Google
+- Pay with PayPal — no Stripe account required
+
+## Privacy
+
+Meeting content is processed securely and not used to train AI models. Audio files are deleted immediately after transcription. No user data is sold or shared with third parties.
+
+## Contact
+
+hello@minutehand.ca
+https://minutehand.ca

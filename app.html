@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MinuteHand — Generate Meeting Minutes</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://unpkg.com/html-docx-js@0.3.1/dist/html-docx.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="container">
+      <a href="/" class="logo" aria-label="MinuteHand home">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <circle cx="14" cy="14" r="13" stroke="currentColor" stroke-width="2"/>
+          <line x1="14" y1="14" x2="14" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="14" y1="14" x2="19" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>MinuteHand</span>
+      </a>
+      <p class="tagline">Turn messy meeting notes into polished minutes. In minutes.</p>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <section id="signin-section" class="card hidden">
+      <div class="auth-tabs">
+        <button id="tab-signin" class="auth-tab auth-tab--active">Sign In</button>
+        <button id="tab-signup" class="auth-tab">Create Account</button>
+      </div>
+
+      <div class="form-group">
+        <label for="signin-email">Email</label>
+        <input type="email" id="signin-email" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label for="signin-password">Password</label>
+        <input type="password" id="signin-password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div id="forgot-wrap" class="forgot-wrap">
+        <button id="forgot-password-btn" class="btn-link">Forgot password?</button>
+      </div>
+
+      <div class="form-footer">
+        <button id="auth-submit-btn" class="btn-primary">Sign In</button>
+        <button id="back-from-signin-btn" class="btn-ghost">← Back</button>
+      </div>
+      <p id="signin-message" class="signin-message hidden"></p>
+      <p id="signin-error" class="error hidden"></p>
+
+      <div class="auth-divider"><span>or</span></div>
+
+      <button id="google-signin-btn" class="btn-google">
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58Z"/></svg>
+        Sign in with Google
+      </button>
+    </section>
+
+    <section id="buy-credits-section" class="card hidden">
+      <h1>Buy Credits</h1>
+      <p class="buy-intro">Each credit generates one complete set of meeting minutes. Credits never expire.</p>
+      <div class="credit-packs">
+        <button class="credit-pack" data-pack="1_credit">
+          <span class="pack-amount">1 credit</span>
+          <span class="pack-price">$7 <span class="pack-currency">CAD</span></span>
+        </button>
+        <button class="credit-pack" data-pack="5_credits">
+          <span class="pack-amount">5 credits</span>
+          <span class="pack-price">$20 <span class="pack-currency">CAD</span></span>
+          <span class="pack-save">save 43%</span>
+        </button>
+      </div>
+      <p id="checkout-error" class="error hidden"></p>
+      <button id="back-from-credits-btn" class="btn-ghost" style="margin-top:1.25rem">← Back</button>
+    </section>
+
+    <section id="form-section" class="card">
+      <h1>Generate Meeting Minutes</h1>
+      <div id="account-bar" class="account-bar account-bar--signedout">
+        <span class="account-bar__signedout">
+          <button id="show-signin-btn" class="btn-link">Sign in</button> to manage your credits
+        </span>
+        <span class="account-bar__signedin hidden">
+          <span id="credits-display" class="credits-badge">— credits</span>
+          <span class="account-sep">·</span>
+          <button id="buy-credits-btn" class="btn-link">Buy more</button>
+          <span class="account-sep">·</span>
+          <span id="user-email-display" class="account-email"></span>
+          <span class="account-sep">·</span>
+          <button id="change-password-btn" class="btn-link">Change password</button>
+          <span class="account-sep">·</span>
+          <button id="signout-btn" class="btn-link">Sign out</button>
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label for="template-select">Meeting type</label>
+        <select id="template-select">
+          <option value="STRATA">Strata Council (BC)</option>
+          <option value="HOA_GENERIC">HOA Board</option>
+          <option value="NONPROFIT_BOARD">Nonprofit Board</option>
+          <option value="TEAM_INFORMAL">Team / Informal Meeting</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Upload audio recording <span class="optional">(optional — .mp3, .m4a, .wav)</span></label>
+        <div id="audio-drop-zone" class="drop-zone">
+          <input type="file" id="audio-input" accept=".mp3,.m4a,.wav,.mp4,.ogg,.webm" hidden>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m0-9L7 6m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13v2a2 2 0 002 2h10a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span id="audio-drop-label">Drag an audio file here or <button type="button" id="audio-browse-btn" class="btn-link">browse</button></span>
+        </div>
+        <p id="audio-status" class="file-status hidden"></p>
+        <div id="upload-progress-wrap" class="upload-progress-wrap hidden">
+          <div class="upload-bar-track"><div id="upload-bar" class="upload-bar"></div></div>
+          <span id="upload-label" class="upload-label">Uploading…</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Upload a .docx file <span class="optional">(optional)</span></label>
+        <div id="drop-zone" class="drop-zone">
+          <input type="file" id="docx-input" accept=".docx" hidden>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m0-9L7 6m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13v2a2 2 0 002 2h10a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span id="drop-label">Drag a .docx here or <button type="button" id="browse-btn" class="btn-link">browse</button></span>
+        </div>
+        <p id="file-status" class="file-status hidden"></p>
+      </div>
+
+      <div class="form-group">
+        <label for="notes-input" id="notes-label">Meeting notes or transcript</label>
+        <textarea
+          id="notes-input"
+          placeholder="Paste your meeting notes, rough transcript, or any combination of both here…"
+          rows="14"
+          spellcheck="false"
+        ></textarea>
+        <p class="field-hint" id="notes-hint">Include date, location, attendees, and any motions made if you have them.</p>
+      </div>
+
+      <div class="form-footer">
+        <button id="generate-btn" class="btn-primary">Generate Minutes</button>
+        <p id="error-msg" class="error hidden"></p>
+      </div>
+    </section>
+
+    <section id="speaker-section" class="card hidden">
+      <h1>Confirm Speaker Names</h1>
+      <p class="speaker-intro">We detected <strong id="speaker-count"></strong> speaker(s). Edit names below — pre-filled where introductions were detected in the first two minutes.</p>
+      <div id="speaker-list" class="speaker-list"></div>
+      <div class="form-footer">
+        <button id="confirm-speakers-btn" class="btn-primary">Generate Minutes</button>
+        <button id="back-to-form-btn" class="btn-ghost">← Back</button>
+        <p id="speaker-error-msg" class="error hidden"></p>
+      </div>
+    </section>
+
+    <section id="change-password-section" class="card hidden">
+      <h1>Change Password</h1>
+      <div class="form-group">
+        <label for="new-password">New password</label>
+        <input type="password" id="new-password" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label for="confirm-password">Confirm new password</label>
+        <input type="password" id="confirm-password" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <div class="form-footer">
+        <button id="save-password-btn" class="btn-primary">Save Password</button>
+        <button id="back-from-password-btn" class="btn-ghost">← Back</button>
+      </div>
+      <p id="password-message" class="signin-message hidden"></p>
+      <p id="password-error" class="error hidden"></p>
+    </section>
+
+    <section id="result-section" class="card hidden">
+      <div class="result-header">
+        <h1>Meeting Minutes</h1>
+        <div class="result-actions">
+          <button id="download-btn" class="btn-secondary">Download .docx</button>
+          <button id="reset-btn" class="btn-ghost">Start over</button>
+        </div>
+      </div>
+      <div id="minutes-preview" class="minutes-preview"></div>
+    </section>
+
+  </main>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -3,195 +3,403 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MinuteHand — Meeting Minutes Generator</title>
+  <title>MinuteHand — AI Meeting Minutes Generator for Strata Councils &amp; HOAs</title>
+  <meta name="description" content="MinuteHand turns meeting notes or audio recordings into polished, professional minutes for $7/meeting. No subscription. Built for strata councils, HOAs &amp; nonprofit boards.">
+  <link rel="canonical" href="https://minutehand.ca/">
   <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="https://unpkg.com/html-docx-js@0.3.1/dist/html-docx.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-</head>
-<body>
 
-  <header>
-    <div class="container">
-      <div class="logo">
-        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://minutehand.ca/">
+  <meta property="og:title" content="MinuteHand — AI Meeting Minutes Generator for Strata Councils &amp; HOAs">
+  <meta property="og:description" content="Turn meeting notes or audio recordings into polished professional minutes for $7/meeting. No subscription. Built for strata councils, HOAs &amp; nonprofit boards.">
+  <meta property="og:image" content="https://minutehand.ca/og-image.png">
+  <meta property="og:site_name" content="MinuteHand">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MinuteHand — AI Meeting Minutes Generator">
+  <meta name="twitter:description" content="Turn meeting notes or audio recordings into polished professional minutes for $7/meeting. No subscription.">
+  <meta name="twitter:image" content="https://minutehand.ca/og-image.png">
+
+  <!-- Schema.org: SoftwareApplication -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "MinuteHand",
+    "url": "https://minutehand.ca",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web",
+    "description": "MinuteHand converts meeting notes, Word documents, and audio recordings into professionally formatted meeting minutes. Designed for strata councils, HOAs, and nonprofit boards.",
+    "offers": {
+      "@type": "AggregateOffer",
+      "priceCurrency": "CAD",
+      "lowPrice": "4",
+      "highPrice": "7",
+      "offerCount": "2",
+      "offers": [
+        {
+          "@type": "Offer",
+          "name": "1 Meeting Credit",
+          "price": "7.00",
+          "priceCurrency": "CAD",
+          "description": "One complete set of meeting minutes"
+        },
+        {
+          "@type": "Offer",
+          "name": "5 Meeting Credits",
+          "price": "20.00",
+          "priceCurrency": "CAD",
+          "description": "Five meeting minutes — about $4 per meeting"
+        }
+      ]
+    },
+    "featureList": [
+      "AI meeting minutes generation",
+      "Audio transcription with speaker diarization",
+      "Microsoft Word (.docx) file upload",
+      "Export finished minutes to .docx",
+      "Pay-per-use pricing — no subscription"
+    ]
+  }
+  </script>
+
+  <!-- Schema.org: FAQPage -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How much does MinuteHand cost?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MinuteHand costs $7 CAD per meeting on a pay-per-use basis. A pack of 5 credits costs $20 CAD — about $4 per meeting. There is no subscription. You buy credits as you need them, and they never expire."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What file formats does MinuteHand support?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MinuteHand accepts pasted or typed notes, Microsoft Word (.docx) files, and audio recordings in .mp3, .m4a, or .wav format up to 50 MB. Audio recordings are automatically transcribed with speaker identification."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is my meeting data private?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Your notes and audio are used only to generate your minutes and are not stored beyond what is needed for processing. Audio files are deleted after transcription. Your data is never sold or used to train AI models."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Who is MinuteHand for?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MinuteHand is designed for volunteer secretaries and board members of strata and condo councils, homeowners associations (HOAs), and nonprofit organizations — anyone responsible for meeting minutes without administrative support."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How accurate is the transcription?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MinuteHand uses Deepgram's Nova-2 speech recognition model, which is highly accurate for meeting recordings. For best results, ask participants to state their name at the start of the meeting. You can review and confirm speaker names before generating minutes."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Do MinuteHand credits expire?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. MinuteHand credits never expire. Buy a pack and use them whenever you need them — once a week, once a quarter, or whenever your council meets."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body class="landing">
+
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a href="/" class="logo" aria-label="MinuteHand home">
+        <svg width="26" height="26" viewBox="0 0 28 28" fill="none" aria-hidden="true">
           <circle cx="14" cy="14" r="13" stroke="currentColor" stroke-width="2"/>
           <line x1="14" y1="14" x2="14" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           <line x1="14" y1="14" x2="19" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
-        <span>MinuteHand</span>
-      </div>
-      <p class="tagline">Turn messy meeting notes into polished minutes. In minutes.</p>
+        MinuteHand
+      </a>
+      <nav aria-label="Site navigation">
+        <a href="#how-it-works" class="nav-link">How it works</a>
+        <a href="#pricing" class="nav-link">Pricing</a>
+        <a href="/app.html" class="btn-primary btn-sm">Open App →</a>
+      </nav>
     </div>
   </header>
 
-  <main class="container">
+  <main>
 
-    <section id="signin-section" class="card hidden">
-      <div class="auth-tabs">
-        <button id="tab-signin" class="auth-tab auth-tab--active">Sign In</button>
-        <button id="tab-signup" class="auth-tab">Create Account</button>
-      </div>
-
-      <div class="form-group">
-        <label for="signin-email">Email</label>
-        <input type="email" id="signin-email" placeholder="your@email.com" autocomplete="email">
-      </div>
-      <div class="form-group">
-        <label for="signin-password">Password</label>
-        <input type="password" id="signin-password" placeholder="••••••••" autocomplete="current-password">
-      </div>
-      <div id="forgot-wrap" class="forgot-wrap">
-        <button id="forgot-password-btn" class="btn-link">Forgot password?</button>
-      </div>
-
-      <div class="form-footer">
-        <button id="auth-submit-btn" class="btn-primary">Sign In</button>
-        <button id="back-from-signin-btn" class="btn-ghost">← Back</button>
-      </div>
-      <p id="signin-message" class="signin-message hidden"></p>
-      <p id="signin-error" class="error hidden"></p>
-
-      <div class="auth-divider"><span>or</span></div>
-
-      <button id="google-signin-btn" class="btn-google">
-        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58Z"/></svg>
-        Sign in with Google
-      </button>
-    </section>
-
-    <section id="buy-credits-section" class="card hidden">
-      <h1>Buy Credits</h1>
-      <p class="buy-intro">Each credit generates one complete set of meeting minutes. Credits never expire.</p>
-      <div class="credit-packs">
-        <button class="credit-pack" data-pack="1_credit">
-          <span class="pack-amount">1 credit</span>
-          <span class="pack-price">$7 <span class="pack-currency">CAD</span></span>
-        </button>
-        <button class="credit-pack" data-pack="5_credits">
-          <span class="pack-amount">5 credits</span>
-          <span class="pack-price">$20 <span class="pack-currency">CAD</span></span>
-          <span class="pack-save">save 43%</span>
-        </button>
-      </div>
-      <p id="checkout-error" class="error hidden"></p>
-      <button id="back-from-credits-btn" class="btn-ghost" style="margin-top:1.25rem">← Back</button>
-    </section>
-
-    <section id="form-section" class="card">
-      <h1>Generate Meeting Minutes</h1>
-      <div id="account-bar" class="account-bar account-bar--signedout">
-        <span class="account-bar__signedout">
-          <button id="show-signin-btn" class="btn-link">Sign in</button> to manage your credits
-        </span>
-        <span class="account-bar__signedin hidden">
-          <span id="credits-display" class="credits-badge">— credits</span>
-          <span class="account-sep">·</span>
-          <button id="buy-credits-btn" class="btn-link">Buy more</button>
-          <span class="account-sep">·</span>
-          <span id="user-email-display" class="account-email"></span>
-          <span class="account-sep">·</span>
-          <button id="change-password-btn" class="btn-link">Change password</button>
-          <span class="account-sep">·</span>
-          <button id="signout-btn" class="btn-link">Sign out</button>
-        </span>
-      </div>
-
-      <div class="form-group">
-        <label for="template-select">Meeting type</label>
-        <select id="template-select">
-          <option value="STRATA">Strata Council (BC)</option>
-          <option value="HOA_GENERIC">HOA Board</option>
-          <option value="NONPROFIT_BOARD">Nonprofit Board</option>
-          <option value="TEAM_INFORMAL">Team / Informal Meeting</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label>Upload audio recording <span class="optional">(optional — .mp3, .m4a, .wav)</span></label>
-        <div id="audio-drop-zone" class="drop-zone">
-          <input type="file" id="audio-input" accept=".mp3,.m4a,.wav,.mp4,.ogg,.webm" hidden>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m0-9L7 6m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13v2a2 2 0 002 2h10a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-          <span id="audio-drop-label">Drag an audio file here or <button type="button" id="audio-browse-btn" class="btn-link">browse</button></span>
+    <!-- ── Hero ── -->
+    <section class="hero" aria-labelledby="hero-heading">
+      <div class="container hero__inner">
+        <div class="hero__text">
+          <h1 id="hero-heading">Stop spending your evening writing up meeting minutes.</h1>
+          <p class="hero__sub">MinuteHand turns rough notes, Word docs, or audio recordings into polished, professional meeting minutes. Built for the volunteer secretaries who run strata councils, HOAs, and nonprofit boards.</p>
+          <p class="hero__fact">MinuteHand converts meeting notes and audio recordings into professionally formatted meeting minutes for $7 CAD per meeting, with no subscription required.</p>
+          <a href="/app.html" class="btn-primary btn-lg">Generate Your Minutes →</a>
         </div>
-        <p id="audio-status" class="file-status hidden"></p>
-        <div id="upload-progress-wrap" class="upload-progress-wrap hidden">
-          <div class="upload-bar-track"><div id="upload-bar" class="upload-bar"></div></div>
-          <span id="upload-label" class="upload-label">Uploading…</span>
+        <div class="hero__mockup" role="img" aria-label="Sample MinuteHand output: a formatted strata council meeting minutes document">
+          <!-- Replace hero__mockup content with a real screenshot (og-image.png) when available -->
+          <div class="mockup-placeholder">
+            <svg width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden="true">
+              <rect x="5" y="3" width="34" height="38" rx="3" stroke="var(--primary)" stroke-width="2"/>
+              <line x1="12" y1="11" x2="32" y2="11" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/>
+              <line x1="12" y1="17" x2="32" y2="17" stroke="var(--border)" stroke-width="2" stroke-linecap="round"/>
+              <line x1="12" y1="22" x2="32" y2="22" stroke="var(--border)" stroke-width="2" stroke-linecap="round"/>
+              <line x1="12" y1="27" x2="32" y2="27" stroke="var(--border)" stroke-width="2" stroke-linecap="round"/>
+              <line x1="12" y1="32" x2="22" y2="32" stroke="var(--border)" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>Sample minutes output</span>
+            <em>Screenshot coming soon</em>
+          </div>
         </div>
       </div>
+    </section>
 
-      <div class="form-group">
-        <label>Upload a .docx file <span class="optional">(optional)</span></label>
-        <div id="drop-zone" class="drop-zone">
-          <input type="file" id="docx-input" accept=".docx" hidden>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m0-9L7 6m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13v2a2 2 0 002 2h10a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-          <span id="drop-label">Drag a .docx here or <button type="button" id="browse-btn" class="btn-link">browse</button></span>
+    <!-- ── Problem ── -->
+    <section class="problem" aria-labelledby="problem-heading">
+      <div class="container">
+        <h2 id="problem-heading">Meeting minutes shouldn't take longer than the meeting.</h2>
+        <p>You just ran a two-hour strata AGM. Now you have to write it all up — from memory and a page of scribbled notes — in a format the Strata Property Act recognizes, before the next meeting rolls around. No admin staff. No template that actually works. Just you and a blank document at 10pm.</p>
+        <p>MinuteHand handles the formatting, structure, and language so you can focus on what matters — running your building, not documenting it.</p>
+      </div>
+    </section>
+
+    <!-- ── How it works ── -->
+    <section class="how-it-works" id="how-it-works" aria-labelledby="how-heading">
+      <div class="container">
+        <h2 id="how-heading">How it works</h2>
+        <ol class="steps" role="list">
+          <li class="step">
+            <div class="step__icon" aria-hidden="true">
+              <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                <rect x="5" y="5" width="26" height="26" rx="3" stroke="var(--primary)" stroke-width="2"/>
+                <line x1="18" y1="11" x2="18" y2="25" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/>
+                <line x1="11" y1="18" x2="25" y2="18" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="step__num" aria-hidden="true">1</div>
+            <h3>Add your notes or recording</h3>
+            <p>Paste notes, drag in a .docx, or upload an .mp3 of the meeting. Mix and match — audio plus written context works in a single run.</p>
+          </li>
+          <li class="step">
+            <div class="step__icon" aria-hidden="true">
+              <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                <circle cx="18" cy="18" r="13" stroke="var(--primary)" stroke-width="2"/>
+                <path d="M11 18l5 5 9-10" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="step__num" aria-hidden="true">2</div>
+            <h3>AI drafts your minutes</h3>
+            <p>MinuteHand structures the output to match your meeting type — strata council, HOA board, nonprofit board, or informal team meeting. Motions, votes, and action items are formatted clearly.</p>
+          </li>
+          <li class="step">
+            <div class="step__icon" aria-hidden="true">
+              <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                <rect x="7" y="3" width="22" height="28" rx="2" stroke="var(--primary)" stroke-width="2"/>
+                <line x1="12" y1="11" x2="24" y2="11" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/>
+                <line x1="12" y1="16" x2="24" y2="16" stroke="var(--border)" stroke-width="2" stroke-linecap="round"/>
+                <line x1="12" y1="21" x2="20" y2="21" stroke="var(--border)" stroke-width="2" stroke-linecap="round"/>
+                <path d="M20 25l3 3m0-3l-3 3" stroke="var(--primary)" stroke-width="1.75" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="step__num" aria-hidden="true">3</div>
+            <h3>Review and export</h3>
+            <p>Review the draft right in your browser, then download a ready-to-distribute .docx file with one click — no copy-pasting into Word.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ── Format support ── -->
+    <section class="formats" aria-labelledby="formats-heading">
+      <div class="container">
+        <h2 id="formats-heading">Works with how you already work</h2>
+        <p class="section-intro">No new tools to learn. Bring your notes however they exist.</p>
+        <div class="format-grid">
+          <div class="format-card">
+            <div class="format-icon" aria-hidden="true">
+              <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+                <rect x="3" y="6" width="24" height="18" rx="2" stroke="var(--primary)" stroke-width="1.75"/>
+                <line x1="8" y1="11" x2="22" y2="11" stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="8" y1="15" x2="22" y2="15" stroke="var(--border)" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="8" y1="19" x2="15" y2="19" stroke="var(--border)" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <h3>Paste or type</h3>
+            <p>Copy rough notes directly into the text box. Bullet points, full sentences, shorthand — MinuteHand makes sense of it.</p>
+          </div>
+          <div class="format-card">
+            <div class="format-icon" aria-hidden="true">
+              <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+                <rect x="6" y="2" width="18" height="26" rx="2" stroke="var(--primary)" stroke-width="1.75"/>
+                <line x1="10" y1="9" x2="20" y2="9" stroke="var(--border)" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="10" y1="13" x2="20" y2="13" stroke="var(--border)" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="10" y1="17" x2="20" y2="17" stroke="var(--border)" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="10" y1="21" x2="16" y2="21" stroke="var(--border)" stroke-width="1.5" stroke-linecap="round"/>
+                <text x="8" y="7" font-size="5" fill="var(--primary)" font-weight="700" font-family="Arial">W</text>
+              </svg>
+            </div>
+            <h3>.docx upload</h3>
+            <p>Already have notes in a Word document? Drop it in. MinuteHand reads the text and uses it as input — no conversion needed.</p>
+          </div>
+          <div class="format-card">
+            <div class="format-icon" aria-hidden="true">
+              <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+                <rect x="11" y="3" width="8" height="14" rx="4" stroke="var(--primary)" stroke-width="1.75"/>
+                <path d="M5 15c0 5.5 4.5 9 10 9s10-3.5 10-9" stroke="var(--primary)" stroke-width="1.75" stroke-linecap="round"/>
+                <line x1="15" y1="24" x2="15" y2="28" stroke="var(--primary)" stroke-width="1.75" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <h3>Audio recording</h3>
+            <p>Upload an .mp3, .m4a, or .wav file up to 50 MB. MinuteHand transcribes it and identifies individual speakers — then lets you confirm names before generating minutes.</p>
+          </div>
         </div>
-        <p id="file-status" class="file-status hidden"></p>
-      </div>
-
-      <div class="form-group">
-        <label for="notes-input" id="notes-label">Meeting notes or transcript</label>
-        <textarea
-          id="notes-input"
-          placeholder="Paste your meeting notes, rough transcript, or any combination of both here…"
-          rows="14"
-          spellcheck="false"
-        ></textarea>
-        <p class="field-hint" id="notes-hint">Include date, location, attendees, and any motions made if you have them.</p>
-      </div>
-
-      <div class="form-footer">
-        <button id="generate-btn" class="btn-primary">Generate Minutes</button>
-        <p id="error-msg" class="error hidden"></p>
-      </div>
-    </section>
-
-    <section id="speaker-section" class="card hidden">
-      <h1>Confirm Speaker Names</h1>
-      <p class="speaker-intro">We detected <strong id="speaker-count"></strong> speaker(s). Edit names below — pre-filled where introductions were detected in the first two minutes.</p>
-      <div id="speaker-list" class="speaker-list"></div>
-      <div class="form-footer">
-        <button id="confirm-speakers-btn" class="btn-primary">Generate Minutes</button>
-        <button id="back-to-form-btn" class="btn-ghost">← Back</button>
-        <p id="speaker-error-msg" class="error hidden"></p>
-      </div>
-    </section>
-
-    <section id="change-password-section" class="card hidden">
-      <h1>Change Password</h1>
-      <div class="form-group">
-        <label for="new-password">New password</label>
-        <input type="password" id="new-password" placeholder="••••••••" autocomplete="new-password">
-      </div>
-      <div class="form-group">
-        <label for="confirm-password">Confirm new password</label>
-        <input type="password" id="confirm-password" placeholder="••••••••" autocomplete="new-password">
-      </div>
-      <div class="form-footer">
-        <button id="save-password-btn" class="btn-primary">Save Password</button>
-        <button id="back-from-password-btn" class="btn-ghost">← Back</button>
-      </div>
-      <p id="password-message" class="signin-message hidden"></p>
-      <p id="password-error" class="error hidden"></p>
-    </section>
-
-    <section id="result-section" class="card hidden">
-      <div class="result-header">
-        <h1>Meeting Minutes</h1>
-        <div class="result-actions">
-          <button id="download-btn" class="btn-secondary">Download .docx</button>
-          <button id="reset-btn" class="btn-ghost">Start over</button>
+        <div class="formats-tip">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+            <circle cx="9" cy="9" r="8" stroke="var(--primary)" stroke-width="1.5"/>
+            <line x1="9" y1="8" x2="9" y2="13" stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="9" cy="5.5" r="0.75" fill="var(--primary)"/>
+          </svg>
+          <p><strong>Tip for audio recordings:</strong> Ask everyone to state their name at the start of the meeting — "Hi, I'm Jane Smith, strata council president." MinuteHand will pre-fill speaker names automatically.</p>
         </div>
       </div>
-      <div id="minutes-preview" class="minutes-preview"></div>
+    </section>
+
+    <!-- ── Pricing ── -->
+    <section class="lp-pricing" id="pricing" aria-labelledby="pricing-heading">
+      <div class="container">
+        <h2 id="pricing-heading">Simple, pay-per-use pricing</h2>
+        <p class="section-intro">No subscription. No monthly fee. Buy credits when you need them — they never expire.</p>
+        <div class="pricing-grid">
+          <div class="pricing-card">
+            <div class="pricing-card__amount">1 credit</div>
+            <div class="pricing-card__price">$7 <span class="pricing-card__currency">CAD</span></div>
+            <div class="pricing-card__desc">One complete set of meeting minutes. Good for trying it out.</div>
+            <a href="/app.html" class="btn-primary">Get started</a>
+          </div>
+          <div class="pricing-card pricing-card--featured">
+            <div class="pricing-card__badge">Best value</div>
+            <div class="pricing-card__amount">5 credits</div>
+            <div class="pricing-card__price">$20 <span class="pricing-card__currency">CAD</span></div>
+            <div class="pricing-card__desc">About $4 per meeting — covers a full year of quarterly meetings.</div>
+            <a href="/app.html" class="btn-primary">Get started</a>
+          </div>
+        </div>
+        <p class="pricing-note">No subscription, no commitment. Credits are prepaid and never expire — use them whenever your council meets.</p>
+      </div>
+    </section>
+
+    <!-- ── Privacy ── -->
+    <section class="privacy" aria-labelledby="privacy-heading">
+      <div class="container">
+        <div class="privacy-inner">
+          <div class="privacy-icon" aria-hidden="true">
+            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+              <path d="M20 4L8 9v11c0 9 5.5 15.5 12 17.5C26.5 35.5 32 29 32 20V9L20 4z" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M13 20l5 5 9-9" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <h2 id="privacy-heading">Your meeting records stay yours</h2>
+            <p>MinuteHand processes your notes and audio only to generate your minutes. Your content is not stored after processing is complete, not used to train AI models, and never sold or shared with third parties.</p>
+            <p>Audio recordings are deleted immediately after transcription. Questions about data handling? <a href="mailto:hello@minutehand.ca">Reach out.</a></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── FAQ ── -->
+    <section class="faq" aria-labelledby="faq-heading">
+      <div class="container">
+        <h2 id="faq-heading">Frequently asked questions</h2>
+        <div class="faq-list">
+
+          <details class="faq-item">
+            <summary class="faq-q">How much does MinuteHand cost?</summary>
+            <div class="faq-a">
+              <p>MinuteHand costs $7 CAD per meeting on a pay-per-use basis. A pack of 5 credits costs $20 CAD — about $4 per meeting. There is no subscription. You buy credits as you need them, and they never expire.</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">What file formats does MinuteHand support?</summary>
+            <div class="faq-a">
+              <p>MinuteHand accepts pasted or typed notes, Microsoft Word (.docx) files, and audio recordings in .mp3, .m4a, or .wav format up to 50 MB. Audio recordings are automatically transcribed with speaker identification.</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Is my meeting data private?</summary>
+            <div class="faq-a">
+              <p>Yes. Your notes and audio are used only to generate your minutes and are not stored beyond what is needed for processing. Audio files are deleted after transcription. Your data is never sold or used to train AI models.</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Who is MinuteHand for?</summary>
+            <div class="faq-a">
+              <p>MinuteHand is designed for volunteer secretaries and board members of strata and condo councils, homeowners associations (HOAs), and nonprofit organizations — anyone responsible for meeting minutes without administrative support.</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">How accurate is the transcription?</summary>
+            <div class="faq-a">
+              <p>MinuteHand uses Deepgram's Nova-2 speech recognition model, which is highly accurate for meeting recordings. For best results, ask participants to state their name at the start of the meeting. You can review and confirm speaker names before generating minutes.</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Do MinuteHand credits expire?</summary>
+            <div class="faq-a">
+              <p>No. MinuteHand credits never expire. Buy a pack and use them whenever you need them — once a week, once a quarter, or whenever your council meets.</p>
+            </div>
+          </details>
+
+        </div>
+      </div>
     </section>
 
   </main>
 
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+  <footer class="site-footer">
+    <div class="container site-footer__inner">
+      <div class="site-footer__brand">
+        <a href="/" class="logo" aria-label="MinuteHand home">
+          <svg width="20" height="20" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <circle cx="14" cy="14" r="13" stroke="currentColor" stroke-width="2"/>
+            <line x1="14" y1="14" x2="14" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="14" y1="14" x2="19" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          MinuteHand
+        </a>
+        <p class="site-footer__copy">&copy; 2026 MinuteHand. All rights reserved.</p>
+      </div>
+      <nav class="site-footer__nav" aria-label="Footer navigation">
+        <a href="/app.html">Open App</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+        <a href="mailto:hello@minutehand.ca">Contact</a>
+      </nav>
+    </div>
+  </footer>
+
 </body>
 </html>
