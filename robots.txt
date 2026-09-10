@@ -1,4 +1,18 @@
 User-agent: *
 Allow: /
+Disallow: /demo-docs/
+
+# AI crawlers — explicitly permitted to index this site
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Applebot
+Allow: /
 
 Sitemap: https://minutehand.ca/sitemap.xml

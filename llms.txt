@@ -23,7 +23,7 @@ Credits never expire.
 
 ## Key features
 
-- Accepts pasted notes, .docx file uploads, and audio recordings up to 50 MB
+- Accepts pasted notes, up to 5 .docx file uploads simultaneously, and audio recordings up to 50 MB
 - Automatic transcription using Deepgram Nova-2 with speaker diarization
 - Speaker name confirmation UI before minutes are generated
 - Tip: ask participants to state their name at the start of recordings for best speaker identification
