@@ -37,10 +37,18 @@ const signoutBtn          = document.getElementById('signout-btn');
 
 // Sign-in section
 const signinEmailInput   = document.getElementById('signin-email');
-const sendMagicLinkBtn   = document.getElementById('send-magic-link-btn');
+const signinPasswordInput = document.getElementById('signin-password');
+const authSubmitBtn      = document.getElementById('auth-submit-btn');
 const backFromSigninBtn  = document.getElementById('back-from-signin-btn');
 const signinMessage      = document.getElementById('signin-message');
 const signinError        = document.getElementById('signin-error');
+const tabSignin          = document.getElementById('tab-signin');
+const tabSignup          = document.getElementById('tab-signup');
+const forgotWrap         = document.getElementById('forgot-wrap');
+const forgotPasswordBtn  = document.getElementById('forgot-password-btn');
+const googleSigninBtn    = document.getElementById('google-signin-btn');
+
+let authMode = 'signin'; // 'signin' | 'signup'
 
 // Buy credits section
 const checkoutError      = document.getElementById('checkout-error');
@@ -85,6 +93,15 @@ let currentMinutesMarkdown = '';
 
 supabaseClient.auth.onAuthStateChange(async (event, session) => {
   currentUser = session?.user ?? null;
+  if (event === 'PASSWORD_RECOVERY') {
+    const newPassword = prompt('Enter your new password:');
+    if (newPassword) {
+      const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+      if (error) showToast('Could not update password: ' + error.message, 'error');
+      else showToast('Password updated — you\'re signed in!', 'success');
+    }
+    return;
+  }
   if (currentUser) {
     await refreshCreditBalance();
     updateAuthBar();
@@ -163,34 +180,89 @@ function showToast(message, type = 'success') {
 
 // ── Auth UI event handlers ────────────────────────────────────────────────────
 
-showSigninBtn.addEventListener('click', () => showSection(signinSection));
+showSigninBtn.addEventListener('click', () => {
+  setAuthMode('signin');
+  showSection(signinSection);
+});
 
 backFromSigninBtn.addEventListener('click', () => showSection(formSection));
 
-sendMagicLinkBtn.addEventListener('click', async () => {
-  const email = signinEmailInput.value.trim();
-  if (!email) { showSigninError('Please enter your email address.'); return; }
+tabSignin.addEventListener('click', () => setAuthMode('signin'));
+tabSignup.addEventListener('click', () => setAuthMode('signup'));
 
-  sendMagicLinkBtn.disabled = true;
-  sendMagicLinkBtn.textContent = 'Sending…';
+function setAuthMode(mode) {
+  authMode = mode;
+  const isSignin = mode === 'signin';
+  tabSignin.className = 'auth-tab' + (isSignin ? ' auth-tab--active' : '');
+  tabSignup.className = 'auth-tab' + (!isSignin ? ' auth-tab--active' : '');
+  authSubmitBtn.textContent = isSignin ? 'Sign In' : 'Create Account';
+  signinPasswordInput.autocomplete = isSignin ? 'current-password' : 'new-password';
+  forgotWrap.classList.toggle('hidden', !isSignin);
+  signinError.classList.add('hidden');
+  signinMessage.classList.add('hidden');
+}
+
+authSubmitBtn.addEventListener('click', async () => {
+  const email    = signinEmailInput.value.trim();
+  const password = signinPasswordInput.value;
+  if (!email)    { showSigninError('Please enter your email address.'); return; }
+  if (!password) { showSigninError('Please enter your password.'); return; }
+  if (authMode === 'signup' && password.length < 6) {
+    showSigninError('Password must be at least 6 characters.'); return;
+  }
+
+  authSubmitBtn.disabled = true;
+  authSubmitBtn.textContent = 'Working…';
   signinError.classList.add('hidden');
   signinMessage.classList.add('hidden');
 
   try {
-    const { error } = await supabaseClient.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: pageOrigin() },
+    if (authMode === 'signup') {
+      const { error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) throw error;
+      signinMessage.textContent = 'Account created — you\'re signed in!';
+      signinMessage.classList.remove('hidden');
+    } else {
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    }
+  } catch (err) {
+    showSigninError(err.message || 'Something went wrong. Please try again.');
+  } finally {
+    authSubmitBtn.disabled = false;
+    authSubmitBtn.textContent = authMode === 'signin' ? 'Sign In' : 'Create Account';
+  }
+});
+
+forgotPasswordBtn.addEventListener('click', async () => {
+  const email = signinEmailInput.value.trim();
+  if (!email) { showSigninError('Enter your email address above first.'); return; }
+
+  forgotPasswordBtn.disabled = true;
+  signinError.classList.add('hidden');
+  try {
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+      redirectTo: pageOrigin(),
     });
     if (error) throw error;
-
-    signinMessage.textContent = `Check your email — we sent a link to ${email}.`;
+    signinMessage.textContent = `Password reset email sent to ${email}.`;
     signinMessage.classList.remove('hidden');
-    sendMagicLinkBtn.textContent = 'Send again';
-    sendMagicLinkBtn.disabled = false;
   } catch (err) {
-    showSigninError(err.message || 'Failed to send magic link. Please try again.');
-    sendMagicLinkBtn.disabled = false;
-    sendMagicLinkBtn.textContent = 'Send Magic Link';
+    showSigninError(err.message || 'Could not send reset email.');
+  } finally {
+    forgotPasswordBtn.disabled = false;
+  }
+});
+
+googleSigninBtn.addEventListener('click', async () => {
+  googleSigninBtn.disabled = true;
+  const { error } = await supabaseClient.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: pageOrigin() },
+  });
+  if (error) {
+    showSigninError(error.message || 'Google sign-in failed.');
+    googleSigninBtn.disabled = false;
   }
 });
 
