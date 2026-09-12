@@ -1400,3 +1400,226 @@ body.landing {
   .site-header nav .nav-link { display: none; }
   .site-footer__inner { flex-direction: column; align-items: flex-start; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Governance Records (board.html)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Loading / access gate ── */
+
+.board-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 3rem 0;
+  color: var(--text-muted);
+}
+
+/* ── Page header ── */
+
+.board-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem 0 0.75rem;
+}
+
+.board-header h1 {
+  font-size: 1.35rem;
+  margin: 0 0 0.15rem;
+}
+
+/* ── Tab nav ── */
+
+.board-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 1.25rem;
+}
+
+.board-tab {
+  padding: 0.5rem 1.1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.board-tab:hover { color: var(--text); }
+
+.board-tab--active {
+  color: var(--mh-heading);
+  border-bottom-color: var(--mh-link);
+}
+
+/* ── Filter bar ── */
+
+.registry-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.registry-search {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  background: var(--card);
+  color: var(--text);
+}
+
+.registry-search:focus { outline: 2px solid var(--mh-link); outline-offset: 1px; }
+
+.registry-select {
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.registry-date {
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  background: var(--card);
+  color: var(--text);
+}
+
+.registry-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-left: 0.25rem;
+}
+
+/* ── Motion cards ── */
+
+.motion-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.motion-card__header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.motion-card__date {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.motion-meeting-link {
+  font-size: 0.8rem;
+  margin-left: auto;
+}
+
+.motion-card__description {
+  font-size: 0.925rem;
+  margin: 0 0 0.45rem;
+  line-height: 1.5;
+}
+
+.motion-card__meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ── Result badges ── */
+
+.result-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.result-badge--carried   { background: #d4edda; color: #155724; }
+.result-badge--defeated  { background: #f8d7da; color: #721c24; }
+.result-badge--tabled    { background: #fff3cd; color: #856404; }
+.result-badge--withdrawn { background: #e9ecef; color: #495057; }
+
+/* ── Empty state ── */
+
+.registry-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.registry-empty p { margin: 0 0 0.4rem; }
+
+/* ── Minutes modal ── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem;
+  overflow-y: auto;
+}
+
+.modal-inner {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 760px;
+  padding: 1.5rem;
+  position: relative;
+}
+
+.modal-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.85rem;
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0.25rem;
+}
+
+.modal-close:hover { color: var(--text); }
+
+@media (max-width: 600px) {
+  .board-header { flex-direction: column; }
+  .registry-filters { flex-direction: column; align-items: stretch; }
+  .registry-select, .registry-date { width: 100%; }
+  .motion-meeting-link { margin-left: 0; }
+  .modal-overlay { padding: 0.5rem; align-items: flex-end; }
+  .modal-inner { border-radius: 8px 8px 0 0; max-height: 90vh; overflow-y: auto; }
+}

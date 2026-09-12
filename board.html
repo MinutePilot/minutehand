@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Governance Records — MinuteHand</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="container">
+      <a href="/" class="logo" aria-label="MinuteHand home">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <circle cx="14" cy="14" r="13" stroke="currentColor" stroke-width="2"/>
+          <line x1="14" y1="14" x2="14" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="14" y1="14" x2="19" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>MinuteHand</span>
+      </a>
+      <p class="tagline">Governance Records</p>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <div id="loading-view" class="board-loading">
+      <div class="spinner"></div>
+      <span>Loading…</span>
+    </div>
+
+    <section id="access-section" class="card hidden">
+      <p id="access-msg"></p>
+      <a href="/app.html" class="btn-primary" style="display:inline-block;margin-top:1rem">Go to app</a>
+    </section>
+
+    <div id="board-view" class="hidden">
+
+      <div class="board-header">
+        <div>
+          <h1 id="org-name-heading"></h1>
+          <p class="field-hint" id="org-type-label"></p>
+        </div>
+        <a href="/app.html" class="btn-ghost">← Generate Minutes</a>
+      </div>
+
+      <nav class="board-tabs" role="tablist">
+        <button class="board-tab board-tab--active" data-tab="motions" role="tab" aria-selected="true">
+          Motions
+        </button>
+      </nav>
+
+      <div id="motions-view" role="tabpanel">
+        <div class="registry-filters">
+          <input type="search" id="motion-search" class="registry-search"
+                 placeholder="Search motions…" autocomplete="off">
+          <select id="status-filter" class="registry-select">
+            <option value="">All statuses</option>
+            <option value="carried">Carried</option>
+            <option value="defeated">Defeated</option>
+            <option value="tabled">Tabled</option>
+            <option value="withdrawn">Withdrawn</option>
+          </select>
+          <input type="date" id="date-from" class="registry-date" aria-label="From date"
+                 title="From date">
+          <input type="date" id="date-to"   class="registry-date" aria-label="To date"
+                 title="To date">
+          <span id="motion-count" class="registry-count"></span>
+        </div>
+
+        <div id="motion-list"></div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Minutes viewer modal -->
+  <div id="minutes-modal" class="modal-overlay hidden" role="dialog" aria-modal="true"
+       aria-label="Meeting minutes">
+    <div class="modal-inner">
+      <button id="modal-close" class="modal-close" aria-label="Close minutes">&#x2715;</button>
+      <div id="modal-body" class="minutes-preview"></div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container site-footer__inner">
+      <div class="site-footer__brand">
+        <a href="/" class="logo" aria-label="MinuteHand home">
+          <svg width="20" height="20" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <circle cx="14" cy="14" r="13" stroke="currentColor" stroke-width="2"/>
+            <line x1="14" y1="14" x2="14" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="14" y1="14" x2="19" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          MinuteHand
+        </a>
+        <p class="site-footer__copy">&copy; 2026 TOP SPIDER CANADA. All rights reserved.</p>
+      </div>
+      <nav class="site-footer__nav" aria-label="Footer navigation">
+        <a href="/app.html">Open App</a>
+        <a href="/#pricing">Pricing</a>
+        <a href="/refund.html">Refund Policy</a>
+        <a href="/terms.html">Terms</a>
+        <a href="/privacy.html">Privacy</a>
+        <a href="mailto:hello@minutehand.ca">Contact</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="board.js"></script>
+</body>
+</html>

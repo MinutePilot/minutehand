@@ -33,7 +33,8 @@ const accountBarSignedin  = accountBar.querySelector('.account-bar__signedin');
 const creditsDisplay      = document.getElementById('credits-display');
 const userEmailDisplay    = document.getElementById('user-email-display');
 const showSigninBtn       = document.getElementById('show-signin-btn');
-const buyCreditsBtn       = document.getElementById('buy-credits-btn');
+const buyCreditsBtn         = document.getElementById('buy-credits-btn');
+const boardPlanLinkWrap     = document.getElementById('board-plan-link-wrap');
 const changePasswordBtn   = document.getElementById('change-password-btn');
 const signoutBtn          = document.getElementById('signout-btn');
 
@@ -170,6 +171,7 @@ async function loadBoardPlanState() {
     .eq('owner_id', currentUser.id)
     .maybeSingle();
   userOrg = org ?? null;
+  boardPlanLinkWrap?.classList.toggle('hidden', !(hasBoardPlan && userOrg));
 }
 
 async function refreshCreditBalance() {
