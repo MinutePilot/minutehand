@@ -95,6 +95,8 @@ const docFileInput        = document.getElementById('doc-file');
 const docTitleInput       = document.getElementById('doc-title');
 const docCategorySelect   = document.getElementById('doc-category');
 const docEffectiveDate    = document.getElementById('doc-effective-date');
+const docSupersedesWrap   = document.getElementById('doc-supersedes-wrap');
+const docSupersedesSelect = document.getElementById('doc-supersedes');
 const docUploadBtn        = document.getElementById('doc-upload-btn');
 const docCancelBtn        = document.getElementById('doc-cancel-btn');
 const docFormError        = document.getElementById('doc-form-error');
@@ -1359,7 +1361,7 @@ async function loadDocuments() {
 
   const { data, error } = await supabaseClient
     .from('documents')
-    .select('id, title, category, effective_date, storage_path, file_name, file_size, mime_type, status, created_at')
+    .select('id, title, category, effective_date, storage_path, file_name, file_size, mime_type, status, supersedes_id, created_at')
     .eq('org_id', userOrg.id)
     .order('created_at', { ascending: false });
 
@@ -1386,6 +1388,106 @@ function sortedDocs(docs) {
   return [...docs].sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
+// Walk supersedes_id links to build a chain: [current, prev, prev-prev, …]
+function buildVersionChain(doc) {
+  const chain   = [doc];
+  const visited = new Set([doc.id]);
+  let cur = doc;
+  while (cur.supersedes_id) {
+    if (visited.has(cur.supersedes_id)) break;  // guard against circular refs
+    const prev = allDocuments.find((d) => d.id === cur.supersedes_id);
+    if (!prev) break;
+    chain.push(prev);
+    visited.add(prev.id);
+    cur = prev;
+  }
+  return chain;
+}
+
+// Renders active docs with version chain expanders when applicable.
+function renderActiveDocItems(docs) {
+  return docs.map((d) => {
+    const chain      = buildVersionChain(d);
+    const versionNum = chain.length;
+    const hasHistory = versionNum > 1;
+    const sizStr     = d.file_size ? formatFileSize(d.file_size) : '';
+    const dateStr    = new Date(d.created_at).toLocaleDateString('en-CA', {
+      year: 'numeric', month: 'short', day: 'numeric',
+    });
+    const effStr = d.effective_date
+      ? ' · Effective: ' + new Date(d.effective_date + 'T12:00:00').toLocaleDateString('en-CA', {
+          year: 'numeric', month: 'short',
+        })
+      : '';
+    const vBadge  = hasHistory
+      ? `<span class="doc-version-badge">v${versionNum}</span>`
+      : '';
+    const closedLabel = `Version history (${versionNum})`;
+    const openLabel   = 'Hide history';
+    const toggleBtn   = hasHistory
+      ? `<button class="btn-link doc-version-toggle"
+                 data-doc-id="${escHtml(d.id)}"
+                 data-label-closed="${escHtml(closedLabel)}"
+                 data-label-open="${escHtml(openLabel)}">${closedLabel}</button>`
+      : '';
+
+    const itemHtml = `<div class="doc-item" data-id="${escHtml(d.id)}">
+  <span class="doc-type-badge">${fileTypeBadge(d.mime_type)}</span>
+  <div class="doc-item__info">
+    <div class="doc-item__title">${escHtml(d.title)}${vBadge}</div>
+    <div class="doc-item__meta">${[sizStr, `Uploaded ${dateStr}`].filter(Boolean).join(' · ')}${effStr}</div>
+  </div>
+  <div class="doc-item__actions">
+    <button class="btn-link doc-download-btn"
+            data-path="${escHtml(d.storage_path)}"
+            data-name="${escHtml(d.file_name)}">Download ↓</button>
+    ${toggleBtn}
+    <button class="btn-link doc-archive-btn" data-id="${escHtml(d.id)}">Archive</button>
+  </div>
+</div>`;
+
+    const chainHtml = hasHistory
+      ? renderVersionChainHtml(d.id, chain.slice(1))
+      : '';
+
+    return itemHtml + chainHtml;
+  }).join('');
+}
+
+// Renders the collapsible version history panel beneath a doc item.
+// `olderDocs`: chain entries from index 1 onward (prev, prev-prev, …)
+function renderVersionChainHtml(parentId, olderDocs) {
+  const totalVersions = olderDocs.length + 1;  // parent is current version
+  const items = olderDocs.map((d, i) => {
+    const vNum   = totalVersions - 1 - i;
+    const sizStr = d.file_size ? formatFileSize(d.file_size) : '';
+    const dateStr = new Date(d.created_at).toLocaleDateString('en-CA', {
+      year: 'numeric', month: 'short', day: 'numeric',
+    });
+    const effStr = d.effective_date
+      ? 'Effective: ' + new Date(d.effective_date + 'T12:00:00').toLocaleDateString('en-CA', {
+          year: 'numeric', month: 'short',
+        })
+      : '';
+    return `<div class="doc-version-item">
+  <span class="doc-version-badge doc-version-badge--old" title="Version ${vNum}">v${vNum}</span>
+  <span class="doc-type-badge doc-type-badge--sm">${fileTypeBadge(d.mime_type)}</span>
+  <div class="doc-version-item__info">
+    <div class="doc-version-item__title">${escHtml(d.title)}</div>
+    <div class="doc-version-item__meta">${[sizStr, `Uploaded ${dateStr}`, effStr].filter(Boolean).join(' · ')}</div>
+  </div>
+  <button class="btn-link doc-download-btn"
+          data-path="${escHtml(d.storage_path)}"
+          data-name="${escHtml(d.file_name)}">Download ↓</button>
+</div>`;
+  }).join('');
+
+  return `<div class="doc-version-chain hidden" id="doc-chain-${escHtml(parentId)}">
+  <div class="doc-version-chain__inner">${items}</div>
+</div>`;
+}
+
+// Renders a flat list without version chains — used for archived section.
 function renderDocItems(docs, showRestore) {
   return docs.map((d) => {
     const sizStr  = d.file_size ? formatFileSize(d.file_size) : '';
@@ -1420,6 +1522,7 @@ function renderDocItems(docs, showRestore) {
 function renderDocuments() {
   const active   = allDocuments.filter((d) => d.status === 'active');
   const archived = allDocuments.filter((d) => d.status === 'archived');
+  // superseded docs are only surfaced via version chains — not counted here
 
   docsCount.textContent = `${active.length} document${active.length !== 1 ? 's' : ''}`;
 
@@ -1440,7 +1543,7 @@ function renderDocuments() {
     ${escHtml(cat)}
     <span class="doc-category-count">${docs.length}</span>
   </h4>
-  <div class="doc-category-list">${renderDocItems(docs, false)}</div>
+  <div class="doc-category-list">${renderActiveDocItems(docs)}</div>
 </div>`;
   }
 
@@ -1451,7 +1554,7 @@ function renderDocuments() {
          <p class="field-hint">Upload governance documents to start your library.</p>
        </div>`;
 
-  // Archived section
+  // Archived section — superseded docs are NOT included here
   if (archived.length > 0) {
     docsArchivedSection.classList.remove('hidden');
     archivedDocsCount.textContent = String(archived.length);
@@ -1475,8 +1578,29 @@ function openDocForm() {
   docEffectiveDate.value     = '';
   docUploadBtn.disabled      = false;
   docUploadBtn.textContent   = 'Upload';
+  updateSupersedesDropdown('Bylaws');
   docTitleInput.focus();
   docFormPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function updateSupersedesDropdown(category) {
+  const candidates = allDocuments.filter(
+    (d) => d.status === 'active' && d.category === category
+  );
+  if (candidates.length === 0) {
+    docSupersedesWrap.classList.add('hidden');
+    docSupersedesSelect.value = '';
+    return;
+  }
+  docSupersedesWrap.classList.remove('hidden');
+  docSupersedesSelect.innerHTML =
+    '<option value="">— Not replacing an existing document —</option>' +
+    candidates.map((d) => {
+      const eff = d.effective_date
+        ? ` (effective ${new Date(d.effective_date + 'T12:00:00').toLocaleDateString('en-CA', { year: 'numeric', month: 'short' })})`
+        : '';
+      return `<option value="${escHtml(d.id)}">${escHtml(d.title)}${eff}</option>`;
+    }).join('');
 }
 
 function closeDocForm() {
@@ -1484,10 +1608,11 @@ function closeDocForm() {
 }
 
 async function uploadDocument() {
-  const file     = docFileInput.files[0];
-  const title    = docTitleInput.value.trim();
-  const category = docCategorySelect.value;
-  const effDate  = docEffectiveDate.value || null;
+  const file        = docFileInput.files[0];
+  const title       = docTitleInput.value.trim();
+  const category    = docCategorySelect.value;
+  const effDate     = docEffectiveDate.value || null;
+  const supersedesId = docSupersedesSelect.value || null;
 
   if (!file)  { showDocFormError('Please select a file.'); return; }
   if (!title) { showDocFormError('Please enter a title for this document.'); return; }
@@ -1528,6 +1653,7 @@ async function uploadDocument() {
     file_name:      file.name,
     file_size:      file.size,
     mime_type:      file.type || null,
+    supersedes_id:  supersedesId,
   });
 
   docUploadBtn.disabled    = false;
@@ -1539,6 +1665,18 @@ async function uploadDocument() {
     // fresh upload with a new UUID will succeed). Note this to the user.
     showDocFormError('File uploaded but metadata save failed: ' + dbError.message + ' — please try uploading again.');
     return;
+  }
+
+  // Mark the superseded document. Non-fatal: if this update fails the new
+  // doc is still correctly uploaded; the old one remains 'active' temporarily.
+  if (supersedesId) {
+    const { error: supErr } = await supabaseClient
+      .from('documents')
+      .update({ status: 'superseded', updated_at: new Date().toISOString() })
+      .eq('id', supersedesId);
+    if (supErr) {
+      console.warn('Step 8d: failed to mark old version as superseded:', supErr.message);
+    }
   }
 
   closeDocForm();
@@ -1599,11 +1737,22 @@ uploadDocBtn.addEventListener('click', openDocForm);
 docCancelBtn.addEventListener('click', closeDocForm);
 docUploadBtn.addEventListener('click', uploadDocument);
 
+docCategorySelect.addEventListener('change', () => {
+  updateSupersedesDropdown(docCategorySelect.value);
+});
+
 docList.addEventListener('click', (e) => {
   const dl  = e.target.closest('.doc-download-btn');
   if (dl)  { downloadDocument(dl.dataset.path, dl.dataset.name); return; }
   const arc = e.target.closest('.doc-archive-btn');
   if (arc) { archiveDocument(arc.dataset.id); return; }
+  const tog = e.target.closest('.doc-version-toggle');
+  if (tog) {
+    const chainEl = document.getElementById(`doc-chain-${tog.dataset.docId}`);
+    if (!chainEl) return;
+    const nowHidden = chainEl.classList.toggle('hidden');
+    tog.textContent = nowHidden ? tog.dataset.labelClosed : tog.dataset.labelOpen;
+  }
 });
 
 archivedDocsList.addEventListener('click', (e) => {

@@ -366,6 +366,16 @@
               <input type="date" id="doc-effective-date">
               <p class="field-hint">The date this document took effect or was filed.</p>
             </div>
+            <div class="form-group hidden" id="doc-supersedes-wrap" style="grid-column: 1 / -1">
+              <label for="doc-supersedes">Supersedes <span class="optional">(optional)</span></label>
+              <select id="doc-supersedes">
+                <option value="">— Not replacing an existing document —</option>
+              </select>
+              <p class="field-hint">
+                If this document replaces an earlier version, select it here.
+                The earlier version will be preserved in version history and remain downloadable.
+              </p>
+            </div>
           </div>
           <div class="member-form__footer">
             <button id="doc-upload-btn" class="btn-primary">Upload</button>

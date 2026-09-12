@@ -2340,6 +2340,73 @@ body.landing {
   color: #1a56d6;
 }
 
+/* Version badge (v2, v3 …) */
+
+.doc-version-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.38rem;
+  border-radius: 3px;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.doc-version-badge--old {
+  background: #f3f4f6;
+  color: #6b7280;
+  border-color: #d1d5db;
+}
+
+/* Version chain panel */
+
+.doc-version-chain {
+  margin: 0 0 0.5rem 0;
+  border-left: 2px solid var(--border);
+  margin-left: 1.25rem;
+}
+
+.doc-version-chain__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.doc-version-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.doc-version-item:last-child { border-bottom: none; }
+
+.doc-version-item__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.doc-version-item__title {
+  font-size: 0.85rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-version-item__meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+
 /* Archived docs section — reuses members-former-toggle */
 
 #docs-archived-section {
