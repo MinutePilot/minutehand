@@ -14,8 +14,9 @@ let currentUser    = null;
 let userOrg        = null;
 let allMotions     = [];
 let allActionItems = [];
-let agendaNewItems = [];
-const meetingCache = new Map();
+let agendaNewItems  = [];
+let searchDebounce  = null;
+const meetingCache  = new Map();
 
 // ── Element refs ──────────────────────────────────────────────────────────────
 
@@ -42,6 +43,10 @@ const aiSearch       = document.getElementById('ai-search');
 const aiCount        = document.getElementById('ai-count');
 const actionItemList      = document.getElementById('action-item-list');
 const agendaView          = document.getElementById('agenda-view');
+const searchView          = document.getElementById('search-view');
+const searchInput         = document.getElementById('search-input');
+const searchStatus        = document.getElementById('search-status');
+const searchResults       = document.getElementById('search-results');
 const agendaMeetingDate   = document.getElementById('agenda-meeting-date');
 const agendaPreview       = document.getElementById('agenda-preview');
 const agendaDownloadBtn   = document.getElementById('agenda-download-btn');
@@ -236,7 +241,9 @@ document.querySelectorAll('.board-tab').forEach((tab) => {
     motionsView.classList.toggle('hidden', active !== 'motions');
     actionsView.classList.toggle('hidden', active !== 'actions');
     agendaView.classList.toggle('hidden',  active !== 'agenda');
+    searchView.classList.toggle('hidden',  active !== 'search');
     if (active === 'agenda') renderAgenda();
+    if (active === 'search') searchInput.focus();
   });
 });
 
@@ -629,6 +636,79 @@ function closeModal() {
 modalClose.addEventListener('click', closeModal);
 minutesModal.addEventListener('click', (e) => { if (e.target === minutesModal) closeModal(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+// ── Full-text search ──────────────────────────────────────────────────────────
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchDebounce);
+  const q = searchInput.value.trim();
+  if (!q) {
+    searchStatus.textContent = '';
+    searchResults.innerHTML  = '';
+    return;
+  }
+  searchStatus.textContent = 'Searching…';
+  searchResults.innerHTML  = '';
+  searchDebounce = setTimeout(() => runSearch(q), 350);
+});
+
+async function runSearch(q) {
+  const { data, error } = await supabaseClient.rpc('search_meetings', {
+    p_org_id: userOrg.id,
+    p_query:  q,
+  });
+
+  // Guard against stale results if the user kept typing
+  if (searchInput.value.trim() !== q) return;
+
+  if (error) {
+    searchStatus.textContent = '';
+    searchResults.innerHTML  = `<p class="error">Search failed: ${escHtml(error.message)}</p>`;
+    return;
+  }
+
+  const results = data ?? [];
+  searchStatus.textContent = results.length === 0
+    ? `No results for "${q}"`
+    : `${results.length} meeting${results.length !== 1 ? 's' : ''}`;
+
+  if (results.length === 0) {
+    searchResults.innerHTML = `<div class="registry-empty"><p>No results for <em>${escHtml(q)}</em>.</p><p class="field-hint">Try different keywords — search covers all meeting narrative, not just titles.</p></div>`;
+    return;
+  }
+
+  searchResults.innerHTML = results.map((r) => {
+    const dateStr = r.meeting_date
+      ? new Date(r.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', {
+          year: 'numeric', month: 'long', day: 'numeric',
+        })
+      : 'Date not recorded';
+    const titleStr  = r.title ?? 'Meeting';
+    // ts_headline wraps matched terms in <mark>. Escape the full string then
+    // restore just the mark tags so other content can't inject HTML.
+    const safeHeadline = escHtml(r.headline ?? '')
+      .replace(/&lt;mark&gt;/g,  '<mark>')
+      .replace(/&lt;\/mark&gt;/g, '</mark>');
+
+    return `<div class="search-result-card">
+  <div class="search-result-card__header">
+    <span class="search-result-card__date">${dateStr}</span>
+    <span class="search-result-card__title">${escHtml(titleStr)}</span>
+    <button class="btn-link search-view-minutes"
+            data-meeting-id="${r.id}"
+            title="View full minutes for ${escHtml(titleStr)}">
+      View minutes&nbsp;↗
+    </button>
+  </div>
+  <p class="search-result-card__headline">${safeHeadline}</p>
+</div>`;
+  }).join('');
+}
+
+searchResults.addEventListener('click', (e) => {
+  const btn = e.target.closest('.search-view-minutes');
+  if (btn) openMeetingModal(btn.dataset.meetingId);
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

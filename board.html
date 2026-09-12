@@ -59,6 +59,9 @@
         <button class="board-tab" data-tab="agenda" role="tab" aria-selected="false">
           Next Agenda
         </button>
+        <button class="board-tab" data-tab="search" role="tab" aria-selected="false">
+          Search
+        </button>
       </nav>
 
       <div id="motions-view" role="tabpanel">
@@ -128,6 +131,17 @@
           <ul id="agenda-new-item-list" class="agenda-new-item-list"></ul>
         </div>
 
+      </div>
+
+      <!-- Search view -->
+      <div id="search-view" class="hidden" role="tabpanel">
+        <div class="search-bar">
+          <input type="search" id="search-input" class="search-input"
+                 placeholder="Search all meeting content…"
+                 autocomplete="off" autocorrect="off" spellcheck="false">
+          <span id="search-status" class="search-status"></span>
+        </div>
+        <div id="search-results"></div>
       </div>
 
     </div>

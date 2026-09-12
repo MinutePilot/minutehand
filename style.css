@@ -1652,6 +1652,75 @@ body.landing {
   color: var(--text-muted);
 }
 
+/* ── Search tab ── */
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 1rem;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.search-status {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.search-result-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.search-result-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.search-result-card__date {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.search-result-card__title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  flex: 1;
+}
+
+.search-result-card__headline {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.search-result-card__headline mark {
+  background: #fff3a3;
+  color: var(--text);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
 /* ── Agenda tab ── */
 
 .agenda-controls {
