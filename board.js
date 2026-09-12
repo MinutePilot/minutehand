@@ -493,7 +493,7 @@ function buildAgendaHtml({ last, openItems, tabledMots, nextDateStr, forExport =
   // New business
   html += `<li><strong>New Business</strong>`;
   if (agendaNewItems.length === 0) {
-    html += `<br>${none('No items added.')}`;
+    html += `<br>${none('None.')}`;
   } else {
     html += `<ul class="agenda-sublist">`;
     agendaNewItems.forEach((text) => { html += `<li>${escHtml(text)}</li>`; });
