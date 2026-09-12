@@ -80,6 +80,32 @@
       <button id="back-from-credits-btn" class="btn-ghost" style="margin-top:1.25rem">← Back</button>
     </section>
 
+    <section id="org-setup-section" class="card hidden">
+      <h1>Set Up Your Organization</h1>
+      <p class="field-hint" style="margin-bottom:1.25rem">This is the anchor record for all your governance data — meeting history, motions, action items, and documents. You only set this up once.</p>
+
+      <div class="form-group">
+        <label for="org-name">Organization name</label>
+        <input type="text" id="org-name" placeholder="e.g. KAS 1117 Strata Corporation" autocomplete="organization">
+        <p class="field-hint">Use the legal name as it appears on your governing documents.</p>
+      </div>
+
+      <div class="form-group">
+        <label for="org-type">Organization type</label>
+        <select id="org-type">
+          <option value="STRATA">Strata Council (BC)</option>
+          <option value="HOA_GENERIC">HOA Board</option>
+          <option value="NONPROFIT_BOARD">Nonprofit Board</option>
+          <option value="TEAM_INFORMAL">Team / Informal Meeting</option>
+        </select>
+      </div>
+
+      <div class="form-footer">
+        <button id="org-save-btn" class="btn-primary">Save &amp; Continue</button>
+      </div>
+      <p id="org-setup-error" class="error hidden"></p>
+    </section>
+
     <section id="form-section" class="card">
       <h1>Generate Meeting Minutes</h1>
       <div id="account-bar" class="account-bar account-bar--signedout">

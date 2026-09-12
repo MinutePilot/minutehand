@@ -77,6 +77,13 @@ const speakerList        = document.getElementById('speaker-list');
 const confirmSpeakersBtn = document.getElementById('confirm-speakers-btn');
 const backToFormBtn      = document.getElementById('back-to-form-btn');
 
+// Org setup
+const orgSetupSection = document.getElementById('org-setup-section');
+const orgNameInput    = document.getElementById('org-name');
+const orgTypeSelect   = document.getElementById('org-type');
+const orgSaveBtn      = document.getElementById('org-save-btn');
+const orgSetupError   = document.getElementById('org-setup-error');
+
 // Result
 const minutesPreview = document.getElementById('minutes-preview');
 const downloadBtn    = document.getElementById('download-btn');
@@ -90,6 +97,9 @@ let audioFile              = null;
 let pendingRawTranscript   = '';
 let pendingSpeakers        = [];
 let currentMinutesMarkdown = '';
+let currentMeetingId       = null;
+let hasBoardPlan           = false;
+let userOrg                = null;
 
 // ── Auth state management ─────────────────────────────────────────────────────
 
@@ -106,8 +116,13 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
   }
   if (currentUser) {
     await refreshCreditBalance();
+    await loadBoardPlanState();
     updateAuthBar();
-    if (!signinSection.classList.contains('hidden')) showSection(formSection);
+    const comingFromSignin = !signinSection.classList.contains('hidden');
+    if (comingFromSignin || (hasBoardPlan && !userOrg)) {
+      if (hasBoardPlan && !userOrg) showSection(orgSetupSection);
+      else showSection(formSection);
+    }
   } else {
     creditBalance = null;
     updateAuthBar();
@@ -136,6 +151,26 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     window.history.replaceState({}, '', window.location.pathname);
   }
 })();
+
+async function loadBoardPlanState() {
+  const { data: sub } = await supabaseClient
+    .from('subscriptions')
+    .select('board_plan_active, expires_at')
+    .eq('user_id', currentUser.id)
+    .maybeSingle();
+
+  hasBoardPlan = sub?.board_plan_active === true &&
+                 (!sub.expires_at || new Date(sub.expires_at) > new Date());
+
+  if (!hasBoardPlan) { userOrg = null; return; }
+
+  const { data: org } = await supabaseClient
+    .from('organizations')
+    .select('id, name, org_type')
+    .eq('owner_id', currentUser.id)
+    .maybeSingle();
+  userOrg = org ?? null;
+}
 
 async function refreshCreditBalance() {
   const { data } = await supabaseClient
@@ -321,6 +356,38 @@ document.getElementById('save-password-btn').addEventListener('click', async () 
 });
 
 buyCreditsBtn.addEventListener('click', () => showSection(buyCreditsSection));
+
+// ── Org setup ─────────────────────────────────────────────────────────────────
+
+orgSaveBtn.addEventListener('click', async () => {
+  const name = orgNameInput.value.trim();
+  if (!name) {
+    orgSetupError.textContent = 'Please enter your organization name.';
+    orgSetupError.classList.remove('hidden');
+    return;
+  }
+  orgSetupError.classList.add('hidden');
+  orgSaveBtn.disabled     = true;
+  orgSaveBtn.textContent  = 'Saving…';
+
+  const { data, error } = await supabaseClient
+    .from('organizations')
+    .insert({ owner_id: currentUser.id, name, org_type: orgTypeSelect.value })
+    .select('id, name, org_type')
+    .single();
+
+  orgSaveBtn.disabled    = false;
+  orgSaveBtn.textContent = 'Save & Continue';
+
+  if (error) {
+    orgSetupError.textContent = error.message || 'Could not save. Please try again.';
+    orgSetupError.classList.remove('hidden');
+    return;
+  }
+
+  userOrg = data;
+  showSection(formSection);
+});
 
 backFromCreditsBtn.addEventListener('click', () => showSection(formSection));
 
@@ -536,13 +603,16 @@ async function runGenerateFlow(notes) {
     });
     removeStatusRow();
     currentMinutesMarkdown = data.minutes;
-    if (currentUser) await refreshCreditBalance(); // update balance display
+    currentMeetingId       = data.meeting_id ?? null;
+    if (currentUser) await refreshCreditBalance();
     minutesPreview.innerHTML = marked.parse(preprocessMarkdown(data.minutes));
     showSection(resultSection);
   } catch (err) {
     removeStatusRow();
     setLoadingBtn(generateBtn, false);
-    if (err.status === 402) {
+    if (err.status === 402 && err.code === 'NO_ORG') {
+      showSection(orgSetupSection);
+    } else if (err.status === 402) {
       showSection(buyCreditsSection);
     } else if (err.status === 401) {
       showSection(signinSection);
@@ -587,6 +657,7 @@ downloadBtn.addEventListener('click', () => {
 
 resetBtn.addEventListener('click', () => {
   currentMinutesMarkdown = '';
+  currentMeetingId       = null;
   pendingRawTranscript   = '';
   pendingSpeakers        = [];
   audioFile              = null;
@@ -658,6 +729,7 @@ async function callEdgeFunction(name, payload) {
     const err = await resp.json().catch(() => ({}));
     const error = new Error(err.error || `Server error (${resp.status})`);
     error.status = resp.status;
+    error.code   = err.code ?? null;
     throw error;
   }
 
@@ -666,7 +738,7 @@ async function callEdgeFunction(name, payload) {
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
 
-const SECTIONS = [signinSection, buyCreditsSection, formSection, speakerSection, resultSection, changePasswordSection];
+const SECTIONS = [signinSection, buyCreditsSection, orgSetupSection, formSection, speakerSection, resultSection, changePasswordSection];
 
 function showSection(section) {
   SECTIONS.forEach((s) => s.classList.add('hidden'));

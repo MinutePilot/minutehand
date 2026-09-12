@@ -169,6 +169,79 @@ Generate complete, properly formatted meeting minutes from the source material. 
   return { system, user };
 }
 
+// ── Board Plan: structured JSON output suffix ─────────────────────────────────
+// Appended to the system prompt for Board Plan users. Same Claude call, same
+// credit cost — the structured field is extracted from what Claude writes in
+// the markdown field, so no additional AI work is required.
+
+function boardPlanJsonSuffix(): string {
+  return `
+
+OUTPUT FORMAT — REQUIRED FOR THIS REQUEST:
+Return a single valid JSON object. No text before or after it. No markdown code fences.
+The object must have exactly two top-level keys:
+
+"markdown": string — the complete meeting minutes formatted exactly per all rules above.
+
+"structured": object extracted from what you wrote in "markdown":
+{
+  "meeting_date": "YYYY-MM-DD if determinable from the source, otherwise null",
+  "title": "the ### heading line, e.g. 'Strata Council Meeting — September 15, 2026'",
+  "motions": [
+    {
+      "description": "the motion substance — what was moved, not the MOVED/SECONDED/CARRIED attribution line",
+      "moved_by": "name string or null",
+      "seconded_by": "name string or null",
+      "result": "carried | defeated | tabled | withdrawn",
+      "vote_tally": "'3-0' format string or null",
+      "sort_order": 1
+    }
+  ],
+  "action_items": [
+    {
+      "description": "the Action column text from the Action Items table",
+      "responsible_party": "name string or null",
+      "due_date_text": "the Due Date column text exactly as written, or null",
+      "due_date_parsed": "YYYY-MM-DD only when a specific calendar date is unambiguously implied — null for 'ongoing', 'TBD', 'at board's discretion', or any vague timing",
+      "sort_order": 1
+    }
+  ]
+}
+
+Extract motions and action items directly from what you wrote in the markdown field. Do not fabricate structured data not present in the generated minutes.`;
+}
+
+// ── Structured output types ───────────────────────────────────────────────────
+
+interface StructuredMotion {
+  description: string;
+  moved_by: string | null;
+  seconded_by: string | null;
+  result: "carried" | "defeated" | "tabled" | "withdrawn";
+  vote_tally: string | null;
+  sort_order: number;
+}
+
+interface StructuredActionItem {
+  description: string;
+  responsible_party: string | null;
+  due_date_text: string | null;
+  due_date_parsed: string | null;
+  sort_order: number;
+}
+
+interface StructuredData {
+  meeting_date: string | null;
+  title: string | null;
+  motions: StructuredMotion[];
+  action_items: StructuredActionItem[];
+}
+
+interface BoardPlanResponse {
+  markdown: string;
+  structured: StructuredData;
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
@@ -180,7 +253,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Method not allowed" }, 405);
   }
 
-  // ── Auth + credit check ───────────────────────────────────────────────────
+  // ── Auth ──────────────────────────────────────────────────────────────────
 
   const jwt = req.headers.get("Authorization")?.replace("Bearer ", "");
   if (!jwt) return json({ error: "Authentication required" }, 401);
@@ -198,6 +271,8 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
+
+  // ── Credit check ──────────────────────────────────────────────────────────
 
   const { data: hasCredit, error: creditError } = await supabaseAdmin.rpc(
     "check_and_deduct_credit",
@@ -228,28 +303,135 @@ Deno.serve(async (req: Request) => {
 
   if (!notes) return json({ error: "notes is required" }, 400);
 
+  // ── Board Plan tier check ─────────────────────────────────────────────────
+
+  const { data: isBoardPlan } = await supabaseAdmin.rpc("has_board_plan", { p_user_id: user.id });
+
+  let orgId: string | null = null;
+  if (isBoardPlan) {
+    const { data: org } = await supabaseAdmin
+      .from("organizations")
+      .select("id")
+      .eq("owner_id", user.id)
+      .maybeSingle();
+
+    if (!org) {
+      // Restore the credit — we're not generating anything
+      await supabaseAdmin.rpc("restore_credit", { p_user_id: user.id });
+      return json({ error: "Organization not set up", code: "NO_ORG" }, 402);
+    }
+    orgId = org.id;
+  }
+
+  // ── Generate ──────────────────────────────────────────────────────────────
+
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) return json({ error: "ANTHROPIC_API_KEY not configured" }, 500);
 
   const client = new Anthropic({ apiKey });
   const { system, user: userPrompt } = buildPrompt(notes, template);
+  const finalSystem = isBoardPlan ? system + boardPlanJsonSuffix() : system;
 
+  let rawText = "";
   try {
     const msg = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 4096,
-      system,
+      max_tokens: isBoardPlan ? 8192 : 4096,
+      system: finalSystem,
       messages: [{ role: "user", content: userPrompt }],
     });
-
-    const minutes = msg.content[0].type === "text" ? msg.content[0].text : "";
-    return json({ minutes, template });
+    rawText = msg.content[0].type === "text" ? msg.content[0].text : "";
   } catch (err) {
     console.error("Anthropic API error:", err);
-    const { error: restoreError } = await supabaseAdmin.rpc("restore_credit", { p_user_id: user.id });
-    if (restoreError) console.error("Credit restore failed:", restoreError);
+    await supabaseAdmin.rpc("restore_credit", { p_user_id: user.id });
     return json({ error: "Failed to generate minutes. Please try again." }, 500);
   }
+
+  // ── Standard tier: return markdown directly ───────────────────────────────
+
+  if (!isBoardPlan) {
+    return json({ minutes: rawText, template });
+  }
+
+  // ── Board Plan: parse structured JSON response ────────────────────────────
+
+  let markdown = rawText;
+  let structured: StructuredData | null = null;
+
+  try {
+    // Strip markdown fences if Claude wrapped the JSON despite instructions
+    const cleaned = rawText
+      .replace(/^```(?:json)?\s*\n?/, "")
+      .replace(/\n?```\s*$/, "")
+      .trim();
+    const parsed: BoardPlanResponse = JSON.parse(cleaned);
+    markdown   = parsed.markdown   ?? rawText;
+    structured = parsed.structured ?? null;
+  } catch (err) {
+    console.error("Board Plan JSON parse failed:", err);
+    // Graceful degradation: minutes were generated, return them without saving
+    return json({ minutes: rawText, template, warning: "structured_parse_failed" });
+  }
+
+  // ── Board Plan: persist meeting + motions + action items ──────────────────
+
+  let meetingId: string | null = null;
+  try {
+    const { data: meeting, error: meetingErr } = await supabaseAdmin
+      .from("meetings")
+      .insert({
+        org_id:       orgId,
+        user_id:      user.id,
+        meeting_date: structured?.meeting_date ?? null,
+        title:        structured?.title        ?? null,
+        template,
+        status:       "draft",
+        markdown,
+        source_notes: notes,
+      })
+      .select("id")
+      .single();
+
+    if (meetingErr) throw meetingErr;
+    meetingId = meeting.id;
+
+    if (structured?.motions?.length) {
+      const { error: motionsErr } = await supabaseAdmin.from("motions").insert(
+        structured.motions.map((m) => ({
+          meeting_id:  meetingId,
+          org_id:      orgId,
+          description: m.description,
+          moved_by:    m.moved_by    ?? null,
+          seconded_by: m.seconded_by ?? null,
+          result:      m.result,
+          vote_tally:  m.vote_tally  ?? null,
+          sort_order:  m.sort_order,
+        }))
+      );
+      if (motionsErr) console.error("Motions insert error:", motionsErr);
+    }
+
+    if (structured?.action_items?.length) {
+      const { error: aiErr } = await supabaseAdmin.from("action_items").insert(
+        structured.action_items.map((a) => ({
+          meeting_id:        meetingId,
+          org_id:            orgId,
+          description:       a.description,
+          responsible_party: a.responsible_party ?? null,
+          due_date_text:     a.due_date_text      ?? null,
+          due_date_parsed:   a.due_date_parsed    ?? null,
+          sort_order:        a.sort_order,
+        }))
+      );
+      if (aiErr) console.error("Action items insert error:", aiErr);
+    }
+  } catch (err) {
+    console.error("Meeting persist error:", err);
+    // Minutes were generated successfully — return them even if DB write failed
+    return json({ minutes: markdown, template, warning: "persist_failed" });
+  }
+
+  return json({ minutes: markdown, template, meeting_id: meetingId });
 });
 
 function json(body: unknown, status = 200) {
