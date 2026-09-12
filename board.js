@@ -1642,18 +1642,20 @@ async function uploadDocument() {
     return;
   }
 
-  const { error: dbError } = await supabaseClient.from('documents').insert({
-    id:             docId,
-    org_id:         userOrg.id,
-    user_id:        currentUser.id,
-    title,
-    category,
-    effective_date: effDate,
-    storage_path:   storagePath,
-    file_name:      file.name,
-    file_size:      file.size,
-    mime_type:      file.type || null,
-    supersedes_id:  supersedesId,
+  // Single RPC call — insert + supersede happen in one Postgres transaction.
+  // If the supersede target is not active or doesn't belong to this org, the
+  // function raises an exception and the INSERT is rolled back automatically.
+  const { error: dbError } = await supabaseClient.rpc('publish_document_version', {
+    p_id:             docId,
+    p_org_id:         userOrg.id,
+    p_title:          title,
+    p_category:       category,
+    p_effective_date: effDate,
+    p_storage_path:   storagePath,
+    p_file_name:      file.name,
+    p_file_size:      file.size,
+    p_mime_type:      file.type || null,
+    p_supersedes_id:  supersedesId,
   });
 
   docUploadBtn.disabled    = false;
@@ -1661,22 +1663,9 @@ async function uploadDocument() {
 
   if (dbError) {
     // Storage upload already succeeded — the file is in the bucket. The
-    // orphan can be resolved by retrying (upsert: false will error, but a
-    // fresh upload with a new UUID will succeed). Note this to the user.
-    showDocFormError('File uploaded but metadata save failed: ' + dbError.message + ' — please try uploading again.');
+    // orphan can be resolved by retrying with a new UUID. Note this to the user.
+    showDocFormError('Metadata save failed: ' + dbError.message + ' — please try uploading again.');
     return;
-  }
-
-  // Mark the superseded document. Non-fatal: if this update fails the new
-  // doc is still correctly uploaded; the old one remains 'active' temporarily.
-  if (supersedesId) {
-    const { error: supErr } = await supabaseClient
-      .from('documents')
-      .update({ status: 'superseded', updated_at: new Date().toISOString() })
-      .eq('id', supersedesId);
-    if (supErr) {
-      console.warn('Step 8d: failed to mark old version as superseded:', supErr.message);
-    }
   }
 
   closeDocForm();
