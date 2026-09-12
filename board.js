@@ -43,6 +43,7 @@ const aiSearch       = document.getElementById('ai-search');
 const aiCount        = document.getElementById('ai-count');
 const actionItemList      = document.getElementById('action-item-list');
 const agendaView          = document.getElementById('agenda-view');
+const toolsView           = document.getElementById('tools-view');
 const searchView          = document.getElementById('search-view');
 const searchInput         = document.getElementById('search-input');
 const searchStatus        = document.getElementById('search-status');
@@ -242,6 +243,7 @@ document.querySelectorAll('.board-tab').forEach((tab) => {
     actionsView.classList.toggle('hidden', active !== 'actions');
     agendaView.classList.toggle('hidden',  active !== 'agenda');
     searchView.classList.toggle('hidden',  active !== 'search');
+    toolsView.classList.toggle('hidden',   active !== 'tools');
     if (active === 'agenda') renderAgenda();
     if (active === 'search') searchInput.focus();
   });
@@ -709,6 +711,121 @@ searchResults.addEventListener('click', (e) => {
   const btn = e.target.closest('.search-view-minutes');
   if (btn) openMeetingModal(btn.dataset.meetingId);
 });
+
+// ── Vote calculator ───────────────────────────────────────────────────────────
+
+const vcBasis      = document.getElementById('vc-basis');
+const vcTotalInput = document.getElementById('vc-total');
+const vcTotalLabel = document.getElementById('vc-total-label');
+const vcInFavour   = document.getElementById('vc-infavour');
+const vcThreshold  = document.getElementById('vc-threshold');
+const vcCustomWrap = document.getElementById('vc-custom-wrap');
+const vcCustomPct  = document.getElementById('vc-custom-pct');
+const vcResult     = document.getElementById('vc-result');
+const vcBadge      = document.getElementById('vc-badge');
+const vcSummary    = document.getElementById('vc-summary');
+const vcDetail     = document.getElementById('vc-detail');
+
+function vcRequiredVotes(n, thresholdType, customPct) {
+  switch (thresholdType) {
+    case 'majority':
+      // Strictly more than half. floor(n/2)+1 is exact for all positive integers.
+      return Math.floor(n / 2) + 1;
+    case 'threequarters':
+      return Math.ceil(n * 3 / 4);
+    case 'unanimous':
+      return n;
+    case 'custom':
+      return Math.ceil(n * customPct / 100);
+  }
+}
+
+function vcFormulaString(n, thresholdType, customPct, basisLabel) {
+  switch (thresholdType) {
+    case 'majority': {
+      const required = Math.floor(n / 2) + 1;
+      return `⌊${n} ÷ 2⌋ + 1 = ${required} (strictly more than half of ${n} ${basisLabel})`;
+    }
+    case 'threequarters': {
+      const raw      = n * 3 / 4;
+      const required = Math.ceil(raw);
+      return raw === required
+        ? `${n} × 75% = ${required} of ${n} ${basisLabel}`
+        : `⌈${n} × 75%⌉ = ${required} (rounded up from ${raw.toFixed(2)}) of ${n} ${basisLabel}`;
+    }
+    case 'unanimous':
+      return `all ${n} ${basisLabel} must vote in favour`;
+    case 'custom': {
+      const raw      = n * customPct / 100;
+      const required = Math.ceil(raw);
+      return raw === required
+        ? `${n} × ${customPct}% = ${required} of ${n} ${basisLabel}`
+        : `⌈${n} × ${customPct}%⌉ = ${required} (rounded up from ${raw.toFixed(2)}) of ${n} ${basisLabel}`;
+    }
+  }
+}
+
+function vcThresholdLabel(thresholdType, customPct) {
+  switch (thresholdType) {
+    case 'majority':      return 'Simple majority (> 50%)';
+    case 'threequarters': return 'Three-quarters (75%)';
+    case 'unanimous':     return 'Unanimous (100%)';
+    case 'custom':        return `Custom threshold (${customPct}%)`;
+  }
+}
+
+function calculateVote() {
+  const n          = parseInt(vcTotalInput.value, 10);
+  const inFavour   = parseInt(vcInFavour.value, 10);
+  const threshold  = vcThreshold.value;
+  const customPct  = parseFloat(vcCustomPct.value);
+  const basisLabel = vcBasis.value === 'cast' ? 'votes cast' : 'eligible voters';
+
+  const hasN      = !isNaN(n) && n >= 1;
+  const hasCustom = threshold !== 'custom' || (!isNaN(customPct) && customPct > 0 && customPct <= 100);
+
+  if (!hasN || !hasCustom) {
+    vcResult.classList.add('hidden');
+    return;
+  }
+
+  const required = vcRequiredVotes(n, threshold, customPct);
+  const formula  = vcFormulaString(n, threshold, customPct, basisLabel);
+  const tLabel   = vcThresholdLabel(threshold, customPct);
+  const hasVotes = !isNaN(inFavour) && vcInFavour.value !== '';
+
+  vcResult.classList.remove('hidden');
+
+  if (!hasVotes) {
+    vcBadge.className     = 'vc-result__badge vc-badge--info';
+    vcBadge.textContent   = `${required} votes required`;
+    vcSummary.textContent = '';
+    vcDetail.textContent  = `${tLabel}: ${formula}.`;
+  } else {
+    const passes = inFavour >= required;
+    vcBadge.className     = `vc-result__badge vc-badge--${passes ? 'passes' : 'falls-short'}`;
+    vcBadge.textContent   = passes ? 'PASSES' : 'FALLS SHORT';
+    vcSummary.textContent = `${inFavour} vote${inFavour !== 1 ? 's' : ''} in favour — ` +
+      `${passes ? 'meets' : 'does not meet'} the ${required}-vote requirement.`;
+    vcDetail.textContent  = `${tLabel}: ${formula}.`;
+  }
+}
+
+vcBasis.addEventListener('change', () => {
+  vcTotalLabel.textContent = vcBasis.value === 'cast'
+    ? 'Total votes cast'
+    : 'Total eligible voters / strata lots';
+  calculateVote();
+});
+
+vcThreshold.addEventListener('change', () => {
+  vcCustomWrap.classList.toggle('hidden', vcThreshold.value !== 'custom');
+  calculateVote();
+});
+
+vcTotalInput.addEventListener('input', calculateVote);
+vcInFavour.addEventListener('input',   calculateVote);
+vcCustomPct.addEventListener('input',  calculateVote);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

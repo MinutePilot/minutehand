@@ -1858,6 +1858,98 @@ body.landing {
   flex-shrink: 0;
 }
 
+/* ── Tools tab ── */
+
+.tools-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.tools-section__heading {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+}
+
+.tools-disclaimer {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  color: #78350f;
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+}
+
+.tools-form {
+  max-width: 420px;
+}
+
+.vc-result {
+  margin: 1.25rem 0 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.vc-result__main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.vc-result__badge {
+  display: inline-block;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.vc-badge--passes {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.vc-badge--falls-short {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.vc-badge--info {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.vc-result__summary {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.vc-result__detail {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-family: monospace;
+  line-height: 1.5;
+}
+
+.tools-legal-note {
+  margin: 1rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 /* ── Minutes modal ── */
 
 .modal-overlay {
