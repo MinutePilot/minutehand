@@ -65,6 +65,9 @@
         <button class="board-tab" data-tab="tools" role="tab" aria-selected="false">
           Tools
         </button>
+        <button class="board-tab" data-tab="members" role="tab" aria-selected="false">
+          Members
+        </button>
       </nav>
 
       <div id="motions-view" role="tabpanel">
@@ -218,6 +221,72 @@
             or other procedural conditions that may affect whether a vote is valid
             under your governing documents or applicable legislation.
           </p>
+        </div>
+
+      </div>
+
+      <!-- Members view -->
+      <div id="members-view" class="hidden" role="tabpanel">
+
+        <div class="members-header">
+          <span id="members-count" class="registry-count"></span>
+          <button id="add-member-btn" class="btn-secondary">+ Add member</button>
+        </div>
+
+        <!-- Add / edit form -->
+        <div id="member-form-panel" class="member-form-panel hidden">
+          <h4 id="member-form-heading" class="member-form__heading">Add member</h4>
+          <div class="member-form__grid">
+            <div class="form-group">
+              <label for="mf-name">Name <span class="required-mark">*</span></label>
+              <input type="text" id="mf-name" placeholder="e.g. Sandra K." autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="mf-role">Role / title <span class="required-mark">*</span></label>
+              <input type="text" id="mf-role" list="mf-role-list" placeholder="e.g. President">
+              <datalist id="mf-role-list">
+                <option value="President">
+                <option value="Vice President">
+                <option value="Chair">
+                <option value="Vice Chair">
+                <option value="Secretary">
+                <option value="Treasurer">
+                <option value="Director">
+                <option value="Board Member">
+              </datalist>
+            </div>
+            <div class="form-group">
+              <label for="mf-lot">Strata lot / unit <span class="optional">(optional)</span></label>
+              <input type="text" id="mf-lot" placeholder="e.g. SL 205">
+            </div>
+            <div class="form-group">
+              <label for="mf-email">Email <span class="optional">(optional)</span></label>
+              <input type="email" id="mf-email" placeholder="member@example.com">
+            </div>
+            <div class="form-group">
+              <label for="mf-term-start">Term start <span class="optional">(optional)</span></label>
+              <input type="date" id="mf-term-start">
+            </div>
+            <div class="form-group">
+              <label for="mf-term-end">Term end <span class="optional">(optional)</span></label>
+              <input type="date" id="mf-term-end">
+              <p class="field-hint">Leave blank for an ongoing term.</p>
+            </div>
+          </div>
+          <div class="member-form__footer">
+            <button id="member-save-btn" class="btn-primary">Save</button>
+            <button id="member-cancel-btn" class="btn-ghost">Cancel</button>
+            <p id="member-form-error" class="error hidden"></p>
+          </div>
+        </div>
+
+        <div id="member-list"></div>
+
+        <div id="former-section" class="hidden">
+          <button id="toggle-former-btn" class="btn-link members-former-toggle">
+            Show former members (<span id="former-count">0</span>)
+          </button>
+          <div id="former-list" class="hidden"></div>
         </div>
 
       </div>

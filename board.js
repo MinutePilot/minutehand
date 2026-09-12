@@ -16,6 +16,9 @@ let allMotions     = [];
 let allActionItems = [];
 let agendaNewItems  = [];
 let searchDebounce  = null;
+let allMembers      = [];
+let membersLoaded   = false;
+let editingMemberId = null;
 const meetingCache  = new Map();
 
 // ── Element refs ──────────────────────────────────────────────────────────────
@@ -44,6 +47,25 @@ const aiCount        = document.getElementById('ai-count');
 const actionItemList      = document.getElementById('action-item-list');
 const agendaView          = document.getElementById('agenda-view');
 const toolsView           = document.getElementById('tools-view');
+const membersView         = document.getElementById('members-view');
+const membersCount        = document.getElementById('members-count');
+const addMemberBtn        = document.getElementById('add-member-btn');
+const memberFormPanel     = document.getElementById('member-form-panel');
+const memberFormHeading   = document.getElementById('member-form-heading');
+const mfName              = document.getElementById('mf-name');
+const mfRole              = document.getElementById('mf-role');
+const mfLot               = document.getElementById('mf-lot');
+const mfEmail             = document.getElementById('mf-email');
+const mfTermStart         = document.getElementById('mf-term-start');
+const mfTermEnd           = document.getElementById('mf-term-end');
+const memberSaveBtn       = document.getElementById('member-save-btn');
+const memberCancelBtn     = document.getElementById('member-cancel-btn');
+const memberFormError     = document.getElementById('member-form-error');
+const memberList          = document.getElementById('member-list');
+const formerSection       = document.getElementById('former-section');
+const toggleFormerBtn     = document.getElementById('toggle-former-btn');
+const formerCountEl       = document.getElementById('former-count');
+const formerList          = document.getElementById('former-list');
 const searchView          = document.getElementById('search-view');
 const searchInput         = document.getElementById('search-input');
 const searchStatus        = document.getElementById('search-status');
@@ -244,8 +266,10 @@ document.querySelectorAll('.board-tab').forEach((tab) => {
     agendaView.classList.toggle('hidden',  active !== 'agenda');
     searchView.classList.toggle('hidden',  active !== 'search');
     toolsView.classList.toggle('hidden',   active !== 'tools');
-    if (active === 'agenda') renderAgenda();
-    if (active === 'search') searchInput.focus();
+    membersView.classList.toggle('hidden', active !== 'members');
+    if (active === 'agenda')  renderAgenda();
+    if (active === 'search')  searchInput.focus();
+    if (active === 'members' && !membersLoaded) loadMembers();
   });
 });
 
@@ -711,6 +735,253 @@ searchResults.addEventListener('click', (e) => {
   const btn = e.target.closest('.search-view-minutes');
   if (btn) openMeetingModal(btn.dataset.meetingId);
 });
+
+// ── Roster ────────────────────────────────────────────────────────────────────
+
+async function loadMembers() {
+  memberList.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading members…</span></div>';
+
+  const { data, error } = await supabaseClient
+    .from('roster')
+    .select('id, name, role, strata_lot, email, term_start, term_end, status, sort_order')
+    .eq('org_id', userOrg.id)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    memberList.innerHTML = `<p class="error">Failed to load members: ${escHtml(error.message)}</p>`;
+    return;
+  }
+
+  allMembers    = data ?? [];
+  membersLoaded = true;
+  renderMembers();
+}
+
+function renderMembers() {
+  const active = allMembers.filter((m) => m.status === 'active');
+  const former = allMembers.filter((m) => m.status === 'former');
+
+  membersCount.textContent = `${active.length} active member${active.length !== 1 ? 's' : ''}`;
+
+  if (active.length === 0) {
+    memberList.innerHTML = `
+      <div class="registry-empty">
+        <p>No active members yet.</p>
+        <p class="field-hint">Add current board or council members to start your roster.</p>
+      </div>`;
+  } else {
+    memberList.innerHTML = renderMemberTable(active, false);
+  }
+
+  if (former.length > 0) {
+    formerSection.classList.remove('hidden');
+    formerCountEl.textContent = String(former.length);
+    if (!formerList.classList.contains('hidden')) {
+      formerList.innerHTML = renderMemberTable(former, true);
+    }
+  } else {
+    formerSection.classList.add('hidden');
+    formerList.classList.add('hidden');
+  }
+}
+
+function renderMemberTable(members, isFormer) {
+  return `<table class="member-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Role</th>
+      <th>Lot / Unit</th>
+      <th>Term</th>
+      <th class="member-table__actions-col"></th>
+    </tr>
+  </thead>
+  <tbody>
+    ${members.map((m, idx) => {
+      const termStart = m.term_start
+        ? new Date(m.term_start + 'T12:00:00').toLocaleDateString('en-CA', { month: 'short', year: 'numeric' })
+        : '';
+      const termEnd = m.term_end
+        ? new Date(m.term_end + 'T12:00:00').toLocaleDateString('en-CA', { month: 'short', year: 'numeric' })
+        : 'ongoing';
+      const termStr = termStart ? `${termStart} – ${termEnd}` : '';
+
+      const isFirst = idx === 0;
+      const isLast  = idx === members.length - 1;
+
+      return `<tr data-member-id="${m.id}">
+        <td><strong>${escHtml(m.name)}</strong>${m.email ? `<br><span class="member-email">${escHtml(m.email)}</span>` : ''}</td>
+        <td>${escHtml(m.role)}</td>
+        <td>${m.strata_lot ? escHtml(m.strata_lot) : '<span class="text-muted">—</span>'}</td>
+        <td class="member-term">${termStr || '<span class="text-muted">—</span>'}</td>
+        <td class="member-table__actions">
+          ${!isFormer ? `
+          <button class="btn-icon member-move-up"   data-id="${m.id}" title="Move up"   ${isFirst ? 'disabled' : ''}>↑</button>
+          <button class="btn-icon member-move-down" data-id="${m.id}" title="Move down" ${isLast  ? 'disabled' : ''}>↓</button>
+          ` : ''}
+          <button class="btn-link member-edit-btn"   data-id="${m.id}">Edit</button>
+          <button class="btn-link member-status-btn" data-id="${m.id}" data-status="${m.status}">
+            ${m.status === 'active' ? 'Mark former' : 'Reactivate'}
+          </button>
+          <button class="btn-link member-delete-btn" data-id="${m.id}">Remove</button>
+        </td>
+      </tr>`;
+    }).join('')}
+  </tbody>
+</table>`;
+}
+
+function openMemberForm(member = null) {
+  editingMemberId = member?.id ?? null;
+  memberFormHeading.textContent = member ? 'Edit member' : 'Add member';
+  mfName.value      = member?.name       ?? '';
+  mfRole.value      = member?.role       ?? '';
+  mfLot.value       = member?.strata_lot ?? '';
+  mfEmail.value     = member?.email      ?? '';
+  mfTermStart.value = member?.term_start ?? '';
+  mfTermEnd.value   = member?.term_end   ?? '';
+  memberFormError.classList.add('hidden');
+  memberFormPanel.classList.remove('hidden');
+  mfName.focus();
+}
+
+function closeMemberForm() {
+  editingMemberId = null;
+  memberFormPanel.classList.add('hidden');
+  memberFormError.classList.add('hidden');
+}
+
+async function saveMember() {
+  const name = mfName.value.trim();
+  const role = mfRole.value.trim();
+  if (!name || !role) {
+    memberFormError.textContent = 'Name and role are required.';
+    memberFormError.classList.remove('hidden');
+    return;
+  }
+
+  memberSaveBtn.disabled   = true;
+  memberSaveBtn.textContent = 'Saving…';
+
+  const payload = {
+    name,
+    role,
+    strata_lot: mfLot.value.trim()       || null,
+    email:      mfEmail.value.trim()      || null,
+    term_start: mfTermStart.value         || null,
+    term_end:   mfTermEnd.value           || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  let error;
+  if (editingMemberId) {
+    ({ error } = await supabaseClient
+      .from('roster')
+      .update(payload)
+      .eq('id', editingMemberId));
+  } else {
+    const maxOrder = allMembers.length
+      ? Math.max(...allMembers.map((m) => m.sort_order)) + 1
+      : 0;
+    ({ error } = await supabaseClient
+      .from('roster')
+      .insert({ ...payload, org_id: userOrg.id, sort_order: maxOrder }));
+  }
+
+  memberSaveBtn.disabled    = false;
+  memberSaveBtn.textContent = 'Save';
+
+  if (error) {
+    memberFormError.textContent = error.message;
+    memberFormError.classList.remove('hidden');
+    return;
+  }
+
+  closeMemberForm();
+  membersLoaded = false;
+  await loadMembers();
+}
+
+async function deleteMember(id) {
+  const member = allMembers.find((m) => m.id === id);
+  if (!confirm(`Remove ${member?.name ?? 'this member'} from the roster? This cannot be undone.`)) return;
+
+  const { error } = await supabaseClient.from('roster').delete().eq('id', id);
+  if (error) { alert(`Failed to remove: ${error.message}`); return; }
+  membersLoaded = false;
+  await loadMembers();
+}
+
+async function setMemberStatus(id, newStatus) {
+  const { error } = await supabaseClient
+    .from('roster')
+    .update({ status: newStatus, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) { alert(`Failed to update status: ${error.message}`); return; }
+  membersLoaded = false;
+  await loadMembers();
+}
+
+async function moveMember(id, direction) {
+  const active  = allMembers.filter((m) => m.status === 'active');
+  const idx     = active.findIndex((m) => m.id === id);
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= active.length) return;
+
+  const a = active[idx];
+  const b = active[swapIdx];
+
+  // Swap sort_orders
+  const [orderA, orderB] = [a.sort_order, b.sort_order];
+  const { error: e1 } = await supabaseClient.from('roster').update({ sort_order: orderB }).eq('id', a.id);
+  const { error: e2 } = await supabaseClient.from('roster').update({ sort_order: orderA }).eq('id', b.id);
+  if (e1 || e2) { alert('Failed to reorder.'); return; }
+  membersLoaded = false;
+  await loadMembers();
+}
+
+// ── Roster event listeners ────────────────────────────────────────────────────
+
+addMemberBtn.addEventListener('click', () => openMemberForm());
+memberCancelBtn.addEventListener('click', closeMemberForm);
+memberSaveBtn.addEventListener('click', saveMember);
+
+mfName.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveMember(); });
+
+toggleFormerBtn.addEventListener('click', () => {
+  const hidden = formerList.classList.toggle('hidden');
+  const former = allMembers.filter((m) => m.status === 'former');
+  if (!hidden) formerList.innerHTML = renderMemberTable(former, true);
+  toggleFormerBtn.textContent = hidden
+    ? `Show former members (${former.length})`
+    : `Hide former members`;
+});
+
+memberList.addEventListener('click',   handleMemberListClick);
+formerList.addEventListener('click',   handleMemberListClick);
+
+function handleMemberListClick(e) {
+  const editBtn   = e.target.closest('.member-edit-btn');
+  const deleteBtn = e.target.closest('.member-delete-btn');
+  const statusBtn = e.target.closest('.member-status-btn');
+  const upBtn     = e.target.closest('.member-move-up');
+  const downBtn   = e.target.closest('.member-move-down');
+
+  if (editBtn) {
+    const member = allMembers.find((m) => m.id === editBtn.dataset.id);
+    if (member) openMemberForm(member);
+  } else if (deleteBtn) {
+    deleteMember(deleteBtn.dataset.id);
+  } else if (statusBtn) {
+    const newStatus = statusBtn.dataset.status === 'active' ? 'former' : 'active';
+    setMemberStatus(statusBtn.dataset.id, newStatus);
+  } else if (upBtn) {
+    moveMember(upBtn.dataset.id, 'up');
+  } else if (downBtn) {
+    moveMember(downBtn.dataset.id, 'down');
+  }
+}
 
 // ── Vote calculator ───────────────────────────────────────────────────────────
 

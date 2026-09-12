@@ -1858,6 +1858,120 @@ body.landing {
   flex-shrink: 0;
 }
 
+/* ── Members / roster tab ── */
+
+.members-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.member-form-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.member-form__heading {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+}
+
+.member-form__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1.25rem;
+}
+
+.member-form__grid .form-group { margin-bottom: 0.85rem; }
+
+.member-form__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.required-mark { color: #dc3545; }
+
+.member-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.member-table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 2px solid var(--border);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.member-table td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.member-table tr:last-child td { border-bottom: none; }
+
+.member-table__actions-col { width: 1%; white-space: nowrap; }
+
+.member-table__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.member-email {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.member-term {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.btn-icon {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.btn-icon:hover:not(:disabled) { background: var(--border); color: var(--text); }
+.btn-icon:disabled { opacity: 0.3; cursor: default; }
+
+.members-former-toggle {
+  margin: 1rem 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 600px) {
+  .member-form__grid { grid-template-columns: 1fr; }
+
+  .member-table th:nth-child(3),
+  .member-table td:nth-child(3),
+  .member-table th:nth-child(4),
+  .member-table td:nth-child(4) { display: none; }
+}
+
 /* ── Tools tab ── */
 
 .tools-section {
