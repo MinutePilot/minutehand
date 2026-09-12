@@ -47,6 +47,10 @@ const aiCount        = document.getElementById('ai-count');
 const actionItemList      = document.getElementById('action-item-list');
 const agendaView          = document.getElementById('agenda-view');
 const toolsView           = document.getElementById('tools-view');
+const exportYear          = document.getElementById('export-year');
+const exportCount         = document.getElementById('export-count');
+const exportDocxBtn       = document.getElementById('export-docx-btn');
+const exportCsvBtn        = document.getElementById('export-csv-btn');
 const membersView         = document.getElementById('members-view');
 const membersCount        = document.getElementById('members-count');
 const addMemberBtn        = document.getElementById('add-member-btn');
@@ -269,6 +273,7 @@ document.querySelectorAll('.board-tab').forEach((tab) => {
     membersView.classList.toggle('hidden', active !== 'members');
     if (active === 'agenda')  renderAgenda();
     if (active === 'search')  searchInput.focus();
+    if (active === 'tools')   populateExportYears();
     if (active === 'members' && !membersLoaded) loadMembers();
   });
 });
@@ -982,6 +987,163 @@ function handleMemberListClick(e) {
     moveMember(downBtn.dataset.id, 'down');
   }
 }
+
+// ── Motions export ───────────────────────────────────────────────────────────
+
+function populateExportYears() {
+  const years = new Set();
+  allMotions.forEach((m) => {
+    const d = m.meetings?.meeting_date;
+    if (d) years.add(d.slice(0, 4));
+  });
+  const sorted = [...years].sort((a, b) => b.localeCompare(a));
+
+  exportYear.innerHTML =
+    '<option value="">All years</option>' +
+    sorted.map((y) => `<option value="${y}">${y}</option>`).join('');
+
+  const thisYear = new Date().getFullYear().toString();
+  if (years.has(thisYear)) exportYear.value = thisYear;
+
+  updateExportCount();
+}
+
+function getExportMotions() {
+  const year = exportYear.value;
+  let rows = year
+    ? allMotions.filter((m) => (m.meetings?.meeting_date ?? '').startsWith(year))
+    : [...allMotions];
+
+  return rows.sort((a, b) => {
+    const da = a.meetings?.meeting_date ?? '';
+    const db = b.meetings?.meeting_date ?? '';
+    if (da !== db) return da.localeCompare(db);
+    return a.sort_order - b.sort_order;
+  });
+}
+
+function updateExportCount() {
+  const n = getExportMotions().length;
+  exportCount.textContent = n === 0
+    ? 'No motions in selection.'
+    : `${n} motion${n !== 1 ? 's' : ''} in selection`;
+}
+
+function exportFilename() {
+  const year    = exportYear.value || 'all-years';
+  const orgSlug = userOrg.name.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 30);
+  return `${orgSlug}_Motions_${year}`;
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a   = Object.assign(document.createElement('a'), { href: url, download: filename });
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// CSV -------------------------------------------------------------------------
+
+function csvCell(value) {
+  const s = String(value ?? '');
+  return (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r'))
+    ? '"' + s.replace(/"/g, '""') + '"'
+    : s;
+}
+
+function downloadMotionsCsv() {
+  const motions = getExportMotions();
+  if (motions.length === 0) { alert('No motions to export.'); return; }
+
+  const header = ['Meeting Date', 'Meeting', 'Motion', 'Result', 'Moved By', 'Seconded By', 'Vote Tally'];
+  const rows   = motions.map((m) => [
+    m.meetings?.meeting_date ?? '',
+    m.meetings?.title        ?? '',
+    m.description,
+    m.result,
+    m.moved_by    ?? '',
+    m.seconded_by ?? '',
+    m.vote_tally  ?? '',
+  ].map(csvCell).join(','));
+
+  // BOM prefix so Excel on Windows opens UTF-8 correctly without mangling
+  const csv  = '﻿' + [header.map(csvCell).join(','), ...rows].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  triggerDownload(blob, exportFilename() + '.csv');
+}
+
+// DOCX ------------------------------------------------------------------------
+
+function downloadMotionsDocx() {
+  const motions = getExportMotions();
+  if (motions.length === 0) { alert('No motions to export.'); return; }
+
+  const year          = exportYear.value || 'All Years';
+  const generatedDate = new Date().toLocaleDateString('en-CA', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+
+  const RESULT_COLOUR = {
+    carried:   '#1a5c38',
+    defeated:  '#8b1a1a',
+    tabled:    '#6b4c00',
+    withdrawn: '#444',
+  };
+
+  const tableRows = motions.map((m) => {
+    const dateStr = m.meetings?.meeting_date
+      ? new Date(m.meetings.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', {
+          year: 'numeric', month: 'short', day: 'numeric',
+        })
+      : '—';
+    const resultLabel = m.result.charAt(0).toUpperCase() + m.result.slice(1);
+    const colour      = RESULT_COLOUR[m.result] ?? '#333';
+
+    return `<tr>
+      <td style="white-space:nowrap">${escHtml(dateStr)}</td>
+      <td>${escHtml(m.meetings?.title ?? '—')}</td>
+      <td>${escHtml(m.description)}</td>
+      <td style="color:${colour};font-weight:bold;white-space:nowrap">${resultLabel}</td>
+      <td style="white-space:nowrap">${escHtml(m.moved_by ?? '—')}</td>
+      <td style="white-space:nowrap">${escHtml(m.seconded_by ?? '—')}</td>
+      <td style="white-space:nowrap">${escHtml(m.vote_tally ?? '—')}</td>
+    </tr>`;
+  }).join('');
+
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  body  { font-family: Calibri, Arial, sans-serif; font-size: 9.5pt; margin: 2cm 1.5cm; }
+  h1    { font-size: 13pt; margin: 0 0 3pt; }
+  .sub  { font-size: 10pt; color: #555; margin: 2pt 0 0; }
+  .gen  { font-size: 8.5pt; color: #888; margin: 5pt 0 0; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14pt; font-size: 9pt; }
+  th    { background: #dce3ec; text-align: left; padding: 5pt 7pt;
+          border: 1pt solid #aab; font-weight: bold; }
+  td    { padding: 4pt 7pt; border: 1pt solid #ccc; vertical-align: top; }
+  tr:nth-child(even) td { background: #f7f8fa; }
+</style>
+</head><body>
+  <h1>${escHtml(userOrg.name)}</h1>
+  <p class="sub">Motions &amp; Decisions Register — ${escHtml(year)}</p>
+  <p class="gen">Generated ${generatedDate} &nbsp;|&nbsp; ${motions.length} motion${motions.length !== 1 ? 's' : ''}</p>
+  <table>
+    <thead><tr>
+      <th>Date</th><th>Meeting</th><th>Motion</th><th>Result</th>
+      <th>Moved By</th><th>Seconded By</th><th>Vote Tally</th>
+    </tr></thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+</body></html>`;
+
+  const blob = htmlDocx.asBlob(fullHtml, { orientation: 'landscape' });
+  triggerDownload(blob, exportFilename() + '.docx');
+}
+
+// ── Export event listeners ────────────────────────────────────────────────────
+
+exportYear.addEventListener('change', updateExportCount);
+exportDocxBtn.addEventListener('click', downloadMotionsDocx);
+exportCsvBtn.addEventListener('click',  downloadMotionsCsv);
 
 // ── Vote calculator ───────────────────────────────────────────────────────────
 

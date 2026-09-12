@@ -154,6 +154,30 @@
       <div id="tools-view" class="hidden" role="tabpanel">
 
         <div class="tools-section">
+          <h3 class="tools-section__heading">Motions &amp; Decisions Export</h3>
+          <p class="field-hint" style="margin-bottom:1rem">
+            Export the motion registry as a .docx report for printing or presenting at an AGM,
+            or as a .csv for filtering and importing into a spreadsheet.
+          </p>
+
+          <div class="tools-form">
+            <div class="form-group">
+              <label for="export-year">Year</label>
+              <select id="export-year">
+                <option value="">All years</option>
+              </select>
+            </div>
+          </div>
+
+          <p id="export-count" class="field-hint" style="margin-bottom:0.75rem"></p>
+
+          <div class="export-buttons">
+            <button id="export-docx-btn" class="btn-secondary">Download .docx</button>
+            <button id="export-csv-btn"  class="btn-secondary">Download .csv</button>
+          </div>
+        </div>
+
+        <div class="tools-section">
           <h3 class="tools-section__heading">Vote Calculator</h3>
 
           <div class="tools-disclaimer">
