@@ -68,6 +68,9 @@
         <button class="board-tab" data-tab="members" role="tab" aria-selected="false">
           Members
         </button>
+        <button class="board-tab" data-tab="documents" role="tab" aria-selected="false">
+          Documents
+        </button>
       </nav>
 
       <div id="motions-view" role="tabpanel">
@@ -311,6 +314,73 @@
             Show former members (<span id="former-count">0</span>)
           </button>
           <div id="former-list" class="hidden"></div>
+        </div>
+
+      </div>
+
+      <!-- Documents view -->
+      <div id="documents-view" class="hidden" role="tabpanel">
+
+        <div class="docs-header">
+          <div class="docs-header__left">
+            <span id="docs-count" class="registry-count"></span>
+            <div class="docs-sort">
+              <span class="docs-sort__label">Sort by</span>
+              <button class="docs-sort-btn docs-sort-btn--active" data-sort="created_at">Upload date</button>
+              <button class="docs-sort-btn" data-sort="effective_date">Effective date</button>
+            </div>
+          </div>
+          <button id="upload-doc-btn" class="btn-secondary">+ Upload document</button>
+        </div>
+
+        <!-- Upload form — same inline-panel pattern as member form -->
+        <div id="doc-form-panel" class="member-form-panel hidden">
+          <h4 class="member-form__heading">Upload document</h4>
+          <div class="member-form__grid">
+            <div class="form-group" style="grid-column: 1 / -1">
+              <label for="doc-file">File <span class="required-mark">*</span></label>
+              <input type="file" id="doc-file"
+                     accept=".pdf,.docx,.doc,.jpg,.jpeg,.png,.tiff,.tif,.gif">
+              <p class="field-hint">PDF, DOCX, DOC, or image formats up to 20 MB.</p>
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1">
+              <label for="doc-title">Title <span class="required-mark">*</span></label>
+              <input type="text" id="doc-title"
+                     placeholder="e.g. Consolidated Bylaws — filed March 2024"
+                     autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="doc-category">Category <span class="required-mark">*</span></label>
+              <select id="doc-category">
+                <option value="Bylaws">Bylaws</option>
+                <option value="Rules &amp; Regulations">Rules &amp; Regulations</option>
+                <option value="AGM Records">AGM Records</option>
+                <option value="Insurance">Insurance</option>
+                <option value="Depreciation Report">Depreciation Report</option>
+                <option value="Financial Statements">Financial Statements</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="doc-effective-date">Effective date <span class="optional">(optional)</span></label>
+              <input type="date" id="doc-effective-date">
+              <p class="field-hint">The date this document took effect or was filed.</p>
+            </div>
+          </div>
+          <div class="member-form__footer">
+            <button id="doc-upload-btn" class="btn-primary">Upload</button>
+            <button id="doc-cancel-btn" class="btn-ghost">Cancel</button>
+            <p id="doc-form-error" class="error hidden"></p>
+          </div>
+        </div>
+
+        <div id="doc-list"></div>
+
+        <div id="docs-archived-section" class="hidden">
+          <button id="toggle-archived-docs-btn" class="btn-link members-former-toggle">
+            Show archived documents (<span id="archived-docs-count">0</span>)
+          </button>
+          <div id="archived-docs-list" class="hidden"></div>
         </div>
 
       </div>

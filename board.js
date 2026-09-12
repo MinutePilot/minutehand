@@ -21,6 +21,10 @@ let membersLoaded   = false;
 let editingMemberId = null;
 const meetingCache  = new Map();
 
+let allDocuments    = [];
+let documentsLoaded = false;
+let docSortField    = 'created_at';  // 'created_at' | 'effective_date'
+
 // ── Element refs ──────────────────────────────────────────────────────────────
 
 const loadingView    = document.getElementById('loading-view');
@@ -83,6 +87,22 @@ const agendaNewItemList   = document.getElementById('agenda-new-item-list');
 const minutesModal        = document.getElementById('minutes-modal');
 const modalClose     = document.getElementById('modal-close');
 const modalBody      = document.getElementById('modal-body');
+const documentsView       = document.getElementById('documents-view');
+const docsCount           = document.getElementById('docs-count');
+const uploadDocBtn        = document.getElementById('upload-doc-btn');
+const docFormPanel        = document.getElementById('doc-form-panel');
+const docFileInput        = document.getElementById('doc-file');
+const docTitleInput       = document.getElementById('doc-title');
+const docCategorySelect   = document.getElementById('doc-category');
+const docEffectiveDate    = document.getElementById('doc-effective-date');
+const docUploadBtn        = document.getElementById('doc-upload-btn');
+const docCancelBtn        = document.getElementById('doc-cancel-btn');
+const docFormError        = document.getElementById('doc-form-error');
+const docList             = document.getElementById('doc-list');
+const docsArchivedSection = document.getElementById('docs-archived-section');
+const toggleArchivedBtn   = document.getElementById('toggle-archived-docs-btn');
+const archivedDocsCount   = document.getElementById('archived-docs-count');
+const archivedDocsList    = document.getElementById('archived-docs-list');
 
 // ── Auth + init ───────────────────────────────────────────────────────────────
 
@@ -265,16 +285,18 @@ document.querySelectorAll('.board-tab').forEach((tab) => {
     tab.setAttribute('aria-selected', 'true');
 
     const active = tab.dataset.tab;
-    motionsView.classList.toggle('hidden', active !== 'motions');
-    actionsView.classList.toggle('hidden', active !== 'actions');
-    agendaView.classList.toggle('hidden',  active !== 'agenda');
-    searchView.classList.toggle('hidden',  active !== 'search');
-    toolsView.classList.toggle('hidden',   active !== 'tools');
-    membersView.classList.toggle('hidden', active !== 'members');
-    if (active === 'agenda')  renderAgenda();
-    if (active === 'search')  searchInput.focus();
-    if (active === 'tools')   populateExportYears();
-    if (active === 'members' && !membersLoaded) loadMembers();
+    motionsView.classList.toggle('hidden',   active !== 'motions');
+    actionsView.classList.toggle('hidden',   active !== 'actions');
+    agendaView.classList.toggle('hidden',    active !== 'agenda');
+    searchView.classList.toggle('hidden',    active !== 'search');
+    toolsView.classList.toggle('hidden',     active !== 'tools');
+    membersView.classList.toggle('hidden',   active !== 'members');
+    documentsView.classList.toggle('hidden', active !== 'documents');
+    if (active === 'agenda')                        renderAgenda();
+    if (active === 'search')                        searchInput.focus();
+    if (active === 'tools')                         populateExportYears();
+    if (active === 'members'   && !membersLoaded)   loadMembers();
+    if (active === 'documents' && !documentsLoaded) loadDocuments();
   });
 });
 
@@ -684,44 +706,51 @@ searchInput.addEventListener('input', () => {
 });
 
 async function runSearch(q) {
-  const { data, error } = await supabaseClient.rpc('search_meetings', {
-    p_org_id: userOrg.id,
-    p_query:  q,
-  });
+  const [meetingRes, docRes] = await Promise.all([
+    supabaseClient.rpc('search_meetings',  { p_org_id: userOrg.id, p_query: q }),
+    supabaseClient.rpc('search_documents', { p_org_id: userOrg.id, p_query: q }),
+  ]);
 
   // Guard against stale results if the user kept typing
   if (searchInput.value.trim() !== q) return;
 
-  if (error) {
+  if (meetingRes.error && docRes.error) {
     searchStatus.textContent = '';
-    searchResults.innerHTML  = `<p class="error">Search failed: ${escHtml(error.message)}</p>`;
+    searchResults.innerHTML  = `<p class="error">Search failed: ${escHtml(meetingRes.error.message)}</p>`;
     return;
   }
 
-  const results = data ?? [];
-  searchStatus.textContent = results.length === 0
-    ? `No results for "${q}"`
-    : `${results.length} meeting${results.length !== 1 ? 's' : ''}`;
+  const meetings = meetingRes.data ?? [];
+  const docs     = docRes.data     ?? [];
+  const total    = meetings.length + docs.length;
 
-  if (results.length === 0) {
-    searchResults.innerHTML = `<div class="registry-empty"><p>No results for <em>${escHtml(q)}</em>.</p><p class="field-hint">Try different keywords — search covers all meeting narrative, not just titles.</p></div>`;
+  if (total === 0) {
+    searchStatus.textContent = `No results for "${q}"`;
+    searchResults.innerHTML  = `<div class="registry-empty"><p>No results for <em>${escHtml(q)}</em>.</p><p class="field-hint">Try different keywords — search covers all meeting narrative and document library, not just titles.</p></div>`;
     return;
   }
 
-  searchResults.innerHTML = results.map((r) => {
-    const dateStr = r.meeting_date
-      ? new Date(r.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', {
-          year: 'numeric', month: 'long', day: 'numeric',
-        })
-      : 'Date not recorded';
-    const titleStr  = r.title ?? 'Meeting';
-    // ts_headline wraps matched terms in <mark>. Escape the full string then
-    // restore just the mark tags so other content can't inject HTML.
-    const safeHeadline = escHtml(r.headline ?? '')
-      .replace(/&lt;mark&gt;/g,  '<mark>')
-      .replace(/&lt;\/mark&gt;/g, '</mark>');
+  const parts = [];
+  if (meetings.length) parts.push(`${meetings.length} meeting${meetings.length !== 1 ? 's' : ''}`);
+  if (docs.length)     parts.push(`${docs.length} document${docs.length !== 1 ? 's' : ''}`);
+  searchStatus.textContent = `${total} result${total !== 1 ? 's' : ''} — ${parts.join(', ')}`;
 
-    return `<div class="search-result-card">
+  let html = '';
+
+  // Meeting results
+  if (meetings.length > 0) {
+    html += `<div class="search-section-heading">Meetings</div>`;
+    html += meetings.map((r) => {
+      const dateStr = r.meeting_date
+        ? new Date(r.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', {
+            year: 'numeric', month: 'long', day: 'numeric',
+          })
+        : 'Date not recorded';
+      const titleStr     = r.title ?? 'Meeting';
+      const safeHeadline = escHtml(r.headline ?? '')
+        .replace(/&lt;mark&gt;/g,  '<mark>')
+        .replace(/&lt;\/mark&gt;/g, '</mark>');
+      return `<div class="search-result-card">
   <div class="search-result-card__header">
     <span class="search-result-card__date">${dateStr}</span>
     <span class="search-result-card__title">${escHtml(titleStr)}</span>
@@ -733,12 +762,45 @@ async function runSearch(q) {
   </div>
   <p class="search-result-card__headline">${safeHeadline}</p>
 </div>`;
-  }).join('');
+    }).join('');
+  }
+
+  // Document results
+  if (docs.length > 0) {
+    html += `<div class="search-section-heading">Documents</div>`;
+    html += docs.map((d) => {
+      const safeHeadline = escHtml(d.headline ?? '')
+        .replace(/&lt;mark&gt;/g,  '<mark>')
+        .replace(/&lt;\/mark&gt;/g, '</mark>');
+      const effStr = d.effective_date
+        ? ' · Effective: ' + new Date(d.effective_date + 'T12:00:00').toLocaleDateString('en-CA', {
+            year: 'numeric', month: 'short',
+          })
+        : '';
+      return `<div class="search-result-card search-result-card--doc">
+  <div class="search-result-card__header">
+    <span class="doc-type-badge doc-type-badge--sm">${fileTypeBadge(d.mime_type)}</span>
+    <span class="search-result-card__title">${escHtml(d.title)}</span>
+    <span class="search-doc-category">${escHtml(d.category)}${effStr}</span>
+    <button class="btn-link search-doc-download"
+            data-path="${escHtml(d.storage_path)}"
+            data-name="${escHtml(d.file_name)}">
+      Download&nbsp;↓
+    </button>
+  </div>
+  <p class="search-result-card__headline">${safeHeadline}</p>
+</div>`;
+    }).join('');
+  }
+
+  searchResults.innerHTML = html;
 }
 
 searchResults.addEventListener('click', (e) => {
-  const btn = e.target.closest('.search-view-minutes');
-  if (btn) openMeetingModal(btn.dataset.meetingId);
+  const minutes = e.target.closest('.search-view-minutes');
+  if (minutes) { openMeetingModal(minutes.dataset.meetingId); return; }
+  const dl = e.target.closest('.search-doc-download');
+  if (dl) downloadDocument(dl.dataset.path, dl.dataset.name);
 });
 
 // ── Roster ────────────────────────────────────────────────────────────────────
@@ -1278,4 +1340,311 @@ function escHtml(str) {
 
 function preprocessMarkdown(md) {
   return md.replace(/^(> .+)\n(?=> )/gm, '$1\n\n');
+}
+
+// ── Document library ──────────────────────────────────────────────────────────
+
+const CATEGORY_ORDER = [
+  'Bylaws',
+  'Rules & Regulations',
+  'AGM Records',
+  'Insurance',
+  'Depreciation Report',
+  'Financial Statements',
+  'Other',
+];
+
+async function loadDocuments() {
+  docList.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading documents…</span></div>';
+
+  const { data, error } = await supabaseClient
+    .from('documents')
+    .select('id, title, category, effective_date, storage_path, file_name, file_size, mime_type, status, created_at')
+    .eq('org_id', userOrg.id)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    docList.innerHTML = `<p class="error">Failed to load documents: ${escHtml(error.message)}</p>`;
+    return;
+  }
+
+  allDocuments    = data ?? [];
+  documentsLoaded = true;
+  renderDocuments();
+}
+
+function sortedDocs(docs) {
+  if (docSortField === 'effective_date') {
+    return [...docs].sort((a, b) => {
+      if (!a.effective_date && !b.effective_date)
+        return b.created_at.localeCompare(a.created_at);
+      if (!a.effective_date) return 1;
+      if (!b.effective_date) return -1;
+      return b.effective_date.localeCompare(a.effective_date);
+    });
+  }
+  return [...docs].sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+function renderDocItems(docs, showRestore) {
+  return docs.map((d) => {
+    const sizStr  = d.file_size ? formatFileSize(d.file_size) : '';
+    const dateStr = new Date(d.created_at).toLocaleDateString('en-CA', {
+      year: 'numeric', month: 'short', day: 'numeric',
+    });
+    const effStr = d.effective_date
+      ? ' · Effective: ' + new Date(d.effective_date + 'T12:00:00').toLocaleDateString('en-CA', {
+          year: 'numeric', month: 'short',
+        })
+      : '';
+    const badge = fileTypeBadge(d.mime_type);
+    const action = showRestore
+      ? `<button class="btn-link doc-restore-btn" data-id="${d.id}">Restore</button>`
+      : `<button class="btn-link doc-archive-btn" data-id="${d.id}">Archive</button>`;
+    return `<div class="doc-item" data-id="${escHtml(d.id)}">
+  <span class="doc-type-badge">${badge}</span>
+  <div class="doc-item__info">
+    <div class="doc-item__title">${escHtml(d.title)}</div>
+    <div class="doc-item__meta">${[sizStr, `Uploaded ${dateStr}`].filter(Boolean).join(' · ')}${effStr}</div>
+  </div>
+  <div class="doc-item__actions">
+    <button class="btn-link doc-download-btn"
+            data-path="${escHtml(d.storage_path)}"
+            data-name="${escHtml(d.file_name)}">Download ↓</button>
+    ${action}
+  </div>
+</div>`;
+  }).join('');
+}
+
+function renderDocuments() {
+  const active   = allDocuments.filter((d) => d.status === 'active');
+  const archived = allDocuments.filter((d) => d.status === 'archived');
+
+  docsCount.textContent = `${active.length} document${active.length !== 1 ? 's' : ''}`;
+
+  // Group active docs by category in fixed display order
+  const byCategory = new Map(CATEGORY_ORDER.map((c) => [c, []]));
+  sortedDocs(active).forEach((d) => {
+    const bucket = byCategory.get(d.category) ?? byCategory.get('Other');
+    bucket.push(d);
+  });
+
+  let anyShown = false;
+  let html = '';
+  for (const [cat, docs] of byCategory) {
+    if (docs.length === 0) continue;
+    anyShown = true;
+    html += `<div class="doc-category-section">
+  <h4 class="doc-category-heading">
+    ${escHtml(cat)}
+    <span class="doc-category-count">${docs.length}</span>
+  </h4>
+  <div class="doc-category-list">${renderDocItems(docs, false)}</div>
+</div>`;
+  }
+
+  docList.innerHTML = anyShown
+    ? html
+    : `<div class="registry-empty">
+         <p>No documents yet.</p>
+         <p class="field-hint">Upload governance documents to start your library.</p>
+       </div>`;
+
+  // Archived section
+  if (archived.length > 0) {
+    docsArchivedSection.classList.remove('hidden');
+    archivedDocsCount.textContent = String(archived.length);
+    if (!archivedDocsList.classList.contains('hidden')) {
+      archivedDocsList.innerHTML = renderDocItems(sortedDocs(archived), true);
+    }
+  } else {
+    docsArchivedSection.classList.add('hidden');
+    archivedDocsList.classList.add('hidden');
+  }
+}
+
+// ── Upload ────────────────────────────────────────────────────────────────────
+
+function openDocForm() {
+  docFormPanel.classList.remove('hidden');
+  docFormError.classList.add('hidden');
+  docTitleInput.value        = '';
+  docFileInput.value         = '';
+  docCategorySelect.value    = 'Bylaws';
+  docEffectiveDate.value     = '';
+  docUploadBtn.disabled      = false;
+  docUploadBtn.textContent   = 'Upload';
+  docTitleInput.focus();
+  docFormPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeDocForm() {
+  docFormPanel.classList.add('hidden');
+}
+
+async function uploadDocument() {
+  const file     = docFileInput.files[0];
+  const title    = docTitleInput.value.trim();
+  const category = docCategorySelect.value;
+  const effDate  = docEffectiveDate.value || null;
+
+  if (!file)  { showDocFormError('Please select a file.'); return; }
+  if (!title) { showDocFormError('Please enter a title for this document.'); return; }
+
+  if (file.size > 20 * 1024 * 1024) {
+    showDocFormError('File exceeds the 20 MB limit. Please use a smaller file or split the document.');
+    return;
+  }
+
+  docUploadBtn.disabled    = true;
+  docUploadBtn.textContent = 'Uploading…';
+  docFormError.classList.add('hidden');
+
+  // Generate IDs client-side so the storage path and DB row use the same UUID.
+  const docId    = crypto.randomUUID();
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const storagePath = `${userOrg.id}/${docId}/${safeName}`;
+
+  const { error: storageError } = await supabaseClient.storage
+    .from('governance-documents')
+    .upload(storagePath, file, { cacheControl: '3600', upsert: false });
+
+  if (storageError) {
+    docUploadBtn.disabled    = false;
+    docUploadBtn.textContent = 'Upload';
+    showDocFormError('Upload failed: ' + storageError.message);
+    return;
+  }
+
+  const { error: dbError } = await supabaseClient.from('documents').insert({
+    id:             docId,
+    org_id:         userOrg.id,
+    title,
+    category,
+    effective_date: effDate,
+    storage_path:   storagePath,
+    file_name:      file.name,
+    file_size:      file.size,
+    mime_type:      file.type || null,
+  });
+
+  docUploadBtn.disabled    = false;
+  docUploadBtn.textContent = 'Upload';
+
+  if (dbError) {
+    // Storage upload already succeeded — the file is in the bucket. The
+    // orphan can be resolved by retrying (upsert: false will error, but a
+    // fresh upload with a new UUID will succeed). Note this to the user.
+    showDocFormError('File uploaded but metadata save failed: ' + dbError.message + ' — please try uploading again.');
+    return;
+  }
+
+  closeDocForm();
+  documentsLoaded = false;
+  await loadDocuments();
+}
+
+function showDocFormError(msg) {
+  docFormError.textContent = msg;
+  docFormError.classList.remove('hidden');
+}
+
+// ── Archive / restore ─────────────────────────────────────────────────────────
+
+async function archiveDocument(id) {
+  const doc = allDocuments.find((d) => d.id === id);
+  if (!confirm(`Archive "${doc?.title ?? 'this document'}"?\n\nIt will be hidden from the main list but not deleted. You can restore it at any time.`)) return;
+
+  const { error } = await supabaseClient
+    .from('documents')
+    .update({ status: 'archived', updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) { alert('Failed to archive: ' + error.message); return; }
+  documentsLoaded = false;
+  await loadDocuments();
+}
+
+async function restoreDocument(id) {
+  const { error } = await supabaseClient
+    .from('documents')
+    .update({ status: 'active', updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) { alert('Failed to restore: ' + error.message); return; }
+  documentsLoaded = false;
+  await loadDocuments();
+}
+
+// ── Download (signed URL, 5-minute expiry) ────────────────────────────────────
+
+async function downloadDocument(storagePath, fileName) {
+  const { data, error } = await supabaseClient.storage
+    .from('governance-documents')
+    .createSignedUrl(storagePath, 300);
+
+  if (error) { alert('Could not generate download link: ' + error.message); return; }
+
+  const a    = document.createElement('a');
+  a.href     = data.signedUrl;
+  a.download = fileName;
+  a.click();
+}
+
+// ── Document event listeners ──────────────────────────────────────────────────
+
+uploadDocBtn.addEventListener('click', openDocForm);
+docCancelBtn.addEventListener('click', closeDocForm);
+docUploadBtn.addEventListener('click', uploadDocument);
+
+docList.addEventListener('click', (e) => {
+  const dl  = e.target.closest('.doc-download-btn');
+  if (dl)  { downloadDocument(dl.dataset.path, dl.dataset.name); return; }
+  const arc = e.target.closest('.doc-archive-btn');
+  if (arc) { archiveDocument(arc.dataset.id); return; }
+});
+
+archivedDocsList.addEventListener('click', (e) => {
+  const dl  = e.target.closest('.doc-download-btn');
+  if (dl)  { downloadDocument(dl.dataset.path, dl.dataset.name); return; }
+  const rst = e.target.closest('.doc-restore-btn');
+  if (rst) { restoreDocument(rst.dataset.id); }
+});
+
+toggleArchivedBtn.addEventListener('click', () => {
+  const hidden = archivedDocsList.classList.toggle('hidden');
+  toggleArchivedBtn.textContent = hidden
+    ? `Show archived documents (${archivedDocsCount.textContent})`
+    : `Hide archived documents`;
+  if (!hidden) {
+    const archived = allDocuments.filter((d) => d.status === 'archived');
+    archivedDocsList.innerHTML = renderDocItems(sortedDocs(archived), true);
+  }
+});
+
+document.querySelectorAll('.docs-sort-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.docs-sort-btn').forEach((b) => b.classList.remove('docs-sort-btn--active'));
+    btn.classList.add('docs-sort-btn--active');
+    docSortField = btn.dataset.sort;
+    renderDocuments();
+  });
+});
+
+// ── Document helpers ──────────────────────────────────────────────────────────
+
+function formatFileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024)    return `${bytes} B`;
+  if (bytes < 1048576) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function fileTypeBadge(mimeType) {
+  if (!mimeType) return 'FILE';
+  if (mimeType === 'application/pdf')           return 'PDF';
+  if (mimeType.includes('word') || mimeType.includes('document')) return 'DOC';
+  if (mimeType.startsWith('image/'))            return 'IMG';
+  return 'FILE';
 }
