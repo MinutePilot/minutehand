@@ -101,6 +101,8 @@ let currentMinutesMarkdown = '';
 let currentMeetingId       = null;
 let hasBoardPlan           = false;
 let userOrg                = null;
+let rosterMembers          = [];
+let selectedGuests         = [];
 
 // ── Auth state management ─────────────────────────────────────────────────────
 
@@ -172,6 +174,21 @@ async function loadBoardPlanState() {
     .maybeSingle();
   userOrg = org ?? null;
   boardPlanLinkWrap?.classList.toggle('hidden', !(hasBoardPlan && userOrg));
+
+  if (userOrg) {
+    const { data: members } = await supabaseClient
+      .from('roster')
+      .select('id, name, role')
+      .eq('org_id', userOrg.id)
+      .eq('status', 'active')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+    rosterMembers = members ?? [];
+  } else {
+    rosterMembers = [];
+  }
+
+  renderAttendeeSection();
 }
 
 async function refreshCreditBalance() {
@@ -358,6 +375,76 @@ document.getElementById('save-password-btn').addEventListener('click', async () 
 });
 
 buyCreditsBtn.addEventListener('click', () => showSection(buyCreditsSection));
+
+// ── Attendee pre-selection ────────────────────────────────────────────────────
+
+const attendeeSection      = document.getElementById('attendee-section');
+const attendeeCheckboxList = document.getElementById('attendee-checkbox-list');
+const attendeeGuestInput   = document.getElementById('attendee-guest-input');
+const attendeeGuestAddBtn  = document.getElementById('attendee-guest-add-btn');
+const attendeeGuestList    = document.getElementById('attendee-guest-list');
+
+function renderAttendeeSection() {
+  if (!hasBoardPlan || rosterMembers.length === 0) {
+    attendeeSection.classList.add('hidden');
+    return;
+  }
+  attendeeCheckboxList.innerHTML = rosterMembers.map((m, i) =>
+    `<label class="attendee-cb-label">` +
+    `<input type="checkbox" id="attendee-cb-${i}" checked>` +
+    `<span class="attendee-cb-name">${escHtmlApp(m.name)}</span>` +
+    `<span class="attendee-cb-role">${escHtmlApp(m.role)}</span>` +
+    `</label>`
+  ).join('');
+  selectedGuests = [];
+  renderAttendeeGuestList();
+  attendeeSection.classList.remove('hidden');
+}
+
+function renderAttendeeGuestList() {
+  attendeeGuestList.innerHTML = selectedGuests.map((name, i) =>
+    `<li>${escHtmlApp(name)}` +
+    `<button class="btn-link attendee-guest-remove" data-index="${i}" aria-label="Remove">&#x2715;</button>` +
+    `</li>`
+  ).join('');
+}
+
+function addAttendeeGuest() {
+  const name = attendeeGuestInput.value.trim();
+  if (!name) return;
+  selectedGuests.push(name);
+  attendeeGuestInput.value = '';
+  renderAttendeeGuestList();
+}
+
+function getSelectedAttendees() {
+  if (!hasBoardPlan || rosterMembers.length === 0) return null;
+  const members = rosterMembers
+    .filter((_, i) => document.getElementById(`attendee-cb-${i}`)?.checked)
+    .map((m) => ({ name: m.name, role: m.role, is_guest: false }));
+  const guests = selectedGuests.map((name) => ({ name, role: null, is_guest: true }));
+  const all = [...members, ...guests];
+  return all.length > 0 ? all : null;
+}
+
+function escHtmlApp(str) {
+  if (str == null) return '';
+  return String(str).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
+  );
+}
+
+attendeeGuestAddBtn.addEventListener('click', addAttendeeGuest);
+attendeeGuestInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); addAttendeeGuest(); }
+});
+attendeeGuestList.addEventListener('click', (e) => {
+  const btn = e.target.closest('.attendee-guest-remove');
+  if (btn) {
+    selectedGuests.splice(Number(btn.dataset.index), 1);
+    renderAttendeeGuestList();
+  }
+});
 
 // ── Org setup ─────────────────────────────────────────────────────────────────
 
@@ -598,10 +685,12 @@ async function runGenerateFlow(notes) {
   setLoadingBtn(generateBtn, true, 'Generating…');
   addStatusRow(generateBtn, 'spinner', 'This usually takes 15–30 seconds…');
 
+  const attendees = getSelectedAttendees();
   try {
     const data = await callEdgeFunction('generate-minutes', {
       notes,
       template: templateSelect.value,
+      ...(attendees ? { attendees } : {}),
     });
     removeStatusRow();
     currentMinutesMarkdown = data.minutes;
@@ -671,6 +760,8 @@ resetBtn.addEventListener('click', () => {
   notesLabel.textContent = 'Meeting notes or transcript';
   notesHint.textContent  = 'Include date, location, attendees, and any motions made if you have them.';
   notesInput.placeholder = 'Paste your meeting notes, rough transcript, or any combination of both here…';
+  selectedGuests = [];
+  renderAttendeeSection();
   showSection(formSection);
 });
 

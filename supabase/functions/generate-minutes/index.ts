@@ -7,6 +7,14 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface Attendee {
+  name: string;
+  role: string | null;
+  is_guest: boolean;
+}
+
 // ── Template configs ──────────────────────────────────────────────────────────
 
 interface Template {
@@ -112,7 +120,26 @@ const TEMPLATES: Record<string, Template> = {
 
 // ── Prompt builder ────────────────────────────────────────────────────────────
 
-function buildPrompt(notes: string, templateKey: string): { system: string; user: string } {
+function buildAttendeeBlock(attendees: Attendee[]): string {
+  if (attendees.length === 0) return "";
+  const lines = attendees.map((a) => {
+    const role = a.role ? ` (${a.role})` : "";
+    const tag  = a.is_guest ? " [guest]" : "";
+    return `- ${a.name}${role}${tag}`;
+  }).join("\n");
+  return (
+    "CONFIRMED ATTENDEES (confirmed by the secretary before generation — " +
+    "record these names and roles exactly in the minutes; " +
+    "do not attribute statements or actions to people absent from this list based on inference alone):\n" +
+    lines + "\n\n"
+  );
+}
+
+function buildPrompt(
+  notes: string,
+  templateKey: string,
+  attendees?: Attendee[]
+): { system: string; user: string } {
   const t = TEMPLATES[templateKey] ?? TEMPLATES["STRATA"];
 
   const sectionsText =
@@ -156,7 +183,9 @@ RULES — follow exactly:
 9. DRAFT DISCLAIMER — MANDATORY: After the Action Items table, always append this closing line as its own paragraph: "These minutes are presented in draft form and are subject to approval at the next ${t.displayName}." If the next meeting date is stated in the source material, append it in parentheses after the sentence. This line must appear in every generated document without exception.
 10. Tone: ${t.tone}.${t.extraNotes ? `\n11. ${t.extraNotes}` : ""}`;
 
-  const user = `REQUIRED SECTIONS (produce each, in this order):
+  const attendeeBlock = attendees && attendees.length > 0 ? buildAttendeeBlock(attendees) : "";
+
+  const user = `${attendeeBlock}REQUIRED SECTIONS (produce each, in this order):
 ${sectionsText}
 
 RAW MEETING NOTES / TRANSCRIPT:
@@ -292,11 +321,13 @@ Deno.serve(async (req: Request) => {
 
   let notes: string;
   let template: string;
+  let attendees: Attendee[] | undefined;
 
   try {
     const body = await req.json();
-    notes    = (body.notes    ?? "").trim();
-    template = ((body.template ?? "STRATA") as string).toUpperCase();
+    notes     = (body.notes    ?? "").trim();
+    template  = ((body.template ?? "STRATA") as string).toUpperCase();
+    attendees = Array.isArray(body.attendees) ? (body.attendees as Attendee[]) : undefined;
   } catch {
     return json({ error: "Invalid JSON body" }, 400);
   }
@@ -329,7 +360,7 @@ Deno.serve(async (req: Request) => {
   if (!apiKey) return json({ error: "ANTHROPIC_API_KEY not configured" }, 500);
 
   const client = new Anthropic({ apiKey });
-  const { system, user: userPrompt } = buildPrompt(notes, template);
+  const { system, user: userPrompt } = buildPrompt(notes, template, attendees);
   const finalSystem = isBoardPlan ? system + boardPlanJsonSuffix() : system;
 
   let rawText = "";
