@@ -36,6 +36,20 @@
     <section id="access-section" class="card hidden">
       <h1 style="font-size:1.2rem;margin-bottom:0.5rem">Governance Records</h1>
       <p id="access-msg"></p>
+      <div id="access-upsell" class="hidden" style="margin-top:1rem">
+        <p style="margin-bottom:0.75rem;font-size:0.95rem">The Board Plan ($75 CAD/year) unlocks:</p>
+        <ul style="font-size:0.9rem;margin:0 0 1rem 1.25rem;line-height:1.7">
+          <li>Motion &amp; decision registry</li>
+          <li>Cross-meeting action item tracking</li>
+          <li>Auto-generated next-meeting agendas</li>
+          <li>Full-text search across all meetings</li>
+          <li>Council roster with role history</li>
+          <li>Governance document library</li>
+          <li>Document templates (AGM Notice, SGM Notice, Written Resolution)</li>
+          <li>Owner-facing minutes portal</li>
+          <li>12 meeting credits included</li>
+        </ul>
+      </div>
       <div id="access-actions" style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:0.75rem"></div>
     </section>
 
@@ -50,7 +64,10 @@
       </div>
 
       <nav class="board-tabs" role="tablist">
-        <button class="board-tab board-tab--active" data-tab="motions" role="tab" aria-selected="true">
+        <button class="board-tab board-tab--active" data-tab="overview" role="tab" aria-selected="true">
+          Overview
+        </button>
+        <button class="board-tab" data-tab="motions" role="tab" aria-selected="false">
           Motions
         </button>
         <button class="board-tab" data-tab="actions" role="tab" aria-selected="false">
@@ -62,6 +79,9 @@
         <button class="board-tab" data-tab="search" role="tab" aria-selected="false">
           Search
         </button>
+        <button class="board-tab" data-tab="minutes" role="tab" aria-selected="false">
+          Minutes
+        </button>
         <button class="board-tab" data-tab="tools" role="tab" aria-selected="false">
           Tools
         </button>
@@ -71,9 +91,50 @@
         <button class="board-tab" data-tab="documents" role="tab" aria-selected="false">
           Documents
         </button>
+        <button class="board-tab" data-tab="templates" role="tab" aria-selected="false">
+          Templates
+        </button>
       </nav>
 
-      <div id="motions-view" role="tabpanel">
+      <!-- Overview tab — default landing view -->
+      <div id="overview-view" role="tabpanel">
+
+        <div class="overview-grid">
+          <div class="overview-card overview-card--actions" id="overview-card-actions">
+            <div class="overview-card__value" id="ov-open-actions">—</div>
+            <div class="overview-card__label">Open action items</div>
+            <div class="overview-card__detail" id="ov-overdue-actions"></div>
+            <button class="overview-card__link" data-tab-link="actions">View all →</button>
+          </div>
+          <div class="overview-card overview-card--minutes" id="overview-card-minutes">
+            <div class="overview-card__value" id="ov-published-minutes">—</div>
+            <div class="overview-card__label">Published minutes</div>
+            <div class="overview-card__detail" id="ov-draft-minutes"></div>
+            <button class="overview-card__link" data-tab-link="minutes">Manage →</button>
+          </div>
+          <div class="overview-card overview-card--agenda" id="overview-card-agenda">
+            <div class="overview-card__value" id="ov-agenda-date">—</div>
+            <div class="overview-card__label">Next meeting</div>
+            <div class="overview-card__detail" id="ov-agenda-detail"></div>
+            <button class="overview-card__link" data-tab-link="agenda">Edit agenda →</button>
+          </div>
+          <div class="overview-card overview-card--docs" id="overview-card-docs">
+            <div class="overview-card__value" id="ov-doc-count">—</div>
+            <div class="overview-card__label">Governance documents</div>
+            <div class="overview-card__detail" id="ov-doc-detail"></div>
+            <button class="overview-card__link" data-tab-link="documents">View library →</button>
+          </div>
+        </div>
+
+        <div class="overview-recent" id="overview-recent-motions">
+          <h3 class="overview-recent__heading">Recent motions</h3>
+          <div id="ov-recent-motions-list" class="overview-recent__list"></div>
+          <button class="btn-link overview-recent__more" data-tab-link="motions">View all motions →</button>
+        </div>
+
+      </div>
+
+      <div id="motions-view" class="hidden" role="tabpanel">
         <div class="registry-filters">
           <input type="search" id="motion-search" class="registry-search"
                  placeholder="Search motions…" autocomplete="off">
@@ -154,6 +215,65 @@
       </div>
 
       <!-- Tools view -->
+      <!-- Minutes tab: publish management + owner portal link -->
+      <div id="minutes-view" class="hidden" role="tabpanel">
+
+        <!-- Owner portal section -->
+        <div class="tools-section" id="portal-link-section">
+          <h3 class="tools-section__heading">Owner Portal</h3>
+          <p class="field-hint" style="margin-bottom:0.75rem">
+            Share this link with your building's owners for a read-only view of
+            published minutes. The link does not require owners to create an account.
+          </p>
+          <div class="portal-link-row">
+            <input type="text" id="portal-link-input" class="portal-link-display"
+                   readonly aria-label="Owner portal link">
+            <button id="portal-copy-btn" class="btn-secondary">Copy link</button>
+          </div>
+          <p id="portal-copy-confirm" class="field-hint hidden" style="color:var(--accent)">
+            Link copied to clipboard.
+          </p>
+          <div style="margin-top:0.75rem">
+            <button id="portal-regen-btn" class="btn-ghost btn--danger-ghost">
+              Regenerate link
+            </button>
+            <p class="field-hint" style="margin-top:0.35rem">
+              Regenerating immediately invalidates the current link. Share the new
+              link before owners try to use the old one.
+            </p>
+          </div>
+        </div>
+
+        <!-- Meeting list with publish toggles -->
+        <div class="tools-section">
+          <div class="mins-list-header">
+            <h3 class="tools-section__heading" style="margin:0">Minutes</h3>
+            <span id="mins-count" class="field-hint"></span>
+          </div>
+          <p class="field-hint" style="margin-bottom:1rem">
+            Publish a set of minutes to make it visible in the owner portal.
+            Unpublish to remove it from the portal without deleting anything.
+          </p>
+          <div id="mins-list">
+            <div class="loading-row"><div class="spinner"></div><span>Loading…</span></div>
+          </div>
+        </div>
+
+        <!-- v1 limitation notice -->
+        <div class="tools-section">
+          <h3 class="tools-section__heading">Known limitation</h3>
+          <p class="field-hint">
+            Published minutes are shown verbatim. There is currently no way to
+            redact a specific passage before publishing — for example, to exclude
+            in-camera discussions on legal matters, personnel, or sensitive contract
+            negotiations. If your council regularly discusses matters that should not
+            circulate to all owners, consider whether this portal is appropriate until
+            per-section redaction is available.
+          </p>
+        </div>
+
+      </div>
+
       <div id="tools-view" class="hidden" role="tabpanel">
 
         <div class="tools-section">
@@ -314,6 +434,40 @@
             Show former members (<span id="former-count">0</span>)
           </button>
           <div id="former-list" class="hidden"></div>
+        </div>
+
+      </div>
+
+      <!-- Templates view -->
+      <div id="templates-view" class="hidden" role="tabpanel">
+
+        <div class="template-selector" role="group" aria-label="Select template">
+          <button class="template-btn template-btn--active" data-template="agm">
+            <span class="template-btn__title">AGM Notice</span>
+            <span class="template-btn__desc">Annual General Meeting notice to owners</span>
+          </button>
+          <button class="template-btn" data-template="sgm">
+            <span class="template-btn__title">SGM Notice</span>
+            <span class="template-btn__desc">Special General Meeting notice to owners</span>
+          </button>
+          <button class="template-btn" data-template="resolution">
+            <span class="template-btn__title">Written Resolution</span>
+            <span class="template-btn__desc">Council resolution passed without a meeting</span>
+          </button>
+        </div>
+
+        <div id="template-form-area"></div>
+
+        <div class="tools-disclaimer" style="margin-top:1.25rem">
+          <strong>Template only — not legal advice.</strong> These documents have not been
+          reviewed by legal counsel. Verify compliance with the Strata Property Act (BC),
+          your corporation's bylaws, and all applicable legislation before distributing
+          any notice or executing any resolution.
+        </div>
+
+        <div class="template-actions">
+          <button id="template-download-btn" class="btn-secondary">Download .docx</button>
+          <p id="template-error" class="error hidden"></p>
         </div>
 
       </div>

@@ -1,6 +1,6 @@
 # MinuteHand
 
-MinuteHand (https://minutehand.ca) is an AI-powered meeting minutes generator for strata councils, homeowners associations (HOAs), and nonprofit boards.
+MinuteHand (https://minutehand.ca) is an AI-powered meeting minutes generator for strata councils, homeowners associations (HOAs), and nonprofit boards. It also offers a full governance records suite for boards that need year-round recordkeeping beyond individual meetings.
 
 ## What it does
 
@@ -15,13 +15,27 @@ Volunteer secretaries and board members responsible for meeting minutes without 
 
 ## Pricing
 
-Pay-per-use. No subscription required.
+### Pay-per-use
+No subscription required. Credits never expire.
 - 1 meeting credit: $7 CAD
 - 5 meeting credits: $20 CAD (approximately $4 per meeting)
 
-Credits never expire.
+### Board Plan — $75 CAD/year
+The Board Plan is a yearly subscription that unlocks the full Governance Records suite, plus 12 meeting credits per year (enough for monthly meetings). Additional credits can be purchased at pay-per-use rates if needed. Includes a 30-day full refund — no questions asked.
 
-## Key features
+Board Plan features:
+- 12 meeting credits included per year
+- Motion and decision registry — every motion searchable across all meetings
+- Cross-meeting action item tracking with open/overdue status
+- Auto-generated next-meeting agenda from open action items
+- Full-text search across all meeting content
+- Council roster with role history
+- Special resolution vote calculator
+- Governance document library with version history and archived versions
+- Document templates: AGM Notice, SGM Notice, Written Resolution
+- Owner-facing minutes portal — a secure per-organization link where strata owners can read and download published minutes without creating an account
+
+## Key features (minutes generation)
 
 - Accepts pasted notes, up to 5 .docx file uploads simultaneously, and audio recordings up to 50 MB
 - Automatic transcription using Deepgram Nova-2 with speaker diarization

@@ -7,8 +7,9 @@ const CORS = {
 };
 
 const PACKS = {
-  "1_credit":  { name: "1 Meeting Credit",   credits: 1, amount: "7.00",  currency: "CAD" },
-  "5_credits": { name: "5 Meeting Credits",  credits: 5, amount: "20.00", currency: "CAD" },
+  "1_credit":   { name: "1 Meeting Credit",             credits: 1,  amount: "7.00",  currency: "CAD" },
+  "5_credits":  { name: "5 Meeting Credits",            credits: 5,  amount: "20.00", currency: "CAD" },
+  "board_plan": { name: "MinuteHand Board Plan (1 yr)", credits: 12, amount: "75.00", currency: "CAD" },
 } as const;
 
 function paypalBase() {

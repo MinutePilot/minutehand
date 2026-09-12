@@ -1,5 +1,6 @@
 // Called after PayPal redirects the user back with ?payment=approved&token=ORDER_ID
 // Captures the order and grants credits atomically.
+// For board_plan purchases: also activates the subscription and grants 12 included credits.
 import { createClient } from "npm:@supabase/supabase-js@^2";
 
 const CORS = {
@@ -9,8 +10,9 @@ const CORS = {
 };
 
 const PACK_CREDITS: Record<string, number> = {
-  "1_credit": 1,
-  "5_credits": 5,
+  "1_credit":   1,
+  "5_credits":  5,
+  "board_plan": 12,   // included meeting credits
 };
 
 function paypalBase() {
@@ -92,13 +94,14 @@ Deno.serve(async (req: Request) => {
   }
 
   const credits = PACK_CREDITS[pack];
-  if (!credits) return json({ error: "Unknown pack in order" }, 400);
+  if (credits === undefined) return json({ error: "Unknown pack in order" }, 400);
 
   const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  // Grant the included meeting credits
   const { error: creditErr } = await supabaseAdmin.rpc("add_credits", {
     p_user_id: user.id,
     p_amount: credits,
@@ -108,6 +111,29 @@ Deno.serve(async (req: Request) => {
   if (creditErr) {
     console.error("Failed to add credits:", creditErr);
     return json({ error: "Failed to grant credits" }, 500);
+  }
+
+  // For Board Plan purchases: activate the subscription
+  if (pack === "board_plan") {
+    const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    const { error: subErr } = await supabaseAdmin
+      .from("subscriptions")
+      .upsert({
+        user_id:                user.id,
+        board_plan_active:      true,
+        activated_at:           new Date().toISOString(),
+        expires_at:             expiresAt,
+        paypal_subscription_id: paymentId,
+        updated_at:             new Date().toISOString(),
+      }, { onConflict: "user_id" });
+
+    if (subErr) {
+      console.error("Failed to activate Board Plan:", subErr);
+      // Credits already granted above — log but don't return error;
+      // support can manually activate if needed, credits are not lost.
+    }
+
+    return json({ credits, boardPlan: true });
   }
 
   return json({ credits });

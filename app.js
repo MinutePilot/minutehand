@@ -13,6 +13,7 @@ const supabaseClient = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabase
 // Sections
 const signinSection          = document.getElementById('signin-section');
 const buyCreditsSection      = document.getElementById('buy-credits-section');
+const buyBoardPlanSection    = document.getElementById('buy-board-plan-section');
 const formSection            = document.getElementById('form-section');
 const speakerSection         = document.getElementById('speaker-section');
 const resultSection          = document.getElementById('result-section');
@@ -33,8 +34,10 @@ const accountBarSignedin  = accountBar.querySelector('.account-bar__signedin');
 const creditsDisplay      = document.getElementById('credits-display');
 const userEmailDisplay    = document.getElementById('user-email-display');
 const showSigninBtn       = document.getElementById('show-signin-btn');
-const buyCreditsBtn         = document.getElementById('buy-credits-btn');
-const boardPlanLinkWrap     = document.getElementById('board-plan-link-wrap');
+const buyCreditsBtn              = document.getElementById('buy-credits-btn');
+const upgradeBoardPlanWrap       = document.getElementById('upgrade-board-plan-wrap');
+const upgradeBoardPlanBtn        = document.getElementById('upgrade-board-plan-btn');
+const boardPlanLinkWrap          = document.getElementById('board-plan-link-wrap');
 const changePasswordBtn   = document.getElementById('change-password-btn');
 const signoutBtn          = document.getElementById('signout-btn');
 
@@ -54,8 +57,14 @@ const googleSigninBtn    = document.getElementById('google-signin-btn');
 let authMode = 'signin'; // 'signin' | 'signup'
 
 // Buy credits section
-const checkoutError      = document.getElementById('checkout-error');
-const backFromCreditsBtn = document.getElementById('back-from-credits-btn');
+const checkoutError           = document.getElementById('checkout-error');
+const backFromCreditsBtn      = document.getElementById('back-from-credits-btn');
+const showBoardPlanFromCreditsBtn = document.getElementById('show-board-plan-from-credits-btn');
+
+// Board Plan section
+const boardPlanCheckoutBtn   = document.getElementById('board-plan-checkout-btn');
+const boardPlanCheckoutError = document.getElementById('board-plan-checkout-error');
+const backFromBoardPlanBtn   = document.getElementById('back-from-board-plan-btn');
 
 // .docx upload
 const dropZone         = document.getElementById('drop-zone');
@@ -122,7 +131,11 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     await loadBoardPlanState();
     updateAuthBar();
     const comingFromSignin = !signinSection.classList.contains('hidden');
-    if (comingFromSignin || (hasBoardPlan && !userOrg)) {
+    const pendingBoardPlan = signinSection.dataset.pendingBoardPlan === '1';
+    delete signinSection.dataset.pendingBoardPlan;
+    if (pendingBoardPlan && !hasBoardPlan) {
+      showSection(buyBoardPlanSection);
+    } else if (comingFromSignin || (hasBoardPlan && !userOrg)) {
       if (hasBoardPlan && !userOrg) showSection(orgSetupSection);
       else showSection(formSection);
     }
@@ -132,26 +145,49 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
   }
 });
 
-// On page load: handle returning from PayPal
+// On page load: handle returning from PayPal or ?plan=board_plan deep-link
 (async () => {
   const params  = new URLSearchParams(window.location.search);
   const payment = params.get('payment');
   const orderId = params.get('token'); // PayPal passes the order ID as ?token=
+  const plan    = params.get('plan');
 
   if (payment === 'approved' && orderId) {
     window.history.replaceState({}, '', window.location.pathname);
     const toast = showToast('Processing payment…', 'info');
     try {
-      await callEdgeFunction('capture-payment', { orderId });
+      const result = await callEdgeFunction('capture-payment', { orderId });
       toast.remove();
       await refreshCreditBalance();
-      showPaymentSuccessToast();
+      if (result.boardPlan) {
+        await loadBoardPlanState();
+        if (hasBoardPlan && !userOrg) {
+          showSection(orgSetupSection);
+        } else {
+          showSection(formSection);
+        }
+        showToast('Board Plan activated — welcome to Governance Records!', 'success');
+      } else {
+        showPaymentSuccessToast();
+      }
     } catch (err) {
       toast.remove();
       showToast(`Payment error: ${err.message || 'Please contact support.'}`, 'error');
     }
   } else if (payment === 'cancelled') {
     window.history.replaceState({}, '', window.location.pathname);
+  } else if (plan === 'board_plan') {
+    window.history.replaceState({}, '', window.location.pathname);
+    // Show board plan section once auth state loads (handled in onAuthStateChange)
+    // For unauthenticated users: show sign-in first, then redirect to board plan
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) {
+      setAuthMode('signup');
+      showSection(signinSection);
+      signinSection.dataset.pendingBoardPlan = '1';
+    } else {
+      showSection(buyBoardPlanSection);
+    }
   }
 })();
 
@@ -165,6 +201,9 @@ async function loadBoardPlanState() {
   hasBoardPlan = sub?.board_plan_active === true &&
                  (!sub.expires_at || new Date(sub.expires_at) > new Date());
 
+  upgradeBoardPlanWrap?.classList.toggle('hidden', hasBoardPlan);
+  boardPlanLinkWrap?.classList.toggle('hidden', !hasBoardPlan);
+
   if (!hasBoardPlan) { userOrg = null; return; }
 
   const { data: org } = await supabaseClient
@@ -173,7 +212,7 @@ async function loadBoardPlanState() {
     .eq('owner_id', currentUser.id)
     .maybeSingle();
   userOrg = org ?? null;
-  boardPlanLinkWrap?.classList.toggle('hidden', !(hasBoardPlan && userOrg));
+  boardPlanLinkWrap?.classList.toggle('hidden', !userOrg);
 
   if (userOrg) {
     const { data: members } = await supabaseClient
@@ -375,6 +414,8 @@ document.getElementById('save-password-btn').addEventListener('click', async () 
 });
 
 buyCreditsBtn.addEventListener('click', () => showSection(buyCreditsSection));
+upgradeBoardPlanBtn?.addEventListener('click', () => showSection(buyBoardPlanSection));
+showBoardPlanFromCreditsBtn?.addEventListener('click', () => showSection(buyBoardPlanSection));
 
 // ── Attendee pre-selection ────────────────────────────────────────────────────
 
@@ -479,6 +520,22 @@ orgSaveBtn.addEventListener('click', async () => {
 });
 
 backFromCreditsBtn.addEventListener('click', () => showSection(formSection));
+backFromBoardPlanBtn?.addEventListener('click', () => showSection(formSection));
+
+boardPlanCheckoutBtn?.addEventListener('click', async () => {
+  boardPlanCheckoutError.classList.add('hidden');
+  boardPlanCheckoutBtn.disabled = true;
+  boardPlanCheckoutBtn.textContent = 'Redirecting to PayPal…';
+  try {
+    const data = await callEdgeFunction('create-checkout', { pack: 'board_plan', origin: pageOrigin() });
+    window.location.href = data.url;
+  } catch (err) {
+    boardPlanCheckoutError.textContent = err.message || 'Failed to start checkout. Please try again.';
+    boardPlanCheckoutError.classList.remove('hidden');
+    boardPlanCheckoutBtn.disabled = false;
+    boardPlanCheckoutBtn.textContent = 'Get Board Plan — $75 CAD/year';
+  }
+});
 
 // ── Buy credits ───────────────────────────────────────────────────────────────
 
@@ -831,7 +888,7 @@ async function callEdgeFunction(name, payload) {
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
 
-const SECTIONS = [signinSection, buyCreditsSection, orgSetupSection, formSection, speakerSection, resultSection, changePasswordSection];
+const SECTIONS = [signinSection, buyCreditsSection, buyBoardPlanSection, orgSetupSection, formSection, speakerSection, resultSection, changePasswordSection];
 
 function showSection(section) {
   SECTIONS.forEach((s) => s.classList.add('hidden'));

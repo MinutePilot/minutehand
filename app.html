@@ -76,8 +76,43 @@
           <span class="pack-save">save 43%</span>
         </button>
       </div>
+      <p class="buy-intro" style="margin-top:1.25rem">
+        Need more than credits?
+        <button id="show-board-plan-from-credits-btn" class="btn-link">See the Board Plan ($75/yr)</button>
+      </p>
       <p id="checkout-error" class="error hidden"></p>
       <button id="back-from-credits-btn" class="btn-ghost" style="margin-top:1.25rem">← Back</button>
+    </section>
+
+    <section id="buy-board-plan-section" class="card hidden">
+      <h1>MinuteHand Board Plan</h1>
+      <p class="buy-intro">Everything you need to run a strata council — all year, in one place.</p>
+
+      <div class="board-plan-price-block">
+        <span class="board-plan-price">$75</span>
+        <span class="board-plan-price-detail">CAD / year</span>
+      </div>
+
+      <ul class="board-plan-features">
+        <li>12 meeting credits included (enough for monthly meetings)</li>
+        <li>Motion &amp; decision registry — searchable across all meetings</li>
+        <li>Cross-meeting action item tracking with open/overdue status</li>
+        <li>Auto-generated next-meeting agenda from open items</li>
+        <li>Full-text search across all meeting content</li>
+        <li>Council roster with role history</li>
+        <li>Special resolution vote calculator</li>
+        <li>Governance document library with version history</li>
+        <li>Document templates: AGM Notice, SGM Notice, Written Resolution</li>
+        <li>Owner-facing minutes portal (secure per-organization link)</li>
+      </ul>
+
+      <p class="board-plan-refund">30-day full refund — no questions asked.</p>
+
+      <div class="form-footer">
+        <button id="board-plan-checkout-btn" class="btn-primary">Get Board Plan — $75 CAD/year</button>
+        <p id="board-plan-checkout-error" class="error hidden"></p>
+      </div>
+      <button id="back-from-board-plan-btn" class="btn-ghost" style="margin-top:1rem">← Back</button>
     </section>
 
     <section id="org-setup-section" class="card hidden">
@@ -116,6 +151,10 @@
           <span id="credits-display" class="credits-badge">— credits</span>
           <span class="account-sep">·</span>
           <button id="buy-credits-btn" class="btn-link">Buy more</button>
+          <span id="upgrade-board-plan-wrap" class="hidden">
+            <span class="account-sep">·</span>
+            <button id="upgrade-board-plan-btn" class="btn-link">Upgrade to Board Plan</button>
+          </span>
           <span id="board-plan-link-wrap" class="hidden">
             <span class="account-sep">·</span>
             <a href="/board.html" class="btn-link">Governance Records</a>

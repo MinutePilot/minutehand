@@ -23,14 +23,22 @@ const meetingCache  = new Map();
 
 let allDocuments    = [];
 let documentsLoaded = false;
-let docSortField    = 'created_at';  // 'created_at' | 'effective_date'
+let docSortField    = 'created_at';
+
+let allMeetingsList    = [];
+let meetingsListLoaded = false;
+let overviewLoaded     = false;
+
+let activeTemplate = 'agm';
 
 // ── Element refs ──────────────────────────────────────────────────────────────
 
 const loadingView    = document.getElementById('loading-view');
 const accessSection   = document.getElementById('access-section');
 const accessMsg       = document.getElementById('access-msg');
+const accessUpsell    = document.getElementById('access-upsell');
 const accessActions   = document.getElementById('access-actions');
+const overviewView    = document.getElementById('overview-view');
 const boardView      = document.getElementById('board-view');
 const orgNameHeading = document.getElementById('org-name-heading');
 const orgTypeLabel   = document.getElementById('org-type-label');
@@ -87,6 +95,17 @@ const agendaNewItemList   = document.getElementById('agenda-new-item-list');
 const minutesModal        = document.getElementById('minutes-modal');
 const modalClose     = document.getElementById('modal-close');
 const modalBody      = document.getElementById('modal-body');
+const templatesView       = document.getElementById('templates-view');
+const templateFormArea    = document.getElementById('template-form-area');
+const templateDownloadBtn = document.getElementById('template-download-btn');
+const templateError       = document.getElementById('template-error');
+const minutesView         = document.getElementById('minutes-view');
+const portalLinkInput     = document.getElementById('portal-link-input');
+const portalCopyBtn       = document.getElementById('portal-copy-btn');
+const portalCopyConfirm   = document.getElementById('portal-copy-confirm');
+const portalRegenBtn      = document.getElementById('portal-regen-btn');
+const minsList            = document.getElementById('mins-list');
+const minsCount           = document.getElementById('mins-count');
 const documentsView       = document.getElementById('documents-view');
 const docsCount           = document.getElementById('docs-count');
 const uploadDocBtn        = document.getElementById('upload-doc-btn');
@@ -135,7 +154,7 @@ async function init() {
 
   const { data: org } = await supabaseClient
     .from('organizations')
-    .select('id, name, org_type')
+    .select('id, name, org_type, portal_token')
     .eq('owner_id', currentUser.id)
     .maybeSingle();
 
@@ -149,8 +168,11 @@ async function init() {
   boardView.classList.remove('hidden');
   orgNameHeading.textContent = org.name;
   orgTypeLabel.textContent   = ORG_TYPE_LABELS[org.org_type] ?? org.org_type;
+  renderPortalLink();
 
   await Promise.all([loadMotions(), loadActionItems()]);
+  loadOverview();
+  loadMeetingsList();
 }
 
 function showAccess(type) {
@@ -163,11 +185,12 @@ function showAccess(type) {
 
   } else if (type === 'no-plan') {
     accessMsg.innerHTML =
-      'Track every motion, action item, and document across all your meetings — ' +
+      'Track every motion, action item, and governance document across all your meetings — ' +
       'without re-entering data each time. Included in the ' +
-      '<strong>Board Plan</strong> ($75 CAD/year).';
+      '<strong>Board Plan</strong> ($75 CAD/year, 30-day refund).';
+    accessUpsell?.classList.remove('hidden');
     accessActions.innerHTML =
-      `<a href="/#pricing" class="btn-primary">See Board Plan pricing</a>` +
+      `<a href="/app.html?plan=board_plan" class="btn-primary">Get Board Plan — $75 CAD/year</a>` +
       `<a href="/app.html" class="btn-ghost">← Back to app</a>`;
 
   } else if (type === 'no-org') {
@@ -278,7 +301,7 @@ function renderMotions() {
 // ── Tab switching ─────────────────────────────────────────────────────────────
 
 document.querySelectorAll('.board-tab').forEach((tab) => {
-  tab.addEventListener('click', () => {
+  tab.addEventListener('click', async () => {
     document.querySelectorAll('.board-tab').forEach((t) => {
       t.classList.remove('board-tab--active');
       t.setAttribute('aria-selected', 'false');
@@ -287,18 +310,25 @@ document.querySelectorAll('.board-tab').forEach((tab) => {
     tab.setAttribute('aria-selected', 'true');
 
     const active = tab.dataset.tab;
-    motionsView.classList.toggle('hidden',   active !== 'motions');
-    actionsView.classList.toggle('hidden',   active !== 'actions');
-    agendaView.classList.toggle('hidden',    active !== 'agenda');
-    searchView.classList.toggle('hidden',    active !== 'search');
-    toolsView.classList.toggle('hidden',     active !== 'tools');
-    membersView.classList.toggle('hidden',   active !== 'members');
-    documentsView.classList.toggle('hidden', active !== 'documents');
-    if (active === 'agenda')                        renderAgenda();
-    if (active === 'search')                        searchInput.focus();
-    if (active === 'tools')                         populateExportYears();
-    if (active === 'members'   && !membersLoaded)   loadMembers();
-    if (active === 'documents' && !documentsLoaded) loadDocuments();
+    overviewView.classList.toggle('hidden',   active !== 'overview');
+    motionsView.classList.toggle('hidden',    active !== 'motions');
+    actionsView.classList.toggle('hidden',    active !== 'actions');
+    agendaView.classList.toggle('hidden',     active !== 'agenda');
+    searchView.classList.toggle('hidden',     active !== 'search');
+    minutesView.classList.toggle('hidden',    active !== 'minutes');
+    toolsView.classList.toggle('hidden',      active !== 'tools');
+    membersView.classList.toggle('hidden',    active !== 'members');
+    documentsView.classList.toggle('hidden',  active !== 'documents');
+    templatesView.classList.toggle('hidden',  active !== 'templates');
+    if (active === 'agenda')                              renderAgenda();
+    if (active === 'search')                              searchInput.focus();
+    if (active === 'tools')                               populateExportYears();
+    if (active === 'members'  && !membersLoaded)          loadMembers();
+    if (active === 'documents' && !documentsLoaded)       loadDocuments();
+    if (active === 'templates') {
+      if (!membersLoaded) await loadMembers();
+      renderTemplateForm(activeTemplate);
+    }
   });
 });
 
@@ -338,6 +368,94 @@ async function loadActionItems() {
   allActionItems = data ?? [];
   renderActionItems();
 }
+
+// ── Overview tab ──────────────────────────────────────────────────────────────
+
+async function loadOverview() {
+  // Fetch published/draft minute counts and document count in parallel
+  const [meetingsCountRes, docCountRes] = await Promise.all([
+    supabaseClient
+      .from('meetings')
+      .select('id, published', { count: 'exact' })
+      .eq('org_id', userOrg.id),
+    supabaseClient
+      .from('governance_documents')
+      .select('id', { count: 'exact' })
+      .eq('org_id', userOrg.id)
+      .eq('archived', false),
+  ]);
+
+  const meetings      = meetingsCountRes.data ?? [];
+  const published     = meetings.filter((m) => m.published).length;
+  const draft         = meetings.filter((m) => !m.published).length;
+  const docCount      = docCountRes.count ?? 0;
+
+  overviewLoaded = true;
+
+  renderOverview({ published, draft, docCount });
+}
+
+function renderOverview({ published, draft, docCount }) {
+  const today = new Date().toLocaleDateString('en-CA');
+
+  // Action items from already-loaded allActionItems
+  const openItems    = allActionItems.filter((i) => i.status === 'open' || i.status === 'in_progress');
+  const overdueItems = openItems.filter((i) => i.due_date_parsed && i.due_date_parsed < today);
+
+  document.getElementById('ov-open-actions').textContent  = openItems.length;
+  document.getElementById('ov-overdue-actions').textContent =
+    overdueItems.length > 0 ? `${overdueItems.length} overdue` : 'None overdue';
+  document.getElementById('ov-overdue-actions').style.color =
+    overdueItems.length > 0 ? 'var(--error)' : '';
+
+  document.getElementById('ov-published-minutes').textContent = published;
+  document.getElementById('ov-draft-minutes').textContent     =
+    draft > 0 ? `${draft} draft${draft !== 1 ? 's' : ''}` : 'All published';
+
+  // Next agenda date from agendaMeetingDate input (may be empty)
+  const agendaDateVal = agendaMeetingDate?.value;
+  if (agendaDateVal) {
+    const d = new Date(agendaDateVal + 'T12:00:00');
+    document.getElementById('ov-agenda-date').textContent =
+      d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+    document.getElementById('ov-agenda-detail').textContent =
+      d.toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
+  } else {
+    document.getElementById('ov-agenda-date').textContent  = '—';
+    document.getElementById('ov-agenda-detail').textContent = 'No date set';
+  }
+
+  document.getElementById('ov-doc-count').textContent  = docCount;
+  document.getElementById('ov-doc-detail').textContent = 'in document library';
+
+  // Recent motions — last 5 carried
+  const recent = allMotions.filter((m) => m.result === 'carried').slice(0, 5);
+  const recentList = document.getElementById('ov-recent-motions-list');
+  if (recent.length === 0) {
+    recentList.innerHTML = '<p class="field-hint">No carried motions yet.</p>';
+  } else {
+    recentList.innerHTML = recent.map((m) => {
+      const dateStr = m.meetings?.meeting_date
+        ? new Date(m.meetings.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', {
+            year: 'numeric', month: 'short', day: 'numeric',
+          })
+        : '';
+      return `<div class="overview-recent__item">
+  <span class="overview-recent__desc">${escHtml(m.description)}</span>
+  ${dateStr ? `<span class="overview-recent__date">${dateStr}</span>` : ''}
+</div>`;
+    }).join('');
+  }
+}
+
+// Tab links inside overview cards
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-tab-link]');
+  if (!btn) return;
+  const target = btn.dataset.tabLink;
+  const tabEl = document.querySelector(`.board-tab[data-tab="${target}"]`);
+  if (tabEl) tabEl.click();
+});
 
 function applyActionFilters() {
   const q          = aiSearch.value.trim().toLowerCase();
@@ -1787,3 +1905,627 @@ function fileTypeBadge(mimeType) {
   if (mimeType.startsWith('image/'))            return 'IMG';
   return 'FILE';
 }
+
+// ── Minutes tab + owner portal ────────────────────────────────────────────────
+
+function portalUrl(token) {
+  return token ? `${location.origin}/portal.html?token=${token}` : '';
+}
+
+function renderPortalLink() {
+  const token = userOrg?.portal_token;
+  if (portalLinkInput) portalLinkInput.value = portalUrl(token) || '(no link yet — reload the page)';
+}
+
+async function loadMeetingsList() {
+  meetingsListLoaded = true;
+  minsList.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading…</span></div>';
+
+  const { data, error } = await supabaseClient
+    .from('meetings')
+    .select('id, title, meeting_date, template, status, published, published_at, created_at')
+    .eq('org_id', userOrg.id)
+    .order('meeting_date', { ascending: false, nullsFirst: false });
+
+  if (error) {
+    minsList.innerHTML = `<p class="error">Failed to load: ${escHtml(error.message)}</p>`;
+    return;
+  }
+
+  allMeetingsList = data ?? [];
+  minsCount.textContent = `${allMeetingsList.length} meeting${allMeetingsList.length !== 1 ? 's' : ''}`;
+  renderMeetingsList();
+}
+
+function renderMeetingsList() {
+  if (allMeetingsList.length === 0) {
+    minsList.innerHTML = `<div class="registry-empty">
+      <p>No meetings yet.</p>
+      <p class="field-hint">Generate your first set of minutes to start publishing.</p>
+    </div>`;
+    return;
+  }
+
+  minsList.innerHTML = allMeetingsList.map((m) => {
+    const dateStr = m.meeting_date
+      ? new Date(m.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', {
+          year: 'numeric', month: 'long', day: 'numeric',
+        })
+      : 'Date not recorded';
+    const title      = m.title || 'Untitled meeting';
+    const isPublished = m.published;
+    const pubLabel    = isPublished
+      ? `Published ${new Date(m.published_at).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' })}`
+      : 'Draft — not visible to owners';
+
+    return `<div class="mins-item${isPublished ? ' mins-item--published' : ''}">
+  <div class="mins-item__meta">
+    <span class="mins-item__date">${escHtml(dateStr)}</span>
+    <span class="mins-item__title">${escHtml(title)}</span>
+    <span class="mins-item__status${isPublished ? ' mins-item__status--pub' : ''}">${escHtml(pubLabel)}</span>
+  </div>
+  <div class="mins-item__actions">
+    <button class="btn-link mins-view-btn" data-meeting-id="${m.id}"
+            title="Preview these minutes">Preview</button>
+    ${isPublished
+      ? `<button class="btn-ghost btn-sm mins-unpublish-btn" data-meeting-id="${m.id}">Unpublish</button>`
+      : `<button class="btn-primary btn-sm mins-publish-btn" data-meeting-id="${m.id}">Publish to portal</button>`
+    }
+  </div>
+</div>`;
+  }).join('');
+}
+
+async function publishMeeting(id) {
+  const now = new Date().toISOString();
+  const { error } = await supabaseClient
+    .from('meetings')
+    .update({ published: true, published_at: now })
+    .eq('id', id);
+
+  if (error) { alert(`Failed to publish: ${error.message}`); return; }
+
+  const m = allMeetingsList.find((m) => m.id === id);
+  if (m) { m.published = true; m.published_at = now; }
+  renderMeetingsList();
+}
+
+async function unpublishMeeting(id) {
+  const { error } = await supabaseClient
+    .from('meetings')
+    .update({ published: false, published_at: null })
+    .eq('id', id);
+
+  if (error) { alert(`Failed to unpublish: ${error.message}`); return; }
+
+  const m = allMeetingsList.find((m) => m.id === id);
+  if (m) { m.published = false; m.published_at = null; }
+  renderMeetingsList();
+}
+
+async function regeneratePortalToken() {
+  const confirmed = confirm(
+    'This will immediately invalidate the current owner portal link.\n\n' +
+    'Anyone using the old link will get a "no longer valid" message until you share the new one.\n\n' +
+    'Continue?'
+  );
+  if (!confirmed) return;
+
+  const { data: newToken, error } = await supabaseClient.rpc('regenerate_portal_token');
+  if (error) { alert(`Failed to regenerate link: ${error.message}`); return; }
+
+  userOrg.portal_token = newToken;
+  renderPortalLink();
+  portalCopyConfirm.classList.add('hidden');
+}
+
+// ── Minutes tab events ────────────────────────────────────────────────────────
+
+portalCopyBtn.addEventListener('click', async () => {
+  const url = portalUrl(userOrg?.portal_token);
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    portalCopyConfirm.classList.remove('hidden');
+    setTimeout(() => portalCopyConfirm.classList.add('hidden'), 3000);
+  } catch {
+    portalLinkInput.select();
+    document.execCommand('copy');
+    portalCopyConfirm.classList.remove('hidden');
+    setTimeout(() => portalCopyConfirm.classList.add('hidden'), 3000);
+  }
+});
+
+portalRegenBtn.addEventListener('click', regeneratePortalToken);
+
+minsList.addEventListener('click', (e) => {
+  const publishBtn   = e.target.closest('.mins-publish-btn');
+  const unpublishBtn = e.target.closest('.mins-unpublish-btn');
+  const previewBtn   = e.target.closest('.mins-view-btn');
+  if (publishBtn)   publishMeeting(publishBtn.dataset.meetingId);
+  if (unpublishBtn) unpublishMeeting(unpublishBtn.dataset.meetingId);
+  if (previewBtn)   openMeetingModal(previewBtn.dataset.meetingId);
+});
+
+// ── Governance document templates ─────────────────────────────────────────────
+//
+// Pure client-side generation — no AI, no API calls. Roster data pulled from
+// allMembers (loaded on first visit to Members or Templates tab).
+
+// ── Field schema ──────────────────────────────────────────────────────────────
+//
+// Each field object:
+//   { id, type, label, required?, hint?, placeholder?, default?, fullWidth?,
+//     preferRole?: string[], rows?: number }
+//
+// type: 'date' | 'time' | 'text' | 'textarea' | 'member' | 'member-multi'
+//   member      → <select> populated from active roster; preferRole pre-selects
+//   member-multi → checkboxes, all active members, all pre-checked
+
+const TEMPLATE_DEFS = {
+  agm: {
+    label:    'Annual General Meeting Notice',
+    filename: (org, v) =>
+      `${org.name.replace(/[^a-zA-Z0-9]+/g, '_')}_AGM_Notice_${v.meeting_date || 'draft'}.docx`,
+    fields: [
+      { id: 'meeting_date',    type: 'date',   label: 'Meeting date',    required: true },
+      { id: 'meeting_time',    type: 'time',   label: 'Meeting time',    default: '19:00',
+        hint: 'Displayed as local time on the notice.' },
+      { id: 'meeting_location', type: 'text',  label: 'Location',        required: true,
+        placeholder: 'e.g. Building amenity room, Level 1', fullWidth: true },
+      { id: 'proxy_deadline',  type: 'date',   label: 'Proxy deadline',
+        hint: 'Typically 2–3 days before the meeting. Leave blank to omit the proxy section.' },
+      { id: 'chairperson',     type: 'member', label: 'Chairperson',     preferRole: ['President', 'Chair'] },
+      { id: 'secretary',       type: 'member', label: 'Secretary',        preferRole: ['Secretary'] },
+      { id: 'extra_business',  type: 'textarea', label: 'Additional agenda items',
+        placeholder: 'One item per line (e.g. Discuss building envelope inspection)', rows: 3,
+        hint: 'Standard AGM items are included automatically. Add any additional business here.',
+        fullWidth: true },
+    ],
+    generate: generateAgmNotice,
+  },
+
+  sgm: {
+    label:    'Special General Meeting Notice',
+    filename: (org, v) =>
+      `${org.name.replace(/[^a-zA-Z0-9]+/g, '_')}_SGM_Notice_${v.meeting_date || 'draft'}.docx`,
+    fields: [
+      { id: 'meeting_date',    type: 'date',   label: 'Meeting date',    required: true },
+      { id: 'meeting_time',    type: 'time',   label: 'Meeting time',    default: '19:00' },
+      { id: 'meeting_location', type: 'text',  label: 'Location',        required: true,
+        placeholder: 'e.g. Building amenity room, Level 1', fullWidth: true },
+      { id: 'resolution_text', type: 'textarea', label: 'Resolution to be considered', required: true,
+        placeholder: 'Enter the full text of the proposed resolution',
+        hint: 'Include the complete resolution wording as it will appear on the ballot.',
+        rows: 5, fullWidth: true },
+      { id: 'proxy_deadline',  type: 'date',   label: 'Proxy deadline',
+        hint: 'Leave blank to omit the proxy section.' },
+      { id: 'chairperson',     type: 'member', label: 'Chairperson',     preferRole: ['President', 'Chair'] },
+      { id: 'secretary',       type: 'member', label: 'Secretary',        preferRole: ['Secretary'] },
+    ],
+    generate: generateSgmNotice,
+  },
+
+  resolution: {
+    label:    'Council Written Resolution',
+    filename: (org, v) => {
+      const num  = v.resolution_number ? `_No${v.resolution_number.replace(/\s+/g, '')}` : '';
+      const date = v.resolution_date || 'draft';
+      return `${org.name.replace(/[^a-zA-Z0-9]+/g, '_')}_Written_Resolution${num}_${date}.docx`;
+    },
+    fields: [
+      { id: 'resolution_date',   type: 'date', label: 'Resolution date', required: true,
+        hint: 'The date on which all signatories have signed.' },
+      { id: 'resolution_number', type: 'text', label: 'Resolution number',
+        placeholder: 'e.g. 2026-03',
+        hint: 'Optional reference number for internal filing. Leave blank to omit.' },
+      { id: 'resolution_text',   type: 'textarea', label: 'Resolution', required: true,
+        placeholder: 'IT IS HEREBY RESOLVED THAT the strata council approves…',
+        rows: 6, fullWidth: true },
+      { id: 'signing_members',   type: 'member-multi', label: 'Signing members', required: true,
+        hint: 'Under s. 26(3) of the Strata Property Act, a majority of all strata council members must sign.',
+        fullWidth: true },
+    ],
+    generate: generateWrittenResolution,
+  },
+};
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+
+function renderTemplateForm(templateId) {
+  activeTemplate = templateId;
+
+  // Sync selector button states
+  document.querySelectorAll('.template-btn').forEach((b) => {
+    b.classList.toggle('template-btn--active', b.dataset.template === templateId);
+  });
+
+  templateError.classList.add('hidden');
+  const def = TEMPLATE_DEFS[templateId];
+  if (!def) { templateFormArea.innerHTML = ''; return; }
+
+  templateFormArea.innerHTML = `
+    <div class="template-form">
+      <h4 class="template-form__heading">${escHtml(def.label)}</h4>
+      <div class="member-form__grid">${renderTemplateFields(def.fields)}</div>
+    </div>`;
+}
+
+function renderTemplateFields(fields) {
+  return fields.map((f) => {
+    const span    = f.fullWidth ? ' style="grid-column: 1 / -1"' : '';
+    const req     = f.required  ? '<span class="required-mark">*</span>' : '<span class="optional">(optional)</span>';
+    const hint    = f.hint      ? `<p class="field-hint">${escHtml(f.hint)}</p>` : '';
+    let   control = '';
+
+    if (f.type === 'date') {
+      control = `<input type="date" id="tpl-${f.id}" data-tpl-field="${f.id}"
+                        value="${f.default || ''}">`;
+
+    } else if (f.type === 'time') {
+      control = `<input type="time" id="tpl-${f.id}" data-tpl-field="${f.id}"
+                        value="${f.default || ''}">`;
+
+    } else if (f.type === 'text') {
+      const ph = f.placeholder ? `placeholder="${escHtml(f.placeholder)}"` : '';
+      control = `<input type="text" id="tpl-${f.id}" data-tpl-field="${f.id}" ${ph}>`;
+
+    } else if (f.type === 'textarea') {
+      const ph   = f.placeholder ? `placeholder="${escHtml(f.placeholder)}"` : '';
+      const rows = f.rows ?? 4;
+      control = `<textarea id="tpl-${f.id}" data-tpl-field="${f.id}"
+                           rows="${rows}" ${ph}></textarea>`;
+
+    } else if (f.type === 'member') {
+      const preselect = preferredMemberId(f.preferRole);
+      const opts = allMembers
+        .filter((m) => m.status === 'active')
+        .map((m) => {
+          const sel = m.id === preselect ? ' selected' : '';
+          return `<option value="${escHtml(m.id)}"${sel}>${escHtml(m.name)}${m.role ? ` — ${escHtml(m.role)}` : ''}</option>`;
+        }).join('');
+      control = `<select id="tpl-${f.id}" data-tpl-field="${f.id}">
+        <option value="">— select —</option>${opts}</select>`;
+
+    } else if (f.type === 'member-multi') {
+      const items = allMembers
+        .filter((m) => m.status === 'active')
+        .map((m) => `<label class="template-member-check">
+          <input type="checkbox" data-tpl-field="${f.id}" data-member-id="${escHtml(m.id)}" checked>
+          ${escHtml(m.name)}${m.role ? ` <span class="text-muted">— ${escHtml(m.role)}</span>` : ''}
+        </label>`).join('');
+      control = `<div class="template-member-checks">${items || '<p class="field-hint">No active members in roster. Add members in the Members tab first.</p>'}</div>`;
+    }
+
+    return `<div class="form-group"${span}>
+      <label for="tpl-${f.id}">${escHtml(f.label)} ${req}</label>
+      ${control}
+      ${hint}
+    </div>`;
+  }).join('');
+}
+
+function collectTemplateValues(fields) {
+  const values = {};
+  for (const f of fields) {
+    if (f.type === 'member-multi') {
+      const checks = templateFormArea.querySelectorAll(`[data-tpl-field="${f.id}"]`);
+      values[f.id] = [...checks]
+        .filter((c) => c.checked)
+        .map((c) => allMembers.find((m) => m.id === c.dataset.memberId))
+        .filter(Boolean);
+    } else {
+      const el = templateFormArea.querySelector(`[data-tpl-field="${f.id}"]`);
+      values[f.id] = el ? el.value.trim() : '';
+    }
+  }
+  return values;
+}
+
+function preferredMemberId(preferRoles) {
+  if (!preferRoles || !preferRoles.length) return '';
+  for (const role of preferRoles) {
+    const m = allMembers.find(
+      (m) => m.status === 'active' && (m.role || '').toLowerCase().includes(role.toLowerCase())
+    );
+    if (m) return m.id;
+  }
+  return '';
+}
+
+// ── Format helpers ────────────────────────────────────────────────────────────
+
+function fmtDateLong(dateStr) {
+  if (!dateStr) return '';
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-CA', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+}
+
+function fmtDateMedium(dateStr) {
+  if (!dateStr) return '';
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-CA', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+}
+
+function fmtTime12h(timeStr) {
+  if (!timeStr) return '';
+  const [h, m] = timeStr.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12  = h % 12 || 12;
+  return m === 0 ? `${h12}:00 ${ampm}` : `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+function fmtToday() {
+  return fmtDateMedium(new Date().toLocaleDateString('en-CA'));
+}
+
+function memberName(id) {
+  const m = allMembers.find((m) => m.id === id);
+  return m ? m.name : '';
+}
+
+function memberRole(id) {
+  const m = allMembers.find((m) => m.id === id);
+  return m ? (m.role || 'Council Member') : 'Council Member';
+}
+
+// ── Docx wrapper ──────────────────────────────────────────────────────────────
+
+function wrapDocx(bodyHtml) {
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  body  { font-family: "Times New Roman", Times, serif; font-size: 12pt; margin: 0; }
+  h1    { font-size: 14pt; text-align: center; text-transform: uppercase; margin: 0 0 18pt; }
+  h2    { font-size: 12pt; text-transform: uppercase; margin: 18pt 0 6pt; }
+  p     { margin: 0 0 8pt; line-height: 1.45; }
+  ol    { margin: 0 0 8pt; padding-left: 22pt; }
+  li    { margin-bottom: 5pt; line-height: 1.45; }
+  table { border-collapse: collapse; }
+  .corp { font-weight: bold; text-align: center; }
+  .sig-block table { width: 100%; }
+  .sig-block td { width: 50%; padding-top: 36pt; vertical-align: top; padding-right: 24pt; }
+  .disclaimer { font-size: 9pt; color: #555; margin-top: 36pt;
+                border-top: 1pt solid #bbb; padding-top: 8pt; }
+</style>
+</head><body>${bodyHtml}</body></html>`;
+}
+
+// Two-column signature table; members laid out in pairs
+function sigTable(pairs) {
+  const rows = [];
+  for (let i = 0; i < pairs.length; i += 2) {
+    const a = pairs[i];
+    const b = pairs[i + 1];
+    const cellA = `_______________________<br><b>${escHtml(a.name)}</b><br>${escHtml(a.role)}`;
+    const cellB = b ? `_______________________<br><b>${escHtml(b.name)}</b><br>${escHtml(b.role)}` : '';
+    rows.push(`<tr>
+      <td style="width:50%;padding-top:36pt;vertical-align:top;padding-right:24pt">${cellA}</td>
+      <td style="width:50%;padding-top:36pt;vertical-align:top">${cellB}</td>
+    </tr>`);
+  }
+  return `<table style="width:100%;border-collapse:collapse">${rows.join('')}</table>`;
+}
+
+const DOCX_DISCLAIMER =
+  `<p class="disclaimer">This document was generated from a template for administrative
+  convenience and has not been reviewed by legal counsel. Verify compliance with the
+  Strata Property Act (BC), your corporation&#8217;s bylaws, and all applicable
+  legislation before distributing any notice or executing any resolution.</p>`;
+
+// ── Template generators ───────────────────────────────────────────────────────
+
+function generateAgmNotice(org, members, v) {
+  const corp     = escHtml(org.name);
+  const dateStr  = fmtDateLong(v.meeting_date);
+  const timeStr  = fmtTime12h(v.meeting_time);
+  const location = escHtml(v.meeting_location);
+
+  const extraItems = (v.extra_business || '')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => `<li>${escHtml(s)}</li>`)
+    .join('');
+
+  const proxySection = v.proxy_deadline ? `
+    <h2>Proxies</h2>
+    <p>Owners who are unable to attend may vote by proxy. Completed proxy forms must be
+    received by the Secretary no later than <b>${escHtml(fmtDateMedium(v.proxy_deadline))}</b>.
+    A proxy must be in writing, signed by the owner, and submitted before the commencement
+    of the meeting.</p>` : '';
+
+  const chairId = v.chairperson;
+  const secId   = v.secretary;
+  const sigs    = [];
+  if (chairId) sigs.push({ name: memberName(chairId), role: memberRole(chairId) });
+  if (secId)   sigs.push({ name: memberName(secId),   role: memberRole(secId)   });
+
+  return wrapDocx(`
+    <p class="corp">${corp}</p>
+    <p style="text-align:center">Notice dated ${fmtToday()}</p>
+
+    <h1>Notice of Annual General Meeting</h1>
+
+    <p>Notice is hereby given that the Annual General Meeting of <b>${corp}</b> will be held:</p>
+
+    <table style="margin-left:28pt;margin-bottom:14pt;border-collapse:collapse">
+      <tr><td style="padding-right:14pt"><b>Date:</b></td><td>${escHtml(dateStr)}</td></tr>
+      ${timeStr ? `<tr><td style="padding-right:14pt"><b>Time:</b></td><td>${escHtml(timeStr)}</td></tr>` : ''}
+      <tr><td style="padding-right:14pt"><b>Location:</b></td><td>${location}</td></tr>
+    </table>
+
+    <h2>Agenda</h2>
+    <ol>
+      <li>Call to order and confirmation of quorum</li>
+      <li>Approval of the agenda</li>
+      <li>Approval of the minutes of the previous Annual General Meeting</li>
+      <li>Report of the Strata Council</li>
+      <li>Presentation of financial statements</li>
+      <li>Approval of the operating fund and contingency reserve fund budgets</li>
+      <li>Election of strata council members for the upcoming term</li>
+      ${extraItems}
+      <li>Adjournment</li>
+    </ol>
+
+    ${proxySection}
+
+    <p style="margin-top:20pt">Dated this ${escHtml(fmtToday())}.</p>
+    <p>On behalf of the Strata Council of <b>${corp}</b>:</p>
+
+    ${sigs.length ? sigTable(sigs) : ''}
+
+    ${DOCX_DISCLAIMER}`);
+}
+
+function generateSgmNotice(org, members, v) {
+  const corp        = escHtml(org.name);
+  const dateStr     = fmtDateLong(v.meeting_date);
+  const timeStr     = fmtTime12h(v.meeting_time);
+  const location    = escHtml(v.meeting_location);
+  const resolution  = escHtml(v.resolution_text || '');
+
+  const proxySection = v.proxy_deadline ? `
+    <h2>Proxies</h2>
+    <p>Owners who are unable to attend may vote by proxy. Completed proxy forms must be
+    received by the Secretary no later than <b>${escHtml(fmtDateMedium(v.proxy_deadline))}</b>.</p>` : '';
+
+  const chairId = v.chairperson;
+  const secId   = v.secretary;
+  const sigs    = [];
+  if (chairId) sigs.push({ name: memberName(chairId), role: memberRole(chairId) });
+  if (secId)   sigs.push({ name: memberName(secId),   role: memberRole(secId)   });
+
+  return wrapDocx(`
+    <p class="corp">${corp}</p>
+    <p style="text-align:center">Notice dated ${fmtToday()}</p>
+
+    <h1>Notice of Special General Meeting</h1>
+
+    <p>Notice is hereby given that a Special General Meeting of <b>${corp}</b> will be held:</p>
+
+    <table style="margin-left:28pt;margin-bottom:14pt;border-collapse:collapse">
+      <tr><td style="padding-right:14pt"><b>Date:</b></td><td>${escHtml(dateStr)}</td></tr>
+      ${timeStr ? `<tr><td style="padding-right:14pt"><b>Time:</b></td><td>${escHtml(timeStr)}</td></tr>` : ''}
+      <tr><td style="padding-right:14pt"><b>Location:</b></td><td>${location}</td></tr>
+    </table>
+
+    <h2>Business to be Transacted</h2>
+    <p>The following resolution will be considered:</p>
+    <p style="margin-left:28pt;font-style:italic">${resolution}</p>
+
+    ${proxySection}
+
+    <p style="margin-top:20pt">Dated this ${escHtml(fmtToday())}.</p>
+    <p>On behalf of the Strata Council of <b>${corp}</b>:</p>
+
+    ${sigs.length ? sigTable(sigs) : ''}
+
+    ${DOCX_DISCLAIMER}`);
+}
+
+function generateWrittenResolution(org, members, v) {
+  const corp          = escHtml(org.name);
+  const resDate       = escHtml(fmtDateMedium(v.resolution_date));
+  const resNum        = v.resolution_number
+    ? `<p>Resolution No. <b>${escHtml(v.resolution_number)}</b></p>` : '';
+  const resText       = escHtml(v.resolution_text || '');
+  const signingMembers = v.signing_members || [];  // array of member objects
+  const totalActive    = allMembers.filter((m) => m.status === 'active').length;
+  const sigCount       = signingMembers.length;
+
+  const sigPairs = signingMembers.map((m) => ({
+    name: m.name,
+    role: m.role || 'Council Member',
+  }));
+
+  const countLine = totalActive > 0
+    ? `<p>This written resolution is signed by <b>${sigCount}</b> of <b>${totalActive}</b> strata council members.</p>`
+    : '';
+
+  // Warn in the document body if fewer than all active members signed, since
+  // written resolutions typically require all members under standard bylaws.
+  const incompleteNote = (totalActive > 0 && sigCount < totalActive)
+    ? `<p style="margin-top:6pt;color:#b45309"><b>Note:</b> Not all active council members have signed.
+       Confirm whether your corporation&#8217;s bylaws expressly authorize written resolutions
+       with fewer than all council members signing before relying on this document.</p>`
+    : '';
+
+  return wrapDocx(`
+    <p class="corp">${corp}</p>
+
+    <h1>Written Resolution of the Strata Council</h1>
+
+    ${resNum}
+    <p>Date: <b>${resDate}</b></p>
+
+    <h2>Resolution</h2>
+    <p>IT IS HEREBY RESOLVED THAT:</p>
+    <p style="margin-left:28pt">${resText}</p>
+
+    ${countLine}
+    ${incompleteNote}
+
+    <p style="margin-top:8pt">The undersigned strata council members hereby consent to and adopt
+    the above resolution in lieu of a council meeting, pursuant to the strata
+    corporation&#8217;s bylaws.</p>
+
+    ${sigPairs.length ? sigTable(sigPairs) : '<p><em>No signing members selected.</em></p>'}
+
+    ${DOCX_DISCLAIMER}`);
+}
+
+// ── Template events ───────────────────────────────────────────────────────────
+
+document.querySelectorAll('.template-btn').forEach((btn) => {
+  btn.addEventListener('click', () => renderTemplateForm(btn.dataset.template));
+});
+
+templateDownloadBtn.addEventListener('click', () => {
+  const def    = TEMPLATE_DEFS[activeTemplate];
+  const values = collectTemplateValues(def.fields);
+  templateError.classList.add('hidden');
+
+  // Validate required fields
+  for (const f of def.fields) {
+    if (!f.required) continue;
+    if (f.type === 'member-multi') {
+      if (!values[f.id] || values[f.id].length === 0) {
+        templateError.textContent = `Please select at least one signing member.`;
+        templateError.classList.remove('hidden');
+        return;
+      }
+    } else if (!values[f.id]) {
+      templateError.textContent = `Please fill in: ${f.label}`;
+      templateError.classList.remove('hidden');
+      return;
+    }
+  }
+
+  // Non-blocking warning for written resolutions with partial sign-off
+  if (activeTemplate === 'resolution') {
+    const totalActive = allMembers.filter((m) => m.status === 'active').length;
+    const sigCount    = (values['signing_members'] || []).length;
+    if (totalActive > 0 && sigCount < totalActive) {
+      templateError.textContent =
+        `Warning: ${totalActive - sigCount} active council member(s) not included. ` +
+        `Written resolutions typically require all members to sign — check your bylaws.`;
+      templateError.style.color = '#b45309';  // amber — advisory, not blocking
+      templateError.classList.remove('hidden');
+      // Continue to download
+    } else {
+      templateError.style.color = '';  // reset to default error red for future errors
+    }
+  } else {
+    templateError.style.color = '';
+  }
+
+  const html  = def.generate(userOrg, allMembers, values);
+  const blob  = htmlDocx.asBlob(html, { orientation: 'portrait' });
+  const fname = def.filename(userOrg, values);
+  const url   = URL.createObjectURL(blob);
+  const a     = Object.assign(document.createElement('a'), { href: url, download: fname });
+  a.click();
+  URL.revokeObjectURL(url);
+});

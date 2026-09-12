@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Meeting Minutes — MinuteHand</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* Portal-specific layout overrides — uses all shared CSS variables */
+    .portal-shell      { min-height: 100vh; display: flex; flex-direction: column; }
+    .portal-header     { background: var(--surface); border-bottom: 1px solid var(--border);
+                         padding: 1rem 0; }
+    .portal-header__inner { max-width: 720px; margin: 0 auto; padding: 0 1.25rem;
+                            display: flex; align-items: baseline; gap: 0.75rem;
+                            flex-wrap: wrap; }
+    .portal-org        { font-size: 1.15rem; font-weight: 700; color: var(--text); }
+    .portal-sub        { font-size: 0.82rem; color: var(--text-muted); }
+    .portal-main       { flex: 1; max-width: 720px; margin: 0 auto; width: 100%;
+                         padding: 2rem 1.25rem; }
+    .portal-footer     { border-top: 1px solid var(--border); padding: 1.25rem;
+                         text-align: center; font-size: 0.8rem; color: var(--text-muted); }
+    .portal-footer a   { color: var(--accent); text-decoration: none; }
+    .portal-footer a:hover { text-decoration: underline; }
+
+    .portal-state      { text-align: center; padding: 4rem 1rem; color: var(--text-muted); }
+    .portal-state p    { margin: 0.5rem 0; }
+    .portal-state .error { color: var(--error); }
+
+    /* Meeting card */
+    .portal-meeting         { border: 1px solid var(--border); border-radius: 10px;
+                              margin-bottom: 1rem; overflow: hidden; background: var(--surface); }
+    .portal-meeting__header { display: flex; align-items: center; gap: 0.75rem;
+                              padding: 0.9rem 1.1rem; cursor: pointer;
+                              user-select: none; }
+    .portal-meeting__header:hover { background: var(--bg); }
+    .portal-meeting__date   { font-size: 0.82rem; color: var(--text-muted); white-space: nowrap; }
+    .portal-meeting__title  { font-weight: 600; color: var(--text); flex: 1; }
+    .portal-meeting__badge  { font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+                              letter-spacing: 0.04em; padding: 0.2rem 0.55rem;
+                              border-radius: 4px; background: var(--accent-faint);
+                              color: var(--accent); white-space: nowrap; }
+    .portal-meeting__toggle { font-size: 0.8rem; color: var(--text-muted);
+                              white-space: nowrap; transition: transform 0.15s; }
+    .portal-meeting--open .portal-meeting__toggle { transform: rotate(180deg); }
+
+    .portal-meeting__body   { display: none; padding: 1.25rem 1.5rem 1.5rem;
+                              border-top: 1px solid var(--border); }
+    .portal-meeting--open .portal-meeting__body  { display: block; }
+
+    .portal-minutes-content { line-height: 1.65; color: var(--text); }
+    .portal-minutes-content h1 { font-size: 1.1rem; margin: 1rem 0 0.4rem; }
+    .portal-minutes-content h2 { font-size: 1rem; margin: 1rem 0 0.3rem; }
+    .portal-minutes-content h3 { font-size: 0.95rem; margin: 0.75rem 0 0.25rem; }
+    .portal-minutes-content p  { margin: 0 0 0.6rem; }
+    .portal-minutes-content ul,
+    .portal-minutes-content ol { margin: 0 0 0.6rem 1.2rem; }
+    .portal-minutes-content li { margin-bottom: 0.25rem; }
+    .portal-minutes-content blockquote {
+      margin: 0.5rem 0; padding: 0.4rem 0.75rem;
+      border-left: 3px solid var(--border); color: var(--text-muted);
+      font-style: italic;
+    }
+
+    .portal-meeting__actions { display: flex; gap: 0.6rem; margin-top: 1.25rem;
+                               flex-wrap: wrap; align-items: center; }
+    .portal-dl-btn           { font-size: 0.84rem; padding: 0.45rem 0.9rem; }
+
+    .portal-v1-note { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.4rem; }
+
+    @media (max-width: 480px) {
+      .portal-header__inner { flex-direction: column; gap: 0.25rem; }
+    }
+  </style>
+</head>
+<body class="portal-shell">
+
+  <header class="portal-header">
+    <div class="portal-header__inner">
+      <a href="/" class="logo" style="font-size:0.95rem" aria-label="MinuteHand home">
+        <svg width="20" height="20" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <circle cx="14" cy="14" r="13" stroke="currentColor" stroke-width="2"/>
+          <line x1="14" y1="14" x2="14" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="14" y1="14" x2="19" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>MinuteHand</span>
+      </a>
+      <span class="portal-sub">·</span>
+      <span id="portal-org-name" class="portal-org">Meeting Minutes</span>
+    </div>
+  </header>
+
+  <main class="portal-main" id="portal-main">
+    <div class="portal-state" id="portal-loading">
+      <div class="spinner" style="margin:0 auto 1rem"></div>
+      <p>Loading minutes…</p>
+    </div>
+    <div class="portal-state hidden" id="portal-error">
+      <p class="error" id="portal-error-msg">This link is no longer valid.</p>
+      <p style="margin-top:1rem">Contact your strata council for an updated link.</p>
+    </div>
+    <div class="portal-state hidden" id="portal-empty">
+      <p>No published minutes yet.</p>
+      <p>Check back after your next meeting.</p>
+    </div>
+    <div id="portal-list" class="hidden"></div>
+  </main>
+
+  <footer class="portal-footer">
+    <p>
+      Read-only view &mdash; provided by <a href="/">MinuteHand</a>.
+    </p>
+    <p style="margin-top:0.35rem">
+      Minutes content is published by the strata council and has not been reviewed
+      by MinuteHand. For questions about the content, contact your strata council directly.
+    </p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://unpkg.com/html-docx-js@0.3.1/dist/html-docx.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="portal.js"></script>
+</body>
+</html>
