@@ -285,7 +285,7 @@ function applyActionFilters() {
 }
 
 function renderActionItems() {
-  const today    = new Date().toISOString().slice(0, 10);
+  const today    = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local timezone
   const filtered = applyActionFilters();
 
   // Overdue: any non-completed item with due_date_parsed < today (across all, not just filtered)
