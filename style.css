@@ -1576,6 +1576,82 @@ body.landing {
 
 .registry-empty p { margin: 0 0 0.4rem; }
 
+/* ── Overdue banner ── */
+
+.overdue-banner {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: #664d03;
+}
+
+/* ── Action item cards ── */
+
+.action-item-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.action-item-card--overdue {
+  border-left: 3px solid #dc3545;
+}
+
+.action-item-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.ai-owner {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.ai-due {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-right: auto;
+}
+
+.ai-due--overdue {
+  color: #dc3545;
+  font-weight: 600;
+}
+
+.action-item-card__description {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.action-item-card__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ai-status-select {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.ai-meeting-link {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
 /* ── Minutes modal ── */
 
 .modal-overlay {

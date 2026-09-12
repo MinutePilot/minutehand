@@ -10,16 +10,18 @@ const supabaseClient = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabase
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let currentUser  = null;
-let userOrg      = null;
-let allMotions   = [];
+let currentUser    = null;
+let userOrg        = null;
+let allMotions     = [];
+let allActionItems = [];
 const meetingCache = new Map();
 
 // ── Element refs ──────────────────────────────────────────────────────────────
 
 const loadingView    = document.getElementById('loading-view');
-const accessSection  = document.getElementById('access-section');
-const accessMsg      = document.getElementById('access-msg');
+const accessSection   = document.getElementById('access-section');
+const accessMsg       = document.getElementById('access-msg');
+const accessActions   = document.getElementById('access-actions');
 const boardView      = document.getElementById('board-view');
 const orgNameHeading = document.getElementById('org-name-heading');
 const orgTypeLabel   = document.getElementById('org-type-label');
@@ -29,6 +31,15 @@ const dateFrom       = document.getElementById('date-from');
 const dateTo         = document.getElementById('date-to');
 const motionCount    = document.getElementById('motion-count');
 const motionList     = document.getElementById('motion-list');
+const motionsView    = document.getElementById('motions-view');
+const actionsView    = document.getElementById('actions-view');
+const overdueBanner  = document.getElementById('overdue-banner');
+const overdueCount   = document.getElementById('overdue-count');
+const overduePlural  = document.getElementById('overdue-plural');
+const aiStatusFilter = document.getElementById('ai-status-filter');
+const aiSearch       = document.getElementById('ai-search');
+const aiCount        = document.getElementById('ai-count');
+const actionItemList = document.getElementById('action-item-list');
 const minutesModal   = document.getElementById('minutes-modal');
 const modalClose     = document.getElementById('modal-close');
 const modalBody      = document.getElementById('modal-body');
@@ -42,7 +53,7 @@ supabaseClient.auth.onAuthStateChange(async (_event, session) => {
 
 async function init() {
   if (!currentUser) {
-    showAccess('Sign in to access Governance Records.');
+    showAccess('not-signed-in');
     return;
   }
 
@@ -56,7 +67,7 @@ async function init() {
                  (!sub.expires_at || new Date(sub.expires_at) > new Date());
 
   if (!active) {
-    showAccess('Governance Records is part of the Board Plan.');
+    showAccess('no-plan');
     return;
   }
 
@@ -67,7 +78,7 @@ async function init() {
     .maybeSingle();
 
   if (!org) {
-    showAccess('Set up your organization first.');
+    showAccess('no-org');
     return;
   }
 
@@ -77,13 +88,30 @@ async function init() {
   orgNameHeading.textContent = org.name;
   orgTypeLabel.textContent   = ORG_TYPE_LABELS[org.org_type] ?? org.org_type;
 
-  await loadMotions();
+  await Promise.all([loadMotions(), loadActionItems()]);
 }
 
-function showAccess(msg) {
+function showAccess(type) {
   loadingView.classList.add('hidden');
-  accessMsg.textContent = msg;
   accessSection.classList.remove('hidden');
+
+  if (type === 'not-signed-in') {
+    accessMsg.textContent   = 'Sign in to access your Governance Records.';
+    accessActions.innerHTML = `<a href="/app.html" class="btn-primary">Sign in</a>`;
+
+  } else if (type === 'no-plan') {
+    accessMsg.innerHTML =
+      'Track every motion, action item, and document across all your meetings — ' +
+      'without re-entering data each time. Included in the ' +
+      '<strong>Board Plan</strong> ($75 CAD/year).';
+    accessActions.innerHTML =
+      `<a href="/#pricing" class="btn-primary">See Board Plan pricing</a>` +
+      `<a href="/app.html" class="btn-ghost">← Back to app</a>`;
+
+  } else if (type === 'no-org') {
+    accessMsg.textContent   = 'Set up your organization in the app to start using Governance Records.';
+    accessActions.innerHTML = `<a href="/app.html" class="btn-primary">Go to app</a>`;
+  }
 }
 
 // ── Load motions ──────────────────────────────────────────────────────────────
@@ -185,6 +213,27 @@ function renderMotions() {
   }).join('');
 }
 
+// ── Tab switching ─────────────────────────────────────────────────────────────
+
+document.querySelectorAll('.board-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.board-tab').forEach((t) => {
+      t.classList.remove('board-tab--active');
+      t.setAttribute('aria-selected', 'false');
+    });
+    tab.classList.add('board-tab--active');
+    tab.setAttribute('aria-selected', 'true');
+
+    if (tab.dataset.tab === 'motions') {
+      motionsView.classList.remove('hidden');
+      actionsView.classList.add('hidden');
+    } else {
+      motionsView.classList.add('hidden');
+      actionsView.classList.remove('hidden');
+    }
+  });
+});
+
 // ── Filter event listeners ────────────────────────────────────────────────────
 
 motionSearch.addEventListener('input',  renderMotions);
@@ -196,6 +245,173 @@ dateTo.addEventListener('change',       renderMotions);
 
 motionList.addEventListener('click', (e) => {
   const btn = e.target.closest('.motion-meeting-link');
+  if (btn) openMeetingModal(btn.dataset.meetingId);
+});
+
+// ── Load action items ─────────────────────────────────────────────────────────
+
+async function loadActionItems() {
+  actionItemList.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading action items…</span></div>';
+
+  const { data, error } = await supabaseClient
+    .from('action_items')
+    .select(`
+      id, description, responsible_party, due_date_text, due_date_parsed,
+      status, completed_at, sort_order, meeting_id,
+      meetings ( id, meeting_date, title )
+    `)
+    .eq('org_id', userOrg.id);
+
+  if (error) {
+    actionItemList.innerHTML = `<p class="error">Failed to load action items: ${escHtml(error.message)}</p>`;
+    return;
+  }
+
+  allActionItems = data ?? [];
+  renderActionItems();
+}
+
+function applyActionFilters() {
+  const q          = aiSearch.value.trim().toLowerCase();
+  const statusVal  = aiStatusFilter.value; // comma-separated or ''
+  const statuses   = statusVal ? statusVal.split(',') : null;
+
+  return allActionItems.filter((item) => {
+    if (statuses && !statuses.includes(item.status)) return false;
+    if (q && !item.description.toLowerCase().includes(q) &&
+        !(item.responsible_party ?? '').toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+function renderActionItems() {
+  const today    = new Date().toISOString().slice(0, 10);
+  const filtered = applyActionFilters();
+
+  // Overdue: any non-completed item with due_date_parsed < today (across all, not just filtered)
+  const overdueItems = allActionItems.filter(
+    (item) => item.status !== 'completed' && item.due_date_parsed && item.due_date_parsed < today
+  );
+  if (overdueItems.length > 0) {
+    overdueBanner.classList.remove('hidden');
+    overdueCount.textContent = String(overdueItems.length);
+    overduePlural.textContent = overdueItems.length === 1 ? '' : 's';
+  } else {
+    overdueBanner.classList.add('hidden');
+  }
+
+  const total = allActionItems.length;
+  const shown = filtered.length;
+  aiCount.textContent = shown === total
+    ? `${total} item${total !== 1 ? 's' : ''}`
+    : `${shown} of ${total}`;
+
+  if (total === 0) {
+    actionItemList.innerHTML = `
+      <div class="registry-empty">
+        <p>No action items recorded yet.</p>
+        <p class="field-hint">Generate minutes with the Board Plan to start tracking action items.</p>
+      </div>`;
+    return;
+  }
+
+  if (shown === 0) {
+    actionItemList.innerHTML = `<div class="registry-empty"><p>No action items match your filters.</p></div>`;
+    return;
+  }
+
+  // Sort: open/in-progress by due_date_parsed ASC (nulls last), completed at bottom
+  const sorted = [...filtered].sort((a, b) => {
+    const aComp = a.status === 'completed';
+    const bComp = b.status === 'completed';
+    if (aComp !== bComp) return aComp ? 1 : -1;
+    if (!aComp) {
+      if (!a.due_date_parsed && !b.due_date_parsed) return 0;
+      if (!a.due_date_parsed) return 1;
+      if (!b.due_date_parsed) return -1;
+      return a.due_date_parsed.localeCompare(b.due_date_parsed);
+    }
+    // Both completed: most recent completed_at first
+    return (b.completed_at ?? '').localeCompare(a.completed_at ?? '');
+  });
+
+  actionItemList.innerHTML = sorted.map((item) => {
+    const meeting  = item.meetings ?? {};
+    const dateStr  = meeting.meeting_date
+      ? new Date(meeting.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', {
+          year: 'numeric', month: 'long', day: 'numeric',
+        })
+      : 'Date not recorded';
+    const titleStr   = meeting.title ?? 'Meeting';
+    const isOverdue  = item.status !== 'completed' && item.due_date_parsed && item.due_date_parsed < today;
+    const dueCls     = isOverdue ? ' ai-due--overdue' : '';
+    const dueLabel   = item.due_date_text
+      ? `Due: ${escHtml(item.due_date_text)}`
+      : 'No due date';
+
+    return `<div class="action-item-card${isOverdue ? ' action-item-card--overdue' : ''}">
+  <div class="action-item-card__header">
+    <span class="ai-owner">${item.responsible_party ? escHtml(item.responsible_party) : '<em>Owner not stated</em>'}</span>
+    <span class="ai-due${dueCls}">${isOverdue ? '⚠ ' : ''}${dueLabel}</span>
+    <button class="btn-link ai-meeting-link"
+            data-meeting-id="${item.meeting_id}"
+            title="View source minutes for ${escHtml(titleStr)}">
+      ${escHtml(dateStr)}&nbsp;↗
+    </button>
+  </div>
+  <p class="action-item-card__description">${escHtml(item.description)}</p>
+  <div class="action-item-card__footer">
+    <select class="ai-status-select" data-item-id="${item.id}" aria-label="Status">
+      <option value="open"        ${item.status === 'open'        ? 'selected' : ''}>Open</option>
+      <option value="in_progress" ${item.status === 'in_progress' ? 'selected' : ''}>In progress</option>
+      <option value="completed"   ${item.status === 'completed'   ? 'selected' : ''}>Completed</option>
+    </select>
+  </div>
+</div>`;
+  }).join('');
+}
+
+async function handleStatusChange(itemId, newStatus) {
+  const updates = { status: newStatus };
+  if (newStatus === 'completed') {
+    updates.completed_at = new Date().toISOString();
+  } else {
+    updates.completed_at = null;
+  }
+
+  const { error } = await supabaseClient
+    .from('action_items')
+    .update(updates)
+    .eq('id', itemId);
+
+  if (error) {
+    alert(`Failed to update status: ${error.message}`);
+    // Re-render to reset the select to the stored value
+    renderActionItems();
+    return;
+  }
+
+  // Update local state without a full reload
+  const item = allActionItems.find((i) => i.id === itemId);
+  if (item) {
+    item.status       = newStatus;
+    item.completed_at = updates.completed_at ?? null;
+  }
+  renderActionItems();
+}
+
+// ── Action item event listeners ───────────────────────────────────────────────
+
+aiStatusFilter.addEventListener('change', renderActionItems);
+aiSearch.addEventListener('input',        renderActionItems);
+
+actionItemList.addEventListener('change', (e) => {
+  const sel = e.target.closest('.ai-status-select');
+  if (sel) handleStatusChange(sel.dataset.itemId, sel.value);
+});
+
+actionItemList.addEventListener('click', (e) => {
+  const btn = e.target.closest('.ai-meeting-link');
   if (btn) openMeetingModal(btn.dataset.meetingId);
 });
 
