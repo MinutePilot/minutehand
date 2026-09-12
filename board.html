@@ -7,6 +7,7 @@
   <title>Governance Records — MinuteHand</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://unpkg.com/html-docx-js@0.3.1/dist/html-docx.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
@@ -55,6 +56,9 @@
         <button class="board-tab" data-tab="actions" role="tab" aria-selected="false">
           Action Items
         </button>
+        <button class="board-tab" data-tab="agenda" role="tab" aria-selected="false">
+          Next Agenda
+        </button>
       </nav>
 
       <div id="motions-view" role="tabpanel">
@@ -98,6 +102,32 @@
         </div>
 
         <div id="action-item-list"></div>
+      </div>
+
+      <!-- Agenda view -->
+      <div id="agenda-view" class="hidden" role="tabpanel">
+
+        <div class="agenda-controls">
+          <div class="form-group agenda-date-group">
+            <label for="agenda-meeting-date">Next meeting date</label>
+            <input type="date" id="agenda-meeting-date" class="registry-date">
+          </div>
+          <button id="agenda-download-btn" class="btn-secondary">Download .docx</button>
+        </div>
+
+        <div id="agenda-preview" class="agenda-preview"></div>
+
+        <div class="agenda-new-business">
+          <h3 class="agenda-new-business__heading">Add new business items</h3>
+          <div class="agenda-new-business__input-row">
+            <input type="text" id="agenda-new-item-input"
+                   placeholder="e.g. Review insurance renewal quote"
+                   autocomplete="off">
+            <button id="agenda-add-item-btn" class="btn-secondary">Add</button>
+          </div>
+          <ul id="agenda-new-item-list" class="agenda-new-item-list"></ul>
+        </div>
+
       </div>
 
     </div>

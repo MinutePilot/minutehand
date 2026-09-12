@@ -14,6 +14,7 @@ let currentUser    = null;
 let userOrg        = null;
 let allMotions     = [];
 let allActionItems = [];
+let agendaNewItems = [];
 const meetingCache = new Map();
 
 // ── Element refs ──────────────────────────────────────────────────────────────
@@ -39,8 +40,15 @@ const overduePlural  = document.getElementById('overdue-plural');
 const aiStatusFilter = document.getElementById('ai-status-filter');
 const aiSearch       = document.getElementById('ai-search');
 const aiCount        = document.getElementById('ai-count');
-const actionItemList = document.getElementById('action-item-list');
-const minutesModal   = document.getElementById('minutes-modal');
+const actionItemList      = document.getElementById('action-item-list');
+const agendaView          = document.getElementById('agenda-view');
+const agendaMeetingDate   = document.getElementById('agenda-meeting-date');
+const agendaPreview       = document.getElementById('agenda-preview');
+const agendaDownloadBtn   = document.getElementById('agenda-download-btn');
+const agendaNewItemInput  = document.getElementById('agenda-new-item-input');
+const agendaAddItemBtn    = document.getElementById('agenda-add-item-btn');
+const agendaNewItemList   = document.getElementById('agenda-new-item-list');
+const minutesModal        = document.getElementById('minutes-modal');
 const modalClose     = document.getElementById('modal-close');
 const modalBody      = document.getElementById('modal-body');
 
@@ -224,13 +232,11 @@ document.querySelectorAll('.board-tab').forEach((tab) => {
     tab.classList.add('board-tab--active');
     tab.setAttribute('aria-selected', 'true');
 
-    if (tab.dataset.tab === 'motions') {
-      motionsView.classList.remove('hidden');
-      actionsView.classList.add('hidden');
-    } else {
-      motionsView.classList.add('hidden');
-      actionsView.classList.remove('hidden');
-    }
+    const active = tab.dataset.tab;
+    motionsView.classList.toggle('hidden', active !== 'motions');
+    actionsView.classList.toggle('hidden', active !== 'actions');
+    agendaView.classList.toggle('hidden',  active !== 'agenda');
+    if (active === 'agenda') renderAgenda();
   });
 });
 
@@ -399,6 +405,181 @@ async function handleStatusChange(itemId, newStatus) {
   }
   renderActionItems();
 }
+
+// ── Agenda ────────────────────────────────────────────────────────────────────
+
+function latestMeeting() {
+  const seen = new Map();
+  [...allMotions, ...allActionItems].forEach((row) => {
+    if (row.meetings?.id && !seen.has(row.meetings.id)) {
+      seen.set(row.meetings.id, row.meetings);
+    }
+  });
+  return [...seen.values()].sort((a, b) => b.meeting_date.localeCompare(a.meeting_date))[0] ?? null;
+}
+
+function renderAgenda() {
+  const last         = latestMeeting();
+  const openItems    = allActionItems.filter((i) => i.status === 'open' || i.status === 'in_progress');
+  const tabledMots   = allMotions.filter((m) => m.result === 'tabled');
+  const nextDateStr  = agendaMeetingDate.value
+    ? new Date(agendaMeetingDate.value + 'T12:00:00').toLocaleDateString('en-CA', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      })
+    : '[Date TBD]';
+
+  agendaPreview.innerHTML = buildAgendaHtml({ last, openItems, tabledMots, nextDateStr });
+  renderAgendaNewItemList();
+}
+
+function buildAgendaHtml({ last, openItems, tabledMots, nextDateStr, forExport = false }) {
+  const orgType = ORG_TYPE_LABELS[userOrg.org_type] ?? userOrg.org_type;
+  const lastRef = last
+    ? new Date(last.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', {
+        year: 'numeric', month: 'long', day: 'numeric',
+      }) + (last.title ? ' — ' + last.title : '')
+    : null;
+
+  const sub  = (text) => `<span class="${forExport ? '' : 'agenda-sub'}">${text}</span>`;
+  const none = (text) => `<span class="${forExport ? '' : 'agenda-sub agenda-none'}">${text}</span>`;
+  const meta = (text) => `<span class="${forExport ? '' : 'agenda-meta'}">${text}</span>`;
+
+  let html = `<div class="agenda-doc">
+  <div class="agenda-header">
+    <h2>${escHtml(userOrg.name)}</h2>
+    <p>${escHtml(orgType)}</p>
+    <p><strong>Agenda — ${escHtml(nextDateStr)}</strong></p>
+  </div>
+  <ol class="agenda-items">
+    <li><strong>Call to Order</strong></li>
+    <li><strong>Adoption of Agenda</strong></li>
+    <li><strong>Approval of Previous Minutes</strong>` +
+    (lastRef ? `<br>${sub(escHtml(lastRef))}` : '') +
+    `</li>`;
+
+  // Action item updates
+  html += `<li><strong>Action Item Updates</strong>`;
+  if (openItems.length === 0) {
+    html += `<br>${none('No open action items.')}`;
+  } else {
+    html += `<ul class="agenda-sublist">`;
+    openItems.forEach((item) => {
+      const owner = item.responsible_party ? escHtml(item.responsible_party) : 'Owner not stated';
+      const due   = item.due_date_text ? ` — Due: ${escHtml(item.due_date_text)}` : '';
+      html += `<li>${escHtml(item.description)} ${meta(`(${owner}${due})`)}</li>`;
+    });
+    html += `</ul>`;
+  }
+  html += `</li>`;
+
+  // Tabled motions
+  html += `<li><strong>Tabled Motions</strong>`;
+  if (tabledMots.length === 0) {
+    html += `<br>${none('None.')}`;
+  } else {
+    html += `<ul class="agenda-sublist">`;
+    tabledMots.forEach((m) => {
+      const d = m.meetings?.meeting_date
+        ? new Date(m.meetings.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', {
+            month: 'long', day: 'numeric', year: 'numeric',
+          })
+        : 'date unknown';
+      html += `<li>${escHtml(m.description)} ${meta(`(tabled ${d})`)}</li>`;
+    });
+    html += `</ul>`;
+  }
+  html += `</li>`;
+
+  // New business
+  html += `<li><strong>New Business</strong>`;
+  if (agendaNewItems.length === 0) {
+    html += `<br>${none('No items added.')}`;
+  } else {
+    html += `<ul class="agenda-sublist">`;
+    agendaNewItems.forEach((text) => { html += `<li>${escHtml(text)}</li>`; });
+    html += `</ul>`;
+  }
+  html += `</li>`;
+
+  html += `<li><strong>Adjournment</strong></li>
+  </ol>
+</div>`;
+  return html;
+}
+
+function renderAgendaNewItemList() {
+  if (agendaNewItems.length === 0) {
+    agendaNewItemList.innerHTML = '';
+    return;
+  }
+  agendaNewItemList.innerHTML = agendaNewItems.map((text, i) =>
+    `<li>${escHtml(text)}<button class="btn-link agenda-remove-item" data-index="${i}" aria-label="Remove">&#x2715;</button></li>`
+  ).join('');
+}
+
+function addAgendaItem() {
+  const text = agendaNewItemInput.value.trim();
+  if (!text) return;
+  agendaNewItems.push(text);
+  agendaNewItemInput.value = '';
+  renderAgenda();
+}
+
+function downloadAgendaDocx() {
+  const last        = latestMeeting();
+  const openItems   = allActionItems.filter((i) => i.status === 'open' || i.status === 'in_progress');
+  const tabledMots  = allMotions.filter((m) => m.result === 'tabled');
+  const nextDateStr = agendaMeetingDate.value
+    ? new Date(agendaMeetingDate.value + 'T12:00:00').toLocaleDateString('en-CA', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      })
+    : 'TBD';
+
+  const bodyHtml = buildAgendaHtml({ last, openItems, tabledMots, nextDateStr, forExport: true });
+
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 2cm; }
+  h2 { font-size: 14pt; margin: 0 0 2pt; }
+  p { margin: 2pt 0; }
+  ol { margin: 12pt 0 0; padding-left: 18pt; }
+  ol li { margin-bottom: 8pt; }
+  ul { margin: 4pt 0 0; padding-left: 18pt; }
+  ul li { margin-bottom: 3pt; }
+  .agenda-header { margin-bottom: 16pt; border-bottom: 1pt solid #888; padding-bottom: 8pt; }
+</style>
+</head><body>${bodyHtml}</body></html>`;
+
+  const blob = htmlDocx.asBlob(fullHtml, { orientation: 'portrait' });
+  const slug = agendaMeetingDate.value || 'agenda';
+  const name = userOrg.name.replace(/[^a-zA-Z0-9]+/g, '_');
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `${name}_Agenda_${slug}.docx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Agenda event listeners ────────────────────────────────────────────────────
+
+agendaMeetingDate.addEventListener('change', renderAgenda);
+
+agendaAddItemBtn.addEventListener('click', addAgendaItem);
+
+agendaNewItemInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); addAgendaItem(); }
+});
+
+agendaNewItemList.addEventListener('click', (e) => {
+  const btn = e.target.closest('.agenda-remove-item');
+  if (btn) {
+    agendaNewItems.splice(Number(btn.dataset.index), 1);
+    renderAgenda();
+  }
+});
+
+agendaDownloadBtn.addEventListener('click', downloadAgendaDocx);
 
 // ── Action item event listeners ───────────────────────────────────────────────
 
