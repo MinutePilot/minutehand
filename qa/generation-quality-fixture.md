@@ -2,6 +2,8 @@
 
 Run this fixture manually before deploying any prompt changes to `generate-minutes/index.ts`. Paste the source notes into MinuteHand using the **STRATA** template and verify each expected behavior against the output.
 
+**Last passing run:** 2026-09-12
+
 ---
 
 ## Source Notes (paste as-is)
@@ -35,8 +37,12 @@ Meeting adjourned around 8:15pm. Next meeting: October 20, 2026.
 
 ### Fix 1: No fabricated names for unattributed facts
 
-- The bylaws motion was "Seconded" without naming who seconded. The output **must not** name a specific person as the seconder — not even with a caveat or footnote. Acceptable output: `MOVED by Priya S, SECONDED — CARRIED (3–0)` or `SECONDED (seconder not stated)`.
-- The STR bylaw notice action item has no named owner. The Responsible Party column **must** show `[Owner not stated]`, not a guessed name.
+- The bylaws motion was "Seconded" without naming who seconded. The output **must not** name a specific person as the seconder. Acceptable forms include `[Seconder not stated — please confirm]` or similar.
+- The STR bylaw notice action item has no named owner. The Responsible Party column **must** show `[Owner not stated]` or `[Owner not stated — please confirm]`, not a guessed name.
+
+**Reference output (2026-09-12):**
+- Bylaws motion: `MOVED by Priya S., SECONDED by [Seconder not stated — please confirm] — CARRIED (3–0)`
+- STR action item Responsible Party: `[Owner not stated — please confirm]`
 
 **FAIL if:** Any specific name appears as the seconder for the bylaws motion, or any name is assigned to the STR action item, when those names are not in the source.
 
@@ -44,28 +50,33 @@ Meeting adjourned around 8:15pm. Next meeting: October 20, 2026.
 
 ### Fix 2: Meeting format inferred from context
 
-- The source says "On the call:" — a clear teleconference/video signal. The Location field **must** infer a virtual/teleconference format and label it as inferred, e.g.:
-  `> **Location:** Teleconference — inferred from source context`
-  
+- The source says "On the call:" — a clear teleconference/video signal. The Location field **must** infer a virtual format and label it as inferred.
+
+**Reference output (2026-09-12):**
+- `> **Location:** Video call — inferred from source context ("on the call")`
+
 **FAIL if:** Location shows `[Not stated — please confirm]` when "on the call" is present in the source.
 
 ---
 
 ### Fix 3: No empty boilerplate sections
 
-- The source has no mention of: Correspondence, Approval of Agenda, Old Business, Approval of Previous Minutes.
-- These sections **must not appear** in the output. They should be omitted entirely.
+- The source has no mention of: Correspondence, Approval of Agenda, Approval of Previous Minutes, Old Business.
+- These sections **must not appear** in the output.
 - Sections that **should** appear: Quorum, Call to Order, Financial Report, New Business, Action Items, Adjournment, Next Meeting.
 
-**FAIL if:** Any of Correspondence, Approval of Agenda, Old Business appear with only `[Not stated — please confirm]` as content.
+**Reference output (2026-09-12):** None of Correspondence, Approval of Agenda, Approval of Previous Minutes, or Old Business appeared. Sections present were Quorum, Call to Order, Financial Report, New Business, Action Items, Adjournment, Next Meeting.
+
+**FAIL if:** Any of those four sections appear with only `[Not stated — please confirm]` as content.
 
 ---
 
 ### Fix 4: Draft disclaimer present
 
-- The output **must** end with a line like:
-  `These minutes are presented in draft form and are subject to approval at the next Strata Council (BC).`
-  (Optionally with the next meeting date: `...at the next Strata Council (BC). (Next meeting: October 20, 2026)`)
+- The output **must** end with a draft/subject-to-approval line referencing the correct meeting type and next meeting date where available.
+
+**Reference output (2026-09-12):**
+> These minutes are presented in draft form and are subject to approval at the next Strata Council meeting (BC). (Next meeting: October 20, 2026.)
 
 **FAIL if:** This line is absent from the generated output.
 
@@ -73,10 +84,16 @@ Meeting adjourned around 8:15pm. Next meeting: October 20, 2026.
 
 ### Fix 5: Due dates inferred from action item context
 
-- Marcus's action item ("contractor quotes — needed for review at next meeting") should have Due Date `October 20, 2026` or `Next meeting (October 20, 2026)` — not `[Not stated — please confirm]`.
-- The STR bylaw notice action item similarly implies "next meeting" as due date.
+- Both action items imply the next meeting as the deadline. Neither should show `[Not stated — please confirm]`.
 
-**FAIL if:** Either action item's Due Date shows `[Not stated — please confirm]` when the source clearly implies the next meeting deadline.
+**Reference output (2026-09-12):**
+
+| Action | Responsible Party | Due Date |
+|---|---|---|
+| Obtain three (3) quotes from licensed contractors for east-side roof drainage remediation | Marcus T. | Prior to October 20, 2026 meeting |
+| Draft notice to owners regarding proposed short-term rental bylaw amendment | [Owner not stated — please confirm] | Prior to October 20, 2026 meeting |
+
+**FAIL if:** Either action item's Due Date shows `[Not stated — please confirm]` when the source clearly implies a next-meeting deadline.
 
 ---
 
@@ -88,5 +105,6 @@ Meeting adjourned around 8:15pm. Next meeting: October 20, 2026.
 4. Generate minutes.
 5. Check each of the five behaviors above against the output.
 6. Note any failures with the exact generated text for debugging.
+7. Update the "Last passing run" date and reference outputs if behavior improves.
 
 Run this fixture after any change to `supabase/functions/generate-minutes/index.ts` before deploying.
