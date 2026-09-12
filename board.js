@@ -1520,6 +1520,7 @@ async function uploadDocument() {
   const { error: dbError } = await supabaseClient.from('documents').insert({
     id:             docId,
     org_id:         userOrg.id,
+    user_id:        currentUser.id,
     title,
     category,
     effective_date: effDate,
