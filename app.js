@@ -537,7 +537,7 @@ async function runGenerateFlow(notes) {
     removeStatusRow();
     currentMinutesMarkdown = data.minutes;
     if (currentUser) await refreshCreditBalance(); // update balance display
-    minutesPreview.innerHTML = marked.parse(data.minutes);
+    minutesPreview.innerHTML = marked.parse(preprocessMarkdown(data.minutes));
     showSection(resultSection);
   } catch (err) {
     removeStatusRow();
@@ -574,7 +574,7 @@ downloadBtn.addEventListener('click', () => {
   li      { margin-bottom: 2pt; }
   strong  { font-weight: bold; }
   em      { font-style: italic; }
-</style></head><body>${marked.parse(currentMinutesMarkdown)}</body></html>`;
+</style></head><body>${marked.parse(preprocessMarkdown(currentMinutesMarkdown))}</body></html>`;
 
   const blob = htmlDocx.asBlob(fullHtml);
   const url  = URL.createObjectURL(blob);
@@ -709,3 +709,9 @@ function escHtml(str) {
 
 function today()      { return new Date().toISOString().slice(0, 10); }
 function pageOrigin() { return window.location.href.split('?')[0]; }
+
+function preprocessMarkdown(md) {
+  // marked collapses consecutive "> " lines into a single run-on <p>.
+  // Insert a blank line between each so each field becomes its own element.
+  return md.replace(/^(> .+)\n(?=> )/gm, '$1\n\n');
+}
