@@ -58,13 +58,16 @@ header {
 }
 
 .logo {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--primary);
+  text-decoration: none;
   margin-bottom: 0.2rem;
+}
+
+.logo-img {
+  height: 36px;
+  width: auto;
+  display: block;
 }
 
 .tagline {
@@ -737,7 +740,7 @@ body.landing {
   z-index: 10;
 }
 
-.site-header .logo { color: #fff; }
+.site-header .logo-img { mix-blend-mode: screen; }
 .site-header .nav-link { color: rgba(255,255,255,0.75); }
 .site-header .nav-link:hover { color: #fff; }
 
@@ -1358,8 +1361,12 @@ body.landing {
 }
 
 .site-footer .logo {
-  color: #fff;
   margin-bottom: 0.25rem;
+}
+
+.site-footer .logo-img {
+  height: 30px;
+  mix-blend-mode: screen;
 }
 
 .site-footer__copy {
