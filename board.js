@@ -2739,7 +2739,7 @@ function buildRequestDocHtml({ ownerName, strataLot, formalRequest, dateSubmitte
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-  body  { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 1.8cm 2cm; line-height: 1.25; }
+  body  { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 0; line-height: 1.25; }
   .org  { font-size: 13pt; font-weight: bold; text-align: center; margin: 0; }
   .sub  { text-align: center; color: #333; margin: 0; font-size: 11pt; letter-spacing: 0.04em; }
   hr    { border: none; border-top: 1pt solid #888; margin: 3pt 0; }
@@ -2813,7 +2813,7 @@ async function saveAlterationRequest() {
       year: 'numeric', month: 'long', day: 'numeric',
     });
     const docHtml   = buildRequestDocHtml({ ownerName, strataLot, formalRequest: altDraftedFormal, dateSubmitted: dateStr, orgName: userOrg.name });
-    const blob      = htmlDocx.asBlob(docHtml, { orientation: 'portrait' });
+    const blob      = htmlDocx.asBlob(docHtml, { orientation: 'portrait', margins: { top: 720, right: 720, bottom: 720, left: 720 } });
     const slug      = strataLot.replace(/[^a-zA-Z0-9]+/g, '_');
     const storagePath = `${userOrg.id}/alterations/${reqRow.id}_request.docx`;
     const fileName  = `AltRequest_${slug}_${today}.docx`;
@@ -2961,7 +2961,7 @@ function buildApprovalLetterHtml({ orgName, ownerName, strataLot, informalDescri
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-  body  { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 2.5cm; line-height: 1.3; }
+  body  { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 0; line-height: 1.3; }
   .org  { font-size: 13pt; font-weight: bold; margin: 0 0 18pt; }
   h2    { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em; margin: 14pt 0 6pt; }
   p     { margin: 0 0 8pt; }
@@ -3066,7 +3066,7 @@ async function generateDecisionLetter() {
       includeNonTransfer,
     });
 
-    const blob        = htmlDocx.asBlob(letterHtml, { orientation: 'portrait' });
+    const blob        = htmlDocx.asBlob(letterHtml, { orientation: 'portrait', margins: { top: 720, right: 720, bottom: 720, left: 720 } });
     const slug        = req.strata_lot.replace(/[^a-zA-Z0-9]+/g, '_');
     const storagePath = `${userOrg.id}/alterations/${req.id}_decision.docx`;
     const fileName    = `AltDecision_${slug}_${decisionDate}.docx`;
