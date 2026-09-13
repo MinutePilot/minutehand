@@ -228,6 +228,14 @@ const boardBuyCreditsLink   = document.getElementById('board-buy-credits-link');
 const boardUserEmail        = document.getElementById('board-user-email');
 const boardSignoutBtn       = document.getElementById('board-signout-btn');
 const appAccessView         = document.getElementById('app-access-view');
+const aiArchivedSection     = document.getElementById('ai-archived-section');
+const toggleArchivedAiBtn   = document.getElementById('toggle-archived-ai-btn');
+const archivedAiCount       = document.getElementById('archived-ai-count');
+const archivedAiList        = document.getElementById('archived-ai-list');
+const altArchivedSection    = document.getElementById('alt-archived-section');
+const toggleArchivedAltBtn  = document.getElementById('toggle-archived-alt-btn');
+const archivedAltCount      = document.getElementById('archived-alt-count');
+const archivedAltList       = document.getElementById('archived-alt-list');
 
 // ── Auth + init ───────────────────────────────────────────────────────────────
 
@@ -291,6 +299,8 @@ async function init() {
   // Non-owner org members cannot purchase credits into the shared pool —
   // hide the link so they don't buy credits that land on their own unused account.
   boardBuyCreditsLink?.classList.toggle('hidden', userRole === 'admin' || userRole === 'member');
+  // Hide roster management controls for members — they can view but not edit the roster.
+  addMemberBtn?.classList.toggle('hidden', !userIsAdmin());
 
   // Show board view for all authenticated users
   loadingView.classList.add('hidden');
@@ -1394,6 +1404,7 @@ function applyActionFilters() {
   const statuses   = statusVal ? statusVal.split(',') : null;
 
   return allActionItems.filter((item) => {
+    if (item.status === 'archived') return false; // always excluded from main list
     if (statuses && !statuses.includes(item.status)) return false;
     if (q && !item.description.toLowerCase().includes(q) &&
         !(item.responsible_party ?? '').toLowerCase().includes(q)) return false;
@@ -1405,9 +1416,10 @@ function renderActionItems() {
   const today    = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local timezone
   const filtered = applyActionFilters();
 
-  // Overdue: any non-completed item with due_date_parsed < today (across all, not just filtered)
+  // Overdue: any non-completed, non-archived item with due_date_parsed < today
   const overdueItems = allActionItems.filter(
-    (item) => item.status !== 'completed' && item.due_date_parsed && item.due_date_parsed < today
+    (item) => item.status !== 'completed' && item.status !== 'archived' &&
+              item.due_date_parsed && item.due_date_parsed < today
   );
   if (overdueItems.length > 0) {
     overdueBanner.classList.remove('hidden');
@@ -1417,7 +1429,8 @@ function renderActionItems() {
     overdueBanner.classList.add('hidden');
   }
 
-  const total = allActionItems.length;
+  const nonArchived = allActionItems.filter((i) => i.status !== 'archived');
+  const total = nonArchived.length;
   const shown = filtered.length;
   aiCount.textContent = shown === total
     ? `${total} item${total !== 1 ? 's' : ''}`
@@ -1483,9 +1496,75 @@ function renderActionItems() {
       <option value="in_progress" ${item.status === 'in_progress' ? 'selected' : ''}>In progress</option>
       <option value="completed"   ${item.status === 'completed'   ? 'selected' : ''}>Completed</option>
     </select>
+    ${userIsAdmin() ? `<button class="btn-link ai-archive-btn" data-id="${item.id}">Archive</button>` : ''}
   </div>
 </div>`;
   }).join('');
+
+  // Archived section (all roles can see archived items for reference; only admin/owner sees actions)
+  const archived = allActionItems.filter((i) => i.status === 'archived');
+  if (archived.length > 0) {
+    aiArchivedSection.classList.remove('hidden');
+    archivedAiCount.textContent = String(archived.length);
+    if (!archivedAiList.classList.contains('hidden')) {
+      archivedAiList.innerHTML = renderArchivedActionItems(archived);
+    }
+  } else {
+    aiArchivedSection.classList.add('hidden');
+    archivedAiList.classList.add('hidden');
+  }
+}
+
+function renderArchivedActionItems(items) {
+  return items.map((item) => {
+    const meeting = item.meetings ?? {};
+    const dateStr = meeting.meeting_date
+      ? new Date(meeting.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', {
+          year: 'numeric', month: 'long', day: 'numeric',
+        })
+      : 'Date not recorded';
+    const adminActions = userIsAdmin()
+      ? `<button class="btn-link ai-restore-btn" data-id="${item.id}">Restore</button>
+         <button class="btn-link danger-link ai-perm-delete-btn" data-id="${item.id}">Delete permanently</button>`
+      : '';
+    return `<div class="action-item-card action-item-card--archived">
+  <p class="action-item-card__description">${escHtml(item.description)}</p>
+  <div class="action-item-card__footer">
+    <span class="text-muted">${escHtml(item.responsible_party ?? 'No owner')} · ${escHtml(dateStr)}</span>
+    <div style="display:flex;gap:1rem">${adminActions}</div>
+  </div>
+</div>`;
+  }).join('');
+}
+
+async function archiveActionItem(id) {
+  const { error } = await supabaseClient
+    .from('action_items')
+    .update({ status: 'archived', updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) { showToast('Failed to archive: ' + error.message, 'error'); return; }
+  const item = allActionItems.find((i) => i.id === id);
+  if (item) item.status = 'archived';
+  renderActionItems();
+}
+
+async function restoreActionItem(id) {
+  const { error } = await supabaseClient
+    .from('action_items')
+    .update({ status: 'open', updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) { showToast('Failed to restore: ' + error.message, 'error'); return; }
+  const item = allActionItems.find((i) => i.id === id);
+  if (item) item.status = 'open';
+  renderActionItems();
+}
+
+async function deleteActionItemPermanently(id) {
+  if (!confirm('Permanently delete this action item?\n\nThis cannot be undone.')) return;
+  const { error } = await supabaseClient.from('action_items').delete().eq('id', id);
+  if (error) { showToast('Failed to delete: ' + error.message, 'error'); return; }
+  allActionItems = allActionItems.filter((i) => i.id !== id);
+  renderActionItems();
 }
 
 async function handleStatusChange(itemId, newStatus) {
@@ -1707,6 +1786,24 @@ actionItemList.addEventListener('change', (e) => {
 actionItemList.addEventListener('click', (e) => {
   const btn = e.target.closest('.ai-meeting-link');
   if (btn) openMeetingModal(btn.dataset.meetingId);
+  const arc = e.target.closest('.ai-archive-btn');
+  if (arc) archiveActionItem(arc.dataset.id);
+});
+
+archivedAiList?.addEventListener('click', (e) => {
+  const rst = e.target.closest('.ai-restore-btn');
+  if (rst) restoreActionItem(rst.dataset.id);
+  const del = e.target.closest('.ai-perm-delete-btn');
+  if (del) deleteActionItemPermanently(del.dataset.id);
+});
+
+toggleArchivedAiBtn?.addEventListener('click', () => {
+  const hidden = archivedAiList.classList.toggle('hidden');
+  const archived = allActionItems.filter((i) => i.status === 'archived');
+  toggleArchivedAiBtn.textContent = hidden
+    ? `Show archived items (${archived.length})`
+    : `Hide archived items`;
+  if (!hidden) archivedAiList.innerHTML = renderArchivedActionItems(archived);
 });
 
 // ── Minutes modal ─────────────────────────────────────────────────────────────
@@ -1940,6 +2037,7 @@ function renderMemberTable(members, isFormer) {
         <td>${m.strata_lot ? escHtml(m.strata_lot) : '<span class="text-muted">—</span>'}</td>
         <td class="member-term">${termStr || '<span class="text-muted">—</span>'}</td>
         <td class="member-table__actions">
+          ${userIsAdmin() ? `
           ${!isFormer ? `
           <button class="btn-icon member-move-up"   data-id="${m.id}" title="Move up"   ${isFirst ? 'disabled' : ''}>↑</button>
           <button class="btn-icon member-move-down" data-id="${m.id}" title="Move down" ${isLast  ? 'disabled' : ''}>↓</button>
@@ -1949,6 +2047,7 @@ function renderMemberTable(members, isFormer) {
             ${m.status === 'active' ? 'Mark former' : 'Reactivate'}
           </button>
           <button class="btn-link member-delete-btn" data-id="${m.id}">Remove</button>
+          ` : ''}
         </td>
       </tr>`;
     }).join('')}
@@ -2500,7 +2599,7 @@ function renderActiveDocItems(docs) {
             data-path="${escHtml(d.storage_path)}"
             data-name="${escHtml(d.file_name)}">Download ↓</button>
     ${toggleBtn}
-    <button class="btn-link doc-archive-btn" data-id="${escHtml(d.id)}">Archive</button>
+    ${userIsAdmin() ? `<button class="btn-link doc-archive-btn" data-id="${escHtml(d.id)}">Archive</button>` : ''}
   </div>
 </div>`;
 
@@ -2559,8 +2658,11 @@ function renderDocItems(docs, showRestore) {
       : '';
     const badge = fileTypeBadge(d.mime_type);
     const action = showRestore
-      ? `<button class="btn-link doc-restore-btn" data-id="${d.id}">Restore</button>`
-      : `<button class="btn-link doc-archive-btn" data-id="${d.id}">Archive</button>`;
+      ? (userIsAdmin()
+          ? `<button class="btn-link doc-restore-btn" data-id="${d.id}">Restore</button>
+             <button class="btn-link danger-link doc-perm-delete-btn" data-id="${d.id}" data-path="${escHtml(d.storage_path)}">Delete permanently</button>`
+          : '')
+      : (userIsAdmin() ? `<button class="btn-link doc-archive-btn" data-id="${d.id}">Archive</button>` : '');
     return `<div class="doc-item" data-id="${escHtml(d.id)}">
   <span class="doc-type-badge">${badge}</span>
   <div class="doc-item__info">
@@ -2739,15 +2841,24 @@ function showDocFormError(msg) {
 // ── Archive / restore ─────────────────────────────────────────────────────────
 
 async function archiveDocument(id) {
-  const doc = allDocuments.find((d) => d.id === id);
-  if (!confirm(`Archive "${doc?.title ?? 'this document'}"?\n\nIt will be hidden from the main list but not deleted. You can restore it at any time.`)) return;
-
   const { error } = await supabaseClient
     .from('documents')
     .update({ status: 'archived', updated_at: new Date().toISOString() })
     .eq('id', id);
+  if (error) { showToast('Failed to archive: ' + error.message, 'error'); return; }
+  documentsLoaded = false;
+  await loadDocuments();
+}
 
-  if (error) { alert('Failed to archive: ' + error.message); return; }
+async function deleteDocumentPermanently(id, storagePath) {
+  if (!confirm('Permanently delete this document?\n\nThis cannot be undone — the file and all version history will be removed.')) return;
+  // Delete storage file first; if it fails we still remove the DB record
+  // (orphaned storage files are acceptable per original spec)
+  if (storagePath) {
+    await supabaseClient.storage.from('governance-documents').remove([storagePath]);
+  }
+  const { error } = await supabaseClient.from('documents').delete().eq('id', id);
+  if (error) { showToast('Failed to delete: ' + error.message, 'error'); return; }
   documentsLoaded = false;
   await loadDocuments();
 }
@@ -2806,7 +2917,9 @@ archivedDocsList.addEventListener('click', (e) => {
   const dl  = e.target.closest('.doc-download-btn');
   if (dl)  { downloadDocument(dl.dataset.path, dl.dataset.name); return; }
   const rst = e.target.closest('.doc-restore-btn');
-  if (rst) { restoreDocument(rst.dataset.id); }
+  if (rst) { restoreDocument(rst.dataset.id); return; }
+  const del = e.target.closest('.doc-perm-delete-btn');
+  if (del) { deleteDocumentPermanently(del.dataset.id, del.dataset.path); }
 });
 
 toggleArchivedBtn.addEventListener('click', () => {
@@ -3512,7 +3625,9 @@ async function loadAlterations() {
 }
 
 function renderAlterations() {
-  const total = allAlterationRequests.length;
+  const active  = allAlterationRequests.filter((r) => r.status !== 'archived');
+  const archived = allAlterationRequests.filter((r) => r.status === 'archived');
+  const total   = active.length;
   altCount.textContent = `${total} request${total !== 1 ? 's' : ''}`;
 
   if (total === 0) {
@@ -3521,10 +3636,8 @@ function renderAlterations() {
         <p>No alteration requests yet.</p>
         <p class="field-hint">Go to Documents → Generate Auth Request to draft the first request.</p>
       </div>`;
-    return;
-  }
-
-  altList.innerHTML = allAlterationRequests.map((r) => {
+  } else {
+    altList.innerHTML = active.map((r) => {
     const dateStr = r.date_submitted
       ? new Date(r.date_submitted + 'T12:00:00').toLocaleDateString('en-CA', {
           year: 'numeric', month: 'long', day: 'numeric',
@@ -3549,6 +3662,9 @@ function renderAlterations() {
     const withdrawBtn = r.status === 'pending'
       ? `<button class="btn-link alt-withdraw-btn" data-id="${r.id}">Withdraw</button>`
       : '';
+    const archiveBtn = userIsAdmin()
+      ? `<button class="btn-link alt-archive-btn" data-id="${r.id}">Archive</button>`
+      : '';
 
     return `<div class="motion-card">
   <div class="motion-card__header">
@@ -3561,10 +3677,91 @@ function renderAlterations() {
   ${r.conditions ? `<p class="motion-card__meta"><em>Conditions:</em> ${escHtml(r.conditions)}</p>` : ''}
   ${decisionStr && r.status !== 'pending' ? `<p class="motion-card__meta">Decision: ${decisionStr}</p>` : ''}
   <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:0.5rem">
-    ${reqDlBtn}${appDlBtn}${issueBtn}${withdrawBtn}
+    ${reqDlBtn}${appDlBtn}${issueBtn}${withdrawBtn}${archiveBtn}
   </div>
 </div>`;
   }).join('');
+  }
+
+  // Archived section
+  if (archived.length > 0) {
+    altArchivedSection.classList.remove('hidden');
+    archivedAltCount.textContent = String(archived.length);
+    if (!archivedAltList.classList.contains('hidden')) {
+      archivedAltList.innerHTML = renderArchivedAlterations(archived);
+    }
+  } else {
+    altArchivedSection.classList.add('hidden');
+    archivedAltList.classList.add('hidden');
+  }
+}
+
+function renderArchivedAlterations(items) {
+  return items.map((r) => {
+    const dateStr = r.date_submitted
+      ? new Date(r.date_submitted + 'T12:00:00').toLocaleDateString('en-CA', {
+          year: 'numeric', month: 'long', day: 'numeric',
+        })
+      : '';
+    const slug       = r.strata_lot.replace(/\s+/g, '_');
+    const reqDlBtn   = r.request_doc_path
+      ? `<button class="btn-link alt-dl-btn" data-path="${escHtml(r.request_doc_path)}" data-name="AltRequest_${escHtml(slug)}.docx">Request .docx ↓</button>`
+      : '';
+    const appDlBtn   = r.approval_doc_path
+      ? `<button class="btn-link alt-dl-btn" data-path="${escHtml(r.approval_doc_path)}" data-name="AltDecision_${escHtml(slug)}.docx">Decision letter .docx ↓</button>`
+      : '';
+    const adminActions = userIsAdmin()
+      ? `<button class="btn-link alt-restore-btn" data-id="${r.id}">Restore</button>
+         <button class="btn-link danger-link alt-perm-delete-btn" data-id="${r.id}">Delete permanently</button>`
+      : '';
+    return `<div class="motion-card motion-card--archived">
+  <div class="motion-card__header">
+    <strong>${escHtml(r.owner_name)}</strong>
+    <span class="text-muted">&nbsp;·&nbsp;${escHtml(r.strata_lot)}</span>
+    <span class="motion-card__date">${dateStr}</span>
+  </div>
+  <p class="motion-card__description">${escHtml(r.formal_request)}</p>
+  <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:0.5rem">
+    ${reqDlBtn}${appDlBtn}${adminActions}
+  </div>
+</div>`;
+  }).join('');
+}
+
+async function archiveAlterationRequest(id) {
+  const { error } = await supabaseClient
+    .from('alteration_requests')
+    .update({ status: 'archived', updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) { showToast('Failed to archive: ' + error.message, 'error'); return; }
+  const req = allAlterationRequests.find((r) => r.id === id);
+  if (req) req.status = 'archived';
+  renderAlterations();
+}
+
+async function restoreAlterationRequest(id) {
+  const { error } = await supabaseClient
+    .from('alteration_requests')
+    .update({ status: 'pending', updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) { showToast('Failed to restore: ' + error.message, 'error'); return; }
+  const req = allAlterationRequests.find((r) => r.id === id);
+  if (req) req.status = 'pending';
+  renderAlterations();
+}
+
+async function deleteAlterationRequestPermanently(id) {
+  if (!confirm('Permanently delete this alteration request?\n\nThis cannot be undone — the record and all associated documents will be removed.')) return;
+  const req = allAlterationRequests.find((r) => r.id === id);
+  // Remove storage files if present
+  const paths = [req?.request_doc_path, req?.approval_doc_path].filter(Boolean);
+  if (paths.length > 0) {
+    await supabaseClient.storage.from('governance-documents').remove(paths);
+  }
+  const { error } = await supabaseClient.from('alteration_requests').delete().eq('id', id);
+  if (error) { showToast('Failed to delete: ' + error.message, 'error'); return; }
+  allAlterationRequests = allAlterationRequests.filter((r) => r.id !== id);
+  renderAlterations();
 }
 
 async function draftAlterationRequest() {
@@ -4059,9 +4256,29 @@ altList.addEventListener('click', (e) => {
   const issueBtn    = e.target.closest('.alt-issue-btn');
   const withdrawBtn = e.target.closest('.alt-withdraw-btn');
   const dlBtn       = e.target.closest('.alt-dl-btn');
+  const archiveBtn  = e.target.closest('.alt-archive-btn');
   if (issueBtn)    openApprovalForm(issueBtn.dataset.id);
   if (withdrawBtn) withdrawAlterationRequest(withdrawBtn.dataset.id);
   if (dlBtn)       downloadDocument(dlBtn.dataset.path, dlBtn.dataset.name);
+  if (archiveBtn)  archiveAlterationRequest(archiveBtn.dataset.id);
+});
+
+archivedAltList?.addEventListener('click', (e) => {
+  const dlBtn   = e.target.closest('.alt-dl-btn');
+  const rstBtn  = e.target.closest('.alt-restore-btn');
+  const delBtn  = e.target.closest('.alt-perm-delete-btn');
+  if (dlBtn)  downloadDocument(dlBtn.dataset.path, dlBtn.dataset.name);
+  if (rstBtn) restoreAlterationRequest(rstBtn.dataset.id);
+  if (delBtn) deleteAlterationRequestPermanently(delBtn.dataset.id);
+});
+
+toggleArchivedAltBtn?.addEventListener('click', () => {
+  const hidden = archivedAltList.classList.toggle('hidden');
+  const archived = allAlterationRequests.filter((r) => r.status === 'archived');
+  toggleArchivedAltBtn.textContent = hidden
+    ? `Show archived requests (${archived.length})`
+    : `Hide archived requests`;
+  if (!hidden) archivedAltList.innerHTML = renderArchivedAlterations(archived);
 });
 
 altGenerateApprovalBtn.addEventListener('click', generateDecisionLetter);

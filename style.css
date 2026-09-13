@@ -1941,6 +1941,14 @@ body.landing {
   border-left: 3px solid #dc3545;
 }
 
+.action-item-card--archived {
+  opacity: 0.7;
+}
+
+.motion-card--archived {
+  opacity: 0.7;
+}
+
 .action-item-card__header {
   display: flex;
   flex-wrap: wrap;
