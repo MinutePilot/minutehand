@@ -2,6 +2,15 @@ if (typeof CONFIG === 'undefined') {
   console.error('MinuteHand: config.js not loaded.');
 }
 
+function showToast(message, type = 'success') {
+  const toast = document.createElement('div');
+  toast.className = `toast toast--${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  if (type !== 'info') setTimeout(() => toast.remove(), 4000);
+  return toast;
+}
+
 // ── Supabase client ───────────────────────────────────────────────────────────
 
 const supabaseClient = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
