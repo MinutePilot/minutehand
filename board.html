@@ -94,6 +94,9 @@
         <button class="board-tab" data-tab="templates" role="tab" aria-selected="false">
           Templates
         </button>
+        <button class="board-tab" data-tab="alterations" role="tab" aria-selected="false">
+          Alterations
+        </button>
       </nav>
 
       <!-- Overview tab — default landing view -->
@@ -512,6 +515,7 @@
                 <option value="Insurance">Insurance</option>
                 <option value="Depreciation Report">Depreciation Report</option>
                 <option value="Financial Statements">Financial Statements</option>
+                <option value="Alteration Requests">Alteration Requests</option>
                 <option value="Other">Other</option>
               </select>
             </div>
@@ -545,6 +549,148 @@
             Show archived documents (<span id="archived-docs-count">0</span>)
           </button>
           <div id="archived-docs-list" class="hidden"></div>
+        </div>
+
+      </div>
+
+      <!-- Alterations view -->
+      <div id="alterations-view" class="hidden" role="tabpanel">
+
+        <!-- New request drafting form -->
+        <div class="tools-section">
+          <h3 class="tools-section__heading">New Alteration Request</h3>
+          <p class="field-hint" style="margin-bottom:1rem">
+            Describe what the owner is asking for in your own words. MinuteHand
+            drafts a formal request document ready for the owner to sign.
+          </p>
+          <div class="member-form__grid">
+            <div class="form-group">
+              <label for="alt-owner-name">Owner name <span class="required-mark">*</span></label>
+              <input type="text" id="alt-owner-name" placeholder="e.g. Margaret Chen" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="alt-strata-lot">Strata lot / unit <span class="required-mark">*</span></label>
+              <input type="text" id="alt-strata-lot" placeholder="e.g. SL 14" autocomplete="off">
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1">
+              <label for="alt-description">
+                What is the owner requesting?
+                <span class="optional"> — write it in your own words</span>
+              </label>
+              <textarea id="alt-description" rows="4"
+                        placeholder="e.g. She wants to put a small wooden dog enclosure in her parking stall — cedar framing with wire mesh, about 4×6 feet, removable, not attached to anything."></textarea>
+            </div>
+          </div>
+          <div class="member-form__footer">
+            <button id="alt-draft-btn" class="btn-primary">Draft formal request</button>
+            <p id="alt-draft-error" class="error hidden"></p>
+          </div>
+        </div>
+
+        <!-- Preview — hidden until draft is generated -->
+        <div id="alt-preview-section" class="tools-section hidden">
+          <h3 class="tools-section__heading">Formal Request — Preview</h3>
+          <p class="field-hint" style="margin-bottom:1rem">
+            Review the AI-drafted text. Once saved, give the document to the owner to sign before
+            bringing the request to the board.
+          </p>
+          <div id="alt-preview" class="agenda-preview"></div>
+          <div class="member-form__footer" style="margin-top:1rem">
+            <button id="alt-save-btn" class="btn-primary">Save &amp; Download .docx</button>
+            <button id="alt-discard-btn" class="btn-ghost">Discard draft</button>
+          </div>
+        </div>
+
+        <!-- Registry -->
+        <div class="tools-section">
+          <div style="display:flex;align-items:baseline;gap:1rem;margin-bottom:1rem">
+            <h3 class="tools-section__heading" style="margin:0">Alteration Request Registry</h3>
+            <span id="alt-count" class="field-hint"></span>
+          </div>
+          <div id="alt-list">
+            <div class="loading-row"><div class="spinner"></div><span>Loading…</span></div>
+          </div>
+        </div>
+
+        <!-- Decision / approval form — hidden until triggered from registry -->
+        <div id="alt-approval-section" class="tools-section hidden">
+          <h3 class="tools-section__heading">Issue Board Decision</h3>
+          <div id="alt-approval-context" style="margin-bottom:1rem"></div>
+
+          <div class="member-form__grid">
+            <div class="form-group">
+              <label>Decision <span class="required-mark">*</span></label>
+              <div style="display:flex;gap:1.5rem;margin-top:0.3rem">
+                <label style="font-weight:normal;display:flex;align-items:center;gap:0.4rem">
+                  <input type="radio" name="alt-decision" value="approved" checked> Approved
+                </label>
+                <label style="font-weight:normal;display:flex;align-items:center;gap:0.4rem">
+                  <input type="radio" name="alt-decision" value="denied"> Denied
+                </label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="alt-decision-date">Decision date <span class="required-mark">*</span></label>
+              <input type="date" id="alt-decision-date" style="max-width:180px">
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1">
+              <label for="alt-conditions">
+                Conditions / reasons
+                <span class="optional"> — optional; one per line if listing multiple</span>
+              </label>
+              <textarea id="alt-conditions" rows="4"
+                        placeholder="e.g. Temporary structure only, must be removed by October 1, 2027.&#10;Owner assumes full liability for any damage."></textarea>
+            </div>
+            <div class="form-group">
+              <label for="alt-notice-days">
+                Removal notice period (days)
+                <span class="optional"> — Standard Term 3, approved decisions</span>
+              </label>
+              <input type="number" id="alt-notice-days" value="30" min="1" max="365"
+                     style="max-width:90px">
+              <p class="field-hint">
+                Days of written notice the owner receives before the corporation may carry out
+                removal at their expense. Board policy — not a fixed SPA requirement.
+              </p>
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1">
+              <label style="display:flex;align-items:flex-start;gap:0.5rem;font-weight:normal;cursor:pointer">
+                <input type="checkbox" id="alt-nontransfer" checked style="margin-top:0.2rem;flex-shrink:0">
+                <span>
+                  This authorization does not transfer to a future owner
+                  <span class="optional">(Standard Term 4 — uncheck for permanent structural alterations that reasonably run with the lot)</span>
+                </span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="alt-motion-select">
+                Linked motion <span class="optional">(optional)</span>
+              </label>
+              <select id="alt-motion-select">
+                <option value="">None — not linked to a recorded motion</option>
+              </select>
+              <p class="field-hint">Link if the board's decision was formalized via a motion at a meeting.</p>
+            </div>
+            <div class="form-group">
+              <label for="alt-signer-select">Authorized by <span class="required-mark">*</span></label>
+              <select id="alt-signer-select">
+                <option value="">Select from roster…</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="tools-disclaimer" style="margin-top:0.75rem">
+            <strong>Legal review required.</strong> The decision letter includes standard terms
+            covering indemnification, right of removal, and non-transferability. This language
+            has not been reviewed by legal counsel — verify compliance with your bylaws and the
+            <em>Strata Property Act</em> before issuing any authorization letter.
+          </div>
+
+          <div class="member-form__footer">
+            <button id="alt-generate-approval-btn" class="btn-primary">Generate decision letter</button>
+            <button id="alt-cancel-approval-btn" class="btn-ghost">Cancel</button>
+            <p id="alt-approval-error" class="error hidden"></p>
+          </div>
         </div>
 
       </div>

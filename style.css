@@ -1653,6 +1653,19 @@ body.landing {
 .result-badge--defeated  { background: #f8d7da; color: #721c24; }
 .result-badge--tabled    { background: #fff3cd; color: #856404; }
 .result-badge--withdrawn { background: #e9ecef; color: #495057; }
+/* Alteration request statuses */
+.result-badge--pending   { background: #fff3cd; color: #856404; }
+.result-badge--approved  { background: #d4edda; color: #155724; }
+.result-badge--denied    { background: #f8d7da; color: #721c24; }
+
+/* ── Alteration request elements ── */
+.alt-meta-table { border-collapse: collapse; margin-bottom: 1rem; }
+.alt-meta-table td { padding: 0.2rem 1rem 0.2rem 0; vertical-align: top; }
+.alt-meta-table td:first-child { white-space: nowrap; }
+.alt-section-heading { font-size: 0.85rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--text-muted); margin: 1.25rem 0 0.4rem; }
+.alt-request-quote { border-left: 3px solid var(--border); padding: 0.4rem 0.75rem;
+  margin: 0 0 1rem; font-style: italic; color: var(--text-muted); font-size: 0.9rem; }
 
 /* ── Empty state ── */
 

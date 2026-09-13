@@ -25,6 +25,11 @@ let allDocuments    = [];
 let documentsLoaded = false;
 let docSortField    = 'created_at';
 
+let allAlterationRequests = [];
+let alterationsLoaded     = false;
+let altDraftedFormal      = null;
+let activeApprovalId      = null;
+
 let allMeetingsList    = [];
 let meetingsListLoaded = false;
 let overviewLoaded     = false;
@@ -124,6 +129,30 @@ const docsArchivedSection = document.getElementById('docs-archived-section');
 const toggleArchivedBtn   = document.getElementById('toggle-archived-docs-btn');
 const archivedDocsCount   = document.getElementById('archived-docs-count');
 const archivedDocsList    = document.getElementById('archived-docs-list');
+
+const alterationsView        = document.getElementById('alterations-view');
+const altOwnerNameInput      = document.getElementById('alt-owner-name');
+const altStrataLotInput      = document.getElementById('alt-strata-lot');
+const altDescriptionInput    = document.getElementById('alt-description');
+const altDraftBtn            = document.getElementById('alt-draft-btn');
+const altDraftError          = document.getElementById('alt-draft-error');
+const altPreviewSection      = document.getElementById('alt-preview-section');
+const altPreviewEl           = document.getElementById('alt-preview');
+const altSaveBtn             = document.getElementById('alt-save-btn');
+const altDiscardBtn          = document.getElementById('alt-discard-btn');
+const altList                = document.getElementById('alt-list');
+const altCount               = document.getElementById('alt-count');
+const altApprovalSection     = document.getElementById('alt-approval-section');
+const altApprovalContext     = document.getElementById('alt-approval-context');
+const altDecisionDate        = document.getElementById('alt-decision-date');
+const altConditionsInput     = document.getElementById('alt-conditions');
+const altNoticeDays          = document.getElementById('alt-notice-days');
+const altNonTransfer         = document.getElementById('alt-nontransfer');
+const altMotionSelect        = document.getElementById('alt-motion-select');
+const altSignerSelect        = document.getElementById('alt-signer-select');
+const altGenerateApprovalBtn = document.getElementById('alt-generate-approval-btn');
+const altCancelApprovalBtn   = document.getElementById('alt-cancel-approval-btn');
+const altApprovalError       = document.getElementById('alt-approval-error');
 
 // ── Auth + init ───────────────────────────────────────────────────────────────
 
@@ -310,21 +339,23 @@ document.querySelectorAll('.board-tab').forEach((tab) => {
     tab.setAttribute('aria-selected', 'true');
 
     const active = tab.dataset.tab;
-    overviewView.classList.toggle('hidden',   active !== 'overview');
-    motionsView.classList.toggle('hidden',    active !== 'motions');
-    actionsView.classList.toggle('hidden',    active !== 'actions');
-    agendaView.classList.toggle('hidden',     active !== 'agenda');
-    searchView.classList.toggle('hidden',     active !== 'search');
-    minutesView.classList.toggle('hidden',    active !== 'minutes');
-    toolsView.classList.toggle('hidden',      active !== 'tools');
-    membersView.classList.toggle('hidden',    active !== 'members');
-    documentsView.classList.toggle('hidden',  active !== 'documents');
-    templatesView.classList.toggle('hidden',  active !== 'templates');
-    if (active === 'agenda')                              renderAgenda();
-    if (active === 'search')                              searchInput.focus();
-    if (active === 'tools')                               populateExportYears();
-    if (active === 'members'  && !membersLoaded)          loadMembers();
-    if (active === 'documents' && !documentsLoaded)       loadDocuments();
+    overviewView.classList.toggle('hidden',    active !== 'overview');
+    motionsView.classList.toggle('hidden',     active !== 'motions');
+    actionsView.classList.toggle('hidden',     active !== 'actions');
+    agendaView.classList.toggle('hidden',      active !== 'agenda');
+    searchView.classList.toggle('hidden',      active !== 'search');
+    minutesView.classList.toggle('hidden',     active !== 'minutes');
+    toolsView.classList.toggle('hidden',       active !== 'tools');
+    membersView.classList.toggle('hidden',     active !== 'members');
+    documentsView.classList.toggle('hidden',   active !== 'documents');
+    templatesView.classList.toggle('hidden',   active !== 'templates');
+    alterationsView.classList.toggle('hidden', active !== 'alterations');
+    if (active === 'agenda')                               renderAgenda();
+    if (active === 'search')                               searchInput.focus();
+    if (active === 'tools')                                populateExportYears();
+    if (active === 'members'     && !membersLoaded)        loadMembers();
+    if (active === 'documents'   && !documentsLoaded)      loadDocuments();
+    if (active === 'alterations' && !alterationsLoaded)    loadAlterations();
     if (active === 'templates') {
       if (!membersLoaded) await loadMembers();
       renderTemplateForm(activeTemplate);
@@ -1471,6 +1502,7 @@ const CATEGORY_ORDER = [
   'Insurance',
   'Depreciation Report',
   'Financial Statements',
+  'Alteration Requests',
   'Other',
 ];
 
@@ -2528,4 +2560,600 @@ templateDownloadBtn.addEventListener('click', () => {
   const a     = Object.assign(document.createElement('a'), { href: url, download: fname });
   a.click();
   URL.revokeObjectURL(url);
+});
+
+// ── Alteration Requests ───────────────────────────────────────────────────────
+
+async function callBoardEdgeFunction(name, body) {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  const resp = await fetch(`${CONFIG.supabaseUrl}/functions/v1/${name}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${session?.access_token}`,
+      'apikey':        CONFIG.supabaseAnonKey,
+    },
+    body: JSON.stringify(body),
+  });
+  const json = await resp.json();
+  if (!resp.ok) throw new Error(json.error || resp.statusText);
+  return json;
+}
+
+async function loadAlterations() {
+  altList.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading requests…</span></div>';
+
+  const { data, error } = await supabaseClient
+    .from('alteration_requests')
+    .select('id, owner_name, strata_lot, description, formal_request, status, date_submitted, decision_date, conditions, request_doc_path, approval_doc_path')
+    .eq('org_id', userOrg.id)
+    .order('date_submitted', { ascending: false })
+    .order('created_at',     { ascending: false });
+
+  if (error) {
+    altList.innerHTML = `<p class="error">Failed to load requests: ${escHtml(error.message)}</p>`;
+    return;
+  }
+
+  allAlterationRequests = data ?? [];
+  alterationsLoaded = true;
+  renderAlterations();
+}
+
+function renderAlterations() {
+  const total = allAlterationRequests.length;
+  altCount.textContent = `${total} request${total !== 1 ? 's' : ''}`;
+
+  if (total === 0) {
+    altList.innerHTML = `
+      <div class="registry-empty">
+        <p>No alteration requests yet.</p>
+        <p class="field-hint">Use the form above to draft the first request.</p>
+      </div>`;
+    return;
+  }
+
+  altList.innerHTML = allAlterationRequests.map((r) => {
+    const dateStr = r.date_submitted
+      ? new Date(r.date_submitted + 'T12:00:00').toLocaleDateString('en-CA', {
+          year: 'numeric', month: 'long', day: 'numeric',
+        })
+      : '';
+    const decisionStr = r.decision_date
+      ? new Date(r.decision_date + 'T12:00:00').toLocaleDateString('en-CA', {
+          year: 'numeric', month: 'long', day: 'numeric',
+        })
+      : '';
+
+    const slug       = r.strata_lot.replace(/\s+/g, '_');
+    const reqDlBtn   = r.request_doc_path
+      ? `<button class="btn-link alt-dl-btn" data-path="${escHtml(r.request_doc_path)}" data-name="AltRequest_${escHtml(slug)}.docx">Request .docx ↓</button>`
+      : '';
+    const appDlBtn   = r.approval_doc_path
+      ? `<button class="btn-link alt-dl-btn" data-path="${escHtml(r.approval_doc_path)}" data-name="AltDecision_${escHtml(slug)}.docx">Decision letter .docx ↓</button>`
+      : '';
+    const issueBtn   = r.status === 'pending'
+      ? `<button class="btn-link alt-issue-btn" data-id="${r.id}">Issue decision letter →</button>`
+      : '';
+    const withdrawBtn = r.status === 'pending'
+      ? `<button class="btn-link alt-withdraw-btn" data-id="${r.id}">Withdraw</button>`
+      : '';
+
+    return `<div class="motion-card">
+  <div class="motion-card__header">
+    <span class="result-badge result-badge--${r.status}">${r.status}</span>
+    <span class="motion-card__date">${dateStr}</span>
+    <strong>${escHtml(r.owner_name)}</strong>
+    <span class="text-muted">&nbsp;·&nbsp;${escHtml(r.strata_lot)}</span>
+  </div>
+  <p class="motion-card__description">${escHtml(r.formal_request)}</p>
+  ${r.conditions ? `<p class="motion-card__meta"><em>Conditions:</em> ${escHtml(r.conditions)}</p>` : ''}
+  ${decisionStr && r.status !== 'pending' ? `<p class="motion-card__meta">Decision: ${decisionStr}</p>` : ''}
+  <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:0.5rem">
+    ${reqDlBtn}${appDlBtn}${issueBtn}${withdrawBtn}
+  </div>
+</div>`;
+  }).join('');
+}
+
+async function draftAlterationRequest() {
+  const ownerName   = altOwnerNameInput.value.trim();
+  const strataLot   = altStrataLotInput.value.trim();
+  const description = altDescriptionInput.value.trim();
+
+  altDraftError.classList.add('hidden');
+
+  if (!ownerName || !strataLot || !description) {
+    altDraftError.textContent = 'Owner name, strata lot, and description are all required.';
+    altDraftError.classList.remove('hidden');
+    return;
+  }
+
+  altDraftBtn.disabled    = true;
+  altDraftBtn.textContent = 'Drafting…';
+
+  try {
+    const result = await callBoardEdgeFunction('draft-alteration-request', {
+      orgName: userOrg.name,
+      ownerName,
+      strataLot,
+      description,
+    });
+
+    altDraftedFormal = result.formalRequest;
+
+    altPreviewEl.innerHTML = buildRequestPreviewHtml({
+      ownerName,
+      strataLot,
+      formalRequest: altDraftedFormal,
+      dateSubmitted: new Date().toLocaleDateString('en-CA', {
+        year: 'numeric', month: 'long', day: 'numeric',
+      }),
+    });
+    altPreviewSection.classList.remove('hidden');
+    altPreviewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    altDraftError.textContent = `Drafting failed: ${err.message}`;
+    altDraftError.classList.remove('hidden');
+  } finally {
+    altDraftBtn.disabled    = false;
+    altDraftBtn.textContent = 'Draft formal request';
+  }
+}
+
+function buildRequestPreviewHtml({ ownerName, strataLot, formalRequest, dateSubmitted }) {
+  const paras = formalRequest.split(/\n\n+/).filter(Boolean)
+    .map((p) => `<p>${escHtml(p.trim())}</p>`).join('');
+
+  return `<div class="agenda-doc">
+  <div class="agenda-header">
+    <h2>${escHtml(userOrg.name)}</h2>
+    <p><strong>OWNER ALTERATION REQUEST</strong></p>
+  </div>
+  <table class="alt-meta-table">
+    <tr><td><strong>Date Submitted</strong></td><td>${escHtml(dateSubmitted)}</td></tr>
+    <tr><td><strong>Strata Lot</strong></td><td>${escHtml(strataLot)}</td></tr>
+    <tr><td><strong>Owner Name</strong></td><td>${escHtml(ownerName)}</td></tr>
+  </table>
+  <h3 class="alt-section-heading">Proposed Alteration</h3>
+  ${paras}
+  <h3 class="alt-section-heading">Owner Confirmations</h3>
+  <p>The owner confirms that the proposed alteration:</p>
+  <ul>
+    <li>Will be carried out in a workmanlike manner;</li>
+    <li>Will comply with all applicable bylaws and rules of the strata corporation;</li>
+    <li>Does not affect the structure of the building, any common property systems, or the interests of any other strata lot; and</li>
+    <li>Will be maintained in good condition at the owner's sole expense.</li>
+  </ul>
+  <h3 class="alt-section-heading">Owner Acknowledgment</h3>
+  <p>By signing below, the owner acknowledges that this request requires Strata Council approval before any work commences, and that proceeding without approval may result in a requirement to restore the strata lot and/or common property at the owner's expense.</p>
+  <p style="margin-top:1.5rem">Owner Signature: _______________________________&nbsp;&nbsp;&nbsp; Date: _______________</p>
+  <p>Printed Name: ${escHtml(ownerName)}</p>
+  <p>Strata Lot: ${escHtml(strataLot)}</p>
+</div>`;
+}
+
+function buildRequestDocHtml({ ownerName, strataLot, formalRequest, dateSubmitted, orgName }) {
+  const paras = formalRequest.split(/\n\n+/).filter(Boolean)
+    .map((p) => `<p>${escHtml(p.trim())}</p>`).join('');
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  body  { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 2.5cm; line-height: 1.3; }
+  .org  { font-size: 13pt; font-weight: bold; text-align: center; margin: 0 0 3pt; }
+  .sub  { text-align: center; color: #333; margin: 0 0 16pt; font-size: 11pt; letter-spacing: 0.04em; }
+  hr    { border: none; border-top: 1pt solid #888; margin: 12pt 0; }
+  table { border-collapse: collapse; margin-bottom: 12pt; }
+  td    { padding: 3pt 14pt 3pt 0; vertical-align: top; }
+  td:first-child { font-weight: bold; min-width: 120pt; }
+  h2    { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em; margin: 14pt 0 6pt; }
+  p     { margin: 0 0 8pt; }
+  ul    { margin: 4pt 0 10pt; padding-left: 18pt; }
+  li    { margin-bottom: 4pt; }
+  .sig  { margin-top: 28pt; }
+</style></head><body>
+<p class="org">${escHtml(orgName)}</p>
+<p class="sub">OWNER ALTERATION REQUEST</p>
+<hr>
+<table>
+  <tr><td>Date Submitted:</td><td>${escHtml(dateSubmitted)}</td></tr>
+  <tr><td>Strata Lot:</td><td>${escHtml(strataLot)}</td></tr>
+  <tr><td>Owner Name:</td><td>${escHtml(ownerName)}</td></tr>
+</table>
+<hr>
+<h2>Proposed Alteration</h2>
+${paras}
+<h2>Owner Confirmations</h2>
+<p>The owner confirms that the proposed alteration:</p>
+<ul>
+  <li>Will be carried out in a workmanlike manner;</li>
+  <li>Will comply with all applicable bylaws and rules of the strata corporation;</li>
+  <li>Does not affect the structure of the building, any common property systems, or the interests of any other strata lot; and</li>
+  <li>Will be maintained in good condition at the owner's sole expense.</li>
+</ul>
+<hr>
+<h2>Owner Acknowledgment</h2>
+<p>By signing below, the owner acknowledges that this request requires Strata Council approval before any work commences, and that proceeding without approval may result in a requirement to restore the strata lot and/or common property at the owner's expense.</p>
+<div class="sig">
+  <p>Owner Signature: &nbsp;_____________________________&nbsp;&nbsp;&nbsp; Date: _______________</p>
+  <p style="margin-top:6pt">Printed Name: ${escHtml(ownerName)}</p>
+  <p>Strata Lot: ${escHtml(strataLot)}</p>
+</div>
+</body></html>`;
+}
+
+async function saveAlterationRequest() {
+  const ownerName   = altOwnerNameInput.value.trim();
+  const strataLot   = altStrataLotInput.value.trim();
+  const description = altDescriptionInput.value.trim();
+  const today       = new Date().toISOString().slice(0, 10);
+
+  if (!altDraftedFormal) return;
+
+  altSaveBtn.disabled    = true;
+  altSaveBtn.textContent = 'Saving…';
+  altDraftError.classList.add('hidden');
+
+  try {
+    const { data: reqRow, error: reqErr } = await supabaseClient
+      .from('alteration_requests')
+      .insert({
+        org_id:         userOrg.id,
+        user_id:        currentUser.id,
+        owner_name:     ownerName,
+        strata_lot:     strataLot,
+        description,
+        formal_request: altDraftedFormal,
+        date_submitted: today,
+      })
+      .select('id')
+      .single();
+    if (reqErr) throw reqErr;
+
+    const dateStr   = new Date(today + 'T12:00:00').toLocaleDateString('en-CA', {
+      year: 'numeric', month: 'long', day: 'numeric',
+    });
+    const docHtml   = buildRequestDocHtml({ ownerName, strataLot, formalRequest: altDraftedFormal, dateSubmitted: dateStr, orgName: userOrg.name });
+    const blob      = htmlDocx.asBlob(docHtml, { orientation: 'portrait' });
+    const slug      = strataLot.replace(/[^a-zA-Z0-9]+/g, '_');
+    const storagePath = `${userOrg.id}/alterations/${reqRow.id}_request.docx`;
+    const fileName  = `AltRequest_${slug}_${today}.docx`;
+
+    const { error: uploadErr } = await supabaseClient.storage
+      .from('governance-documents')
+      .upload(storagePath, blob, {
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        upsert: false,
+      });
+    if (uploadErr) throw uploadErr;
+
+    const { error: docErr } = await supabaseClient.from('documents').insert({
+      org_id:       userOrg.id,
+      user_id:      currentUser.id,
+      title:        `Alteration Request — ${ownerName} (${strataLot})`,
+      category:     'Alteration Requests',
+      storage_path: storagePath,
+      file_name:    fileName,
+      file_size:    blob.size,
+      mime_type:    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+    if (docErr) throw docErr;
+
+    await supabaseClient
+      .from('alteration_requests')
+      .update({ request_doc_path: storagePath, updated_at: new Date().toISOString() })
+      .eq('id', reqRow.id);
+
+    triggerDownload(blob, fileName);
+
+    altOwnerNameInput.value   = '';
+    altStrataLotInput.value   = '';
+    altDescriptionInput.value = '';
+    altDraftedFormal          = null;
+    altPreviewSection.classList.add('hidden');
+
+    alterationsLoaded = false;
+    await loadAlterations();
+    showToast('Request saved and downloaded.', 'success');
+  } catch (err) {
+    altDraftError.textContent = `Failed to save: ${err.message}`;
+    altDraftError.classList.remove('hidden');
+  } finally {
+    altSaveBtn.disabled    = false;
+    altSaveBtn.textContent = 'Save & Download .docx';
+  }
+}
+
+async function openApprovalForm(requestId) {
+  activeApprovalId = requestId;
+  const req = allAlterationRequests.find((r) => r.id === requestId);
+  if (!req) return;
+
+  const dateStr = req.date_submitted
+    ? new Date(req.date_submitted + 'T12:00:00').toLocaleDateString('en-CA', {
+        year: 'numeric', month: 'long', day: 'numeric',
+      })
+    : '';
+
+  altApprovalContext.innerHTML = `
+    <table class="alt-meta-table" style="margin-bottom:0.75rem">
+      <tr><td><strong>Owner</strong></td><td>${escHtml(req.owner_name)}</td></tr>
+      <tr><td><strong>Strata Lot</strong></td><td>${escHtml(req.strata_lot)}</td></tr>
+      <tr><td><strong>Date Submitted</strong></td><td>${dateStr}</td></tr>
+    </table>
+    <blockquote class="alt-request-quote">${escHtml(req.description)}</blockquote>`;
+
+  altDecisionDate.value    = new Date().toISOString().slice(0, 10);
+  altConditionsInput.value = '';
+  altApprovalError.classList.add('hidden');
+  document.querySelector('input[name="alt-decision"][value="approved"]').checked = true;
+
+  altMotionSelect.innerHTML = '<option value="">None — not linked to a recorded motion</option>';
+  allMotions.forEach((m) => {
+    const mtg   = m.meetings ?? {};
+    const dStr  = mtg.meeting_date
+      ? new Date(mtg.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })
+      : '';
+    const label = `${dStr ? dStr + ' — ' : ''}${m.description.slice(0, 60)}${m.description.length > 60 ? '…' : ''}`;
+    const opt   = Object.assign(document.createElement('option'), { value: m.id, textContent: label });
+    altMotionSelect.appendChild(opt);
+  });
+
+  altSignerSelect.innerHTML = '<option value="">Select from roster…</option>';
+  if (!membersLoaded) await loadMembers();
+  allMembers.filter((m) => m.status === 'active').forEach((m) => {
+    const opt = Object.assign(document.createElement('option'), {
+      value:       JSON.stringify({ name: m.name, role: m.role }),
+      textContent: `${m.name} — ${m.role}`,
+    });
+    altSignerSelect.appendChild(opt);
+  });
+
+  altApprovalSection.classList.remove('hidden');
+  altApprovalSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function buildApprovalLetterHtml({ orgName, ownerName, strataLot, informalDescription, requestDateStr, decision, conditions, decisionDateStr, signerName, signerRole, noticeDays, includeNonTransfer }) {
+  const decisionLabel  = decision === 'approved' ? 'APPROVED' : 'DENIED';
+  const decisionColour = decision === 'approved' ? '#1a5c38' : '#8b1a1a';
+
+  let conditionsHtml = '';
+  if (conditions) {
+    const lines = conditions.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 1) {
+      conditionsHtml = decision === 'approved'
+        ? `<h2>Conditions of Approval</h2><p>${escHtml(lines[0])}</p>`
+        : `<h2>Reasons for Denial</h2><p>${escHtml(lines[0])}</p>`;
+    } else {
+      const listItems = lines.map((l) => `<li>${escHtml(l)}</li>`).join('');
+      conditionsHtml = decision === 'approved'
+        ? `<h2>Conditions of Approval</h2><p>This authorization is granted subject to the following conditions:</p><ol>${listItems}</ol>`
+        : `<h2>Reasons for Denial</h2><ol>${listItems}</ol>`;
+    }
+  }
+
+  // Standard Term 3 — removal on non-compliance; notice period is a board policy
+  // choice set by the secretary in the form (default 30 days, not a fixed SPA requirement).
+  const removalClause = decision === 'approved'
+    ? `<li>If the owner fails to comply with any condition of this authorization, the Strata Council may, after providing at least ${escHtml(String(noticeDays))} days' written notice, require the owner to remove the alteration and restore the area to its original condition at the owner's expense. If the owner does not comply within the time stated in the notice, the strata corporation may carry out the work and recover the reasonable costs as a strata fee debt in accordance with the <em>Strata Property Act</em>.</li>`
+    : '';
+
+  // Standard Term 4 — non-transferability; included by default, removable via UI
+  // checkbox for permanent structural alterations that reasonably run with the lot.
+  const transferClause = (decision === 'approved' && includeNonTransfer)
+    ? `<li>This authorization applies to the current owner of Strata Lot ${escHtml(strataLot)} only. A subsequent owner wishing to maintain the alteration must apply to the Strata Council for new authorization.</li>`
+    : '';
+
+  const maintenanceClause = decision === 'approved'
+    ? `<li>The owner must maintain the alteration in good repair and in clean and safe condition at all times, in compliance with the strata corporation's bylaws and rules and the <em>Strata Property Act</em>.</li>`
+    : '';
+
+  // Standard Term 4 (denial) — non-waiver boilerplate regardless of transferability setting
+  const nonWaiverClause = `<li>This ${decision === 'approved' ? 'authorization' : 'decision'} does not constitute an amendment to the strata plan, a change in the designation of any common property, or a waiver of any provision of the strata corporation's bylaws, rules, or the <em>Strata Property Act</em>.</li>`;
+
+  // Denial: always include a reapply note — most useful exactly when the owner
+  // knows what to fix. Tailor wording based on whether reasons were given.
+  const reapplyNote = decision === 'denied'
+    ? `<p>${conditions
+        ? 'You may reapply to the Strata Council once the concerns above have been addressed.'
+        : 'You may reapply to the Strata Council for reconsideration.'
+      }</p>`
+    : '';
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  body  { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 2.5cm; line-height: 1.3; }
+  .org  { font-size: 13pt; font-weight: bold; margin: 0 0 18pt; }
+  h2    { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em; margin: 14pt 0 6pt; }
+  p     { margin: 0 0 8pt; }
+  ol    { margin: 4pt 0 10pt; padding-left: 18pt; }
+  li    { margin-bottom: 6pt; line-height: 1.4; }
+  .re   { font-weight: bold; margin: 14pt 0 8pt; }
+  .dec  { font-size: 12pt; font-weight: bold; margin: 14pt 0; color: ${decisionColour}; }
+  .quo  { border-left: 3pt solid #ccc; padding: 5pt 10pt; margin: 6pt 0 14pt; font-style: italic; color: #444; }
+  hr    { border: none; border-top: 1pt solid #ccc; margin: 16pt 0; }
+  .sig  { margin-top: 32pt; }
+</style></head><body>
+<p class="org">${escHtml(orgName)}</p>
+<p>${escHtml(decisionDateStr)}</p>
+<p style="margin-top:14pt">${escHtml(ownerName)}<br>Strata Lot ${escHtml(strataLot)}<br>${escHtml(orgName)}</p>
+<p class="re">RE: OWNER ALTERATION REQUEST — STRATA LOT ${escHtml(strataLot)}</p>
+<p>Dear ${escHtml(ownerName)},</p>
+<p>The Strata Council of ${escHtml(orgName)} has reviewed your alteration request dated ${escHtml(requestDateStr)}, regarding:</p>
+<div class="quo">${escHtml(informalDescription)}</div>
+<p class="dec">DECISION: ${decisionLabel}</p>
+${conditionsHtml}
+${reapplyNote}
+<h2>Standard Terms</h2>
+<ol>
+  <li>The owner assumes full responsibility and liability for any damage to common property, limited common property, or other strata lots arising from the installation, existence, use, or removal of the alteration.</li>
+  ${nonWaiverClause}
+  ${removalClause}
+  ${transferClause}
+  ${maintenanceClause}
+  <!-- PENDING LEGAL REVIEW — Standard Term: Indemnification
+       The scope of this clause (in particular whether to carve out the corporation's
+       own negligence) is genuine contract-law nuance that has NOT been reviewed by
+       legal counsel. The broad placeholder below must be reviewed by a lawyer before
+       this feature is recommended for use by strata corporations other than KAS 1117.
+       Do not remove this comment until that review is complete and the clause is
+       finalized. -->
+  <li>The owner agrees to indemnify and save harmless the Strata Corporation and its council members, officers, and agents from any claims, costs, damages, or liabilities arising from the installation, existence, use, maintenance, or removal of the alteration. [PENDING LEGAL REVIEW]</li>
+</ol>
+<hr>
+<p style="font-size:9.5pt;color:#555">Authorized by the Strata Council of ${escHtml(orgName)}.</p>
+<div class="sig">
+  <p>_______________________________</p>
+  <p>${escHtml(signerName)}${signerRole ? ', ' + escHtml(signerRole) : ''}</p>
+  <p>On behalf of the Strata Council<br>${escHtml(orgName)}</p>
+  <p style="margin-top:10pt">Date: _______________</p>
+</div>
+</body></html>`;
+}
+
+async function generateDecisionLetter() {
+  const req = allAlterationRequests.find((r) => r.id === activeApprovalId);
+  if (!req) return;
+
+  const decisionRadio    = document.querySelector('input[name="alt-decision"]:checked');
+  const decision         = decisionRadio?.value ?? 'approved';
+  const decisionDate     = altDecisionDate.value;
+  const conditions       = altConditionsInput.value.trim();
+  const motionId         = altMotionSelect.value || null;
+  const signerRaw        = altSignerSelect.value;
+  const noticeDays       = parseInt(altNoticeDays.value, 10) || 30;
+  const includeNonTransfer = altNonTransfer.checked;
+
+  altApprovalError.classList.add('hidden');
+
+  if (!decisionDate) {
+    altApprovalError.textContent = 'Decision date is required.';
+    altApprovalError.classList.remove('hidden');
+    return;
+  }
+  if (!signerRaw) {
+    altApprovalError.textContent = 'Select an authorized signatory from the roster.';
+    altApprovalError.classList.remove('hidden');
+    return;
+  }
+
+  const signer = JSON.parse(signerRaw);
+
+  altGenerateApprovalBtn.disabled    = true;
+  altGenerateApprovalBtn.textContent = 'Generating…';
+
+  try {
+    const requestDateStr  = req.date_submitted
+      ? new Date(req.date_submitted + 'T12:00:00').toLocaleDateString('en-CA', {
+          year: 'numeric', month: 'long', day: 'numeric',
+        })
+      : '';
+    const decisionDateStr = new Date(decisionDate + 'T12:00:00').toLocaleDateString('en-CA', {
+      year: 'numeric', month: 'long', day: 'numeric',
+    });
+
+    const letterHtml  = buildApprovalLetterHtml({
+      orgName:             userOrg.name,
+      ownerName:           req.owner_name,
+      strataLot:           req.strata_lot,
+      informalDescription: req.description,
+      requestDateStr,
+      decision,
+      conditions,
+      decisionDateStr,
+      signerName:          signer.name,
+      signerRole:          signer.role,
+      noticeDays,
+      includeNonTransfer,
+    });
+
+    const blob        = htmlDocx.asBlob(letterHtml, { orientation: 'portrait' });
+    const slug        = req.strata_lot.replace(/[^a-zA-Z0-9]+/g, '_');
+    const storagePath = `${userOrg.id}/alterations/${req.id}_decision.docx`;
+    const fileName    = `AltDecision_${slug}_${decisionDate}.docx`;
+
+    const { error: uploadErr } = await supabaseClient.storage
+      .from('governance-documents')
+      .upload(storagePath, blob, {
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        upsert: true,
+      });
+    if (uploadErr) throw uploadErr;
+
+    const { error: docErr } = await supabaseClient.from('documents').insert({
+      org_id:       userOrg.id,
+      user_id:      currentUser.id,
+      title:        `Alteration ${decision === 'approved' ? 'Authorization' : 'Denial'} — ${req.owner_name} (${req.strata_lot})`,
+      category:     'Alteration Requests',
+      storage_path: storagePath,
+      file_name:    fileName,
+      file_size:    blob.size,
+      mime_type:    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+    if (docErr) throw docErr;
+
+    await supabaseClient
+      .from('alteration_requests')
+      .update({
+        status:            decision,
+        decision_date:     decisionDate,
+        conditions:        conditions || null,
+        motion_id:         motionId,
+        approval_doc_path: storagePath,
+        updated_at:        new Date().toISOString(),
+      })
+      .eq('id', req.id);
+
+    triggerDownload(blob, fileName);
+    altApprovalSection.classList.add('hidden');
+    activeApprovalId  = null;
+    alterationsLoaded = false;
+    await loadAlterations();
+    showToast('Decision letter saved and downloaded.', 'success');
+  } catch (err) {
+    altApprovalError.textContent = `Failed to generate: ${err.message}`;
+    altApprovalError.classList.remove('hidden');
+  } finally {
+    altGenerateApprovalBtn.disabled    = false;
+    altGenerateApprovalBtn.textContent = 'Generate decision letter';
+  }
+}
+
+async function withdrawAlterationRequest(id) {
+  if (!confirm('Mark this request as withdrawn? This cannot be undone.')) return;
+
+  const { error } = await supabaseClient
+    .from('alteration_requests')
+    .update({ status: 'withdrawn', updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) { alert(`Failed to withdraw: ${error.message}`); return; }
+  alterationsLoaded = false;
+  await loadAlterations();
+}
+
+altDraftBtn.addEventListener('click', draftAlterationRequest);
+
+altSaveBtn.addEventListener('click', saveAlterationRequest);
+
+altDiscardBtn.addEventListener('click', () => {
+  altDraftedFormal = null;
+  altPreviewSection.classList.add('hidden');
+  altOwnerNameInput.focus();
+});
+
+altList.addEventListener('click', (e) => {
+  const issueBtn    = e.target.closest('.alt-issue-btn');
+  const withdrawBtn = e.target.closest('.alt-withdraw-btn');
+  const dlBtn       = e.target.closest('.alt-dl-btn');
+  if (issueBtn)    openApprovalForm(issueBtn.dataset.id);
+  if (withdrawBtn) withdrawAlterationRequest(withdrawBtn.dataset.id);
+  if (dlBtn)       downloadDocument(dlBtn.dataset.path, dlBtn.dataset.name);
+});
+
+altGenerateApprovalBtn.addEventListener('click', generateDecisionLetter);
+
+altCancelApprovalBtn.addEventListener('click', () => {
+  altApprovalSection.classList.add('hidden');
+  activeApprovalId = null;
 });
