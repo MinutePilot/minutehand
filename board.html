@@ -56,48 +56,37 @@
     <div id="board-view" class="hidden">
 
       <div class="board-header">
-        <div>
+        <div class="board-header__title">
           <h1 id="org-name-heading"></h1>
           <p class="field-hint" id="org-type-label"></p>
         </div>
-        <a href="/app.html" class="btn-ghost">← Generate Minutes</a>
+        <div class="board-header__actions">
+          <div class="board-search-wrap">
+            <input type="search" id="search-input" class="board-search-input"
+                   placeholder="Search meetings &amp; documents…"
+                   autocomplete="off" autocorrect="off" spellcheck="false">
+            <span id="search-status" class="search-status"></span>
+          </div>
+          <a href="/app.html" class="btn-ghost">← Generate Minutes</a>
+        </div>
       </div>
 
-      <nav class="board-tabs" role="tablist">
-        <button class="board-tab board-tab--active" data-tab="overview" role="tab" aria-selected="true">
-          Overview
-        </button>
-        <button class="board-tab" data-tab="motions" role="tab" aria-selected="false">
-          Motions
-        </button>
-        <button class="board-tab" data-tab="actions" role="tab" aria-selected="false">
-          Action Items
-        </button>
-        <button class="board-tab" data-tab="agenda" role="tab" aria-selected="false">
-          Next Agenda
-        </button>
-        <button class="board-tab" data-tab="search" role="tab" aria-selected="false">
-          Search
-        </button>
-        <button class="board-tab" data-tab="minutes" role="tab" aria-selected="false">
-          Minutes
-        </button>
-        <button class="board-tab" data-tab="tools" role="tab" aria-selected="false">
-          Tools
-        </button>
-        <button class="board-tab" data-tab="members" role="tab" aria-selected="false">
-          Members
-        </button>
-        <button class="board-tab" data-tab="documents" role="tab" aria-selected="false">
-          Documents
-        </button>
-        <button class="board-tab" data-tab="templates" role="tab" aria-selected="false">
-          Templates
-        </button>
-        <button class="board-tab" data-tab="alterations" role="tab" aria-selected="false">
-          Alterations
-        </button>
+      <nav class="board-nav" aria-label="Board sections">
+        <div class="board-nav__primary" role="tablist">
+          <button class="board-cat board-cat--active" data-cat="overview" role="tab" aria-selected="true">Overview</button>
+          <button class="board-cat" data-cat="meetings" role="tab" aria-selected="false">Meetings</button>
+          <button class="board-cat" data-cat="work" role="tab" aria-selected="false">Work To Do</button>
+          <button class="board-cat" data-cat="documents" role="tab" aria-selected="false">Documents</button>
+          <button class="board-cat" data-cat="tools" role="tab" aria-selected="false">Tools</button>
+          <button class="board-cat" data-cat="members" role="tab" aria-selected="false">Members</button>
+        </div>
+        <div class="board-nav__sub hidden" id="board-subnav" role="tablist"></div>
       </nav>
+
+      <!-- Search results — visible when a search query is active -->
+      <div id="search-results-panel" class="hidden">
+        <div id="search-results"></div>
+      </div>
 
       <!-- Overview tab — default landing view -->
       <div id="overview-view" role="tabpanel">
@@ -206,18 +195,8 @@
 
       </div>
 
-      <!-- Search view -->
-      <div id="search-view" class="hidden" role="tabpanel">
-        <div class="search-bar">
-          <input type="search" id="search-input" class="search-input"
-                 placeholder="Search all meeting content…"
-                 autocomplete="off" autocorrect="off" spellcheck="false">
-          <span id="search-status" class="search-status"></span>
-        </div>
-        <div id="search-results"></div>
-      </div>
-
-      <!-- Tools view -->
+      <!-- Tools view —
+           note: search-input/status/results are now in the header area above -->
       <!-- Minutes tab: publish management + owner portal link -->
       <div id="minutes-view" class="hidden" role="tabpanel">
 
@@ -279,6 +258,7 @@
 
       <div id="tools-view" class="hidden" role="tabpanel">
 
+        <div id="tools-export-section">
         <div class="tools-section">
           <h3 class="tools-section__heading">Motions &amp; Decisions Export</h3>
           <p class="field-hint" style="margin-bottom:1rem">
@@ -302,7 +282,9 @@
             <button id="export-csv-btn"  class="btn-secondary">Download .csv</button>
           </div>
         </div>
+        </div><!-- /tools-export-section -->
 
+        <div id="tools-vote-section">
         <div class="tools-section">
           <h3 class="tools-section__heading">Vote Calculator</h3>
 
@@ -372,6 +354,7 @@
             under your governing documents or applicable legislation.
           </p>
         </div>
+        </div><!-- /tools-vote-section -->
 
       </div>
 
@@ -556,6 +539,9 @@
       <!-- Alterations view -->
       <div id="alterations-view" class="hidden" role="tabpanel">
 
+        <!-- Draft section: shown for Documents → Generate Auth Request -->
+        <div id="alt-draft-section">
+
         <!-- New request drafting form -->
         <div class="tools-section">
           <h3 class="tools-section__heading">New Alteration Request</h3>
@@ -600,6 +586,11 @@
             <button id="alt-discard-btn" class="btn-ghost">Discard draft</button>
           </div>
         </div>
+
+        </div><!-- /alt-draft-section -->
+
+        <!-- Review section: shown for Work To Do → Alteration Requests -->
+        <div id="alt-review-section">
 
         <!-- Registry -->
         <div class="tools-section">
@@ -692,6 +683,8 @@
             <p id="alt-approval-error" class="error hidden"></p>
           </div>
         </div>
+
+        </div><!-- /alt-review-section -->
 
       </div>
 

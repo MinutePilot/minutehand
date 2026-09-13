@@ -87,7 +87,6 @@ const formerSection       = document.getElementById('former-section');
 const toggleFormerBtn     = document.getElementById('toggle-former-btn');
 const formerCountEl       = document.getElementById('former-count');
 const formerList          = document.getElementById('former-list');
-const searchView          = document.getElementById('search-view');
 const searchInput         = document.getElementById('search-input');
 const searchStatus        = document.getElementById('search-status');
 const searchResults       = document.getElementById('search-results');
@@ -153,6 +152,12 @@ const altSignerSelect        = document.getElementById('alt-signer-select');
 const altGenerateApprovalBtn = document.getElementById('alt-generate-approval-btn');
 const altCancelApprovalBtn   = document.getElementById('alt-cancel-approval-btn');
 const altApprovalError       = document.getElementById('alt-approval-error');
+
+const searchResultsPanel  = document.getElementById('search-results-panel');
+const altDraftSection     = document.getElementById('alt-draft-section');
+const altReviewSection    = document.getElementById('alt-review-section');
+const toolsExportSection  = document.getElementById('tools-export-section');
+const toolsVoteSection    = document.getElementById('tools-vote-section');
 
 // ── Auth + init ───────────────────────────────────────────────────────────────
 
@@ -327,40 +332,181 @@ function renderMotions() {
   }).join('');
 }
 
-// ── Tab switching ─────────────────────────────────────────────────────────────
+// ── Two-tier navigation ───────────────────────────────────────────────────────
 
-document.querySelectorAll('.board-tab').forEach((tab) => {
-  tab.addEventListener('click', async () => {
-    document.querySelectorAll('.board-tab').forEach((t) => {
-      t.classList.remove('board-tab--active');
-      t.setAttribute('aria-selected', 'false');
-    });
-    tab.classList.add('board-tab--active');
-    tab.setAttribute('aria-selected', 'true');
+const CAT_SUBS = {
+  overview:  [],
+  meetings:  [
+    { id: 'portal',  label: 'Publish & Portal' },
+    { id: 'agenda',  label: 'Next Agenda' },
+  ],
+  work: [
+    { id: 'actions',    label: 'Action Items' },
+    { id: 'alt-review', label: 'Alteration Requests' },
+  ],
+  documents: [
+    { id: 'library',     label: 'Library' },
+    { id: 'templates',   label: 'Generate Templates' },
+    { id: 'alt-request', label: 'Generate Auth Request' },
+  ],
+  tools: [
+    { id: 'motions',    label: 'Motions & Decisions' },
+    { id: 'calculator', label: 'Vote Calculator' },
+    { id: 'export',     label: 'Annual Export' },
+  ],
+  members: [],
+};
 
-    const active = tab.dataset.tab;
-    overviewView.classList.toggle('hidden',    active !== 'overview');
-    motionsView.classList.toggle('hidden',     active !== 'motions');
-    actionsView.classList.toggle('hidden',     active !== 'actions');
-    agendaView.classList.toggle('hidden',      active !== 'agenda');
-    searchView.classList.toggle('hidden',      active !== 'search');
-    minutesView.classList.toggle('hidden',     active !== 'minutes');
-    toolsView.classList.toggle('hidden',       active !== 'tools');
-    membersView.classList.toggle('hidden',     active !== 'members');
-    documentsView.classList.toggle('hidden',   active !== 'documents');
-    templatesView.classList.toggle('hidden',   active !== 'templates');
-    alterationsView.classList.toggle('hidden', active !== 'alterations');
-    if (active === 'agenda')                               renderAgenda();
-    if (active === 'search')                               searchInput.focus();
-    if (active === 'tools')                                populateExportYears();
-    if (active === 'members'     && !membersLoaded)        loadMembers();
-    if (active === 'documents'   && !documentsLoaded)      loadDocuments();
-    if (active === 'alterations' && !alterationsLoaded)    loadAlterations();
-    if (active === 'templates') {
-      if (!membersLoaded) await loadMembers();
-      renderTemplateForm(activeTemplate);
-    }
+// Map old tab-link names to new category + sub
+const TAB_LINK_MAP = {
+  'overview':    { cat: 'overview',   sub: null          },
+  'actions':     { cat: 'work',       sub: 'actions'     },
+  'minutes':     { cat: 'meetings',   sub: 'portal'      },
+  'agenda':      { cat: 'meetings',   sub: 'agenda'      },
+  'documents':   { cat: 'documents',  sub: 'library'     },
+  'motions':     { cat: 'tools',      sub: 'motions'     },
+  'members':     { cat: 'members',    sub: null          },
+  'tools':       { cat: 'tools',      sub: 'motions'     },
+  'templates':   { cat: 'documents',  sub: 'templates'   },
+  'alterations': { cat: 'work',       sub: 'alt-review'  },
+};
+
+let activeCat    = 'overview';
+let activeSubTab = null;
+const catLastSub = {};  // remembers last active sub per category
+
+const allContentViews = [
+  overviewView, motionsView, actionsView, agendaView,
+  minutesView, toolsView, membersView, documentsView,
+  templatesView, alterationsView,
+];
+
+function hideAllContent() {
+  allContentViews.forEach((v) => v.classList.add('hidden'));
+}
+
+async function activateContent(cat, sub) {
+  hideAllContent();
+  searchResultsPanel.classList.add('hidden');
+
+  // Reset section visibility to defaults before showing
+  altDraftSection.classList.remove('hidden');
+  altReviewSection.classList.remove('hidden');
+  toolsExportSection.classList.remove('hidden');
+  toolsVoteSection.classList.remove('hidden');
+
+  switch (cat) {
+    case 'overview':
+      overviewView.classList.remove('hidden');
+      break;
+
+    case 'meetings':
+      if (sub === 'portal') {
+        minutesView.classList.remove('hidden');
+      } else if (sub === 'agenda') {
+        agendaView.classList.remove('hidden');
+        renderAgenda();
+      }
+      break;
+
+    case 'work':
+      if (sub === 'actions') {
+        actionsView.classList.remove('hidden');
+      } else if (sub === 'alt-review') {
+        alterationsView.classList.remove('hidden');
+        altDraftSection.classList.add('hidden');
+        if (!alterationsLoaded) loadAlterations();
+      }
+      break;
+
+    case 'documents':
+      if (sub === 'library') {
+        documentsView.classList.remove('hidden');
+        if (!documentsLoaded) loadDocuments();
+      } else if (sub === 'templates') {
+        templatesView.classList.remove('hidden');
+        if (!membersLoaded) await loadMembers();
+        renderTemplateForm(activeTemplate);
+      } else if (sub === 'alt-request') {
+        alterationsView.classList.remove('hidden');
+        altReviewSection.classList.add('hidden');
+        if (!alterationsLoaded) loadAlterations();
+      }
+      break;
+
+    case 'tools':
+      if (sub === 'motions') {
+        motionsView.classList.remove('hidden');
+      } else if (sub === 'calculator') {
+        toolsView.classList.remove('hidden');
+        toolsExportSection.classList.add('hidden');
+      } else if (sub === 'export') {
+        toolsView.classList.remove('hidden');
+        toolsVoteSection.classList.add('hidden');
+        populateExportYears();
+      }
+      break;
+
+    case 'members':
+      membersView.classList.remove('hidden');
+      if (!membersLoaded) loadMembers();
+      break;
+  }
+}
+
+function renderSubNav(cat, activeSub) {
+  const boardSubnav = document.getElementById('board-subnav');
+  const subs = CAT_SUBS[cat] ?? [];
+  if (subs.length === 0) {
+    boardSubnav.classList.add('hidden');
+    return;
+  }
+  boardSubnav.innerHTML = subs.map((s) =>
+    `<button class="board-subcat${s.id === activeSub ? ' board-subcat--active' : ''}"
+             data-cat="${cat}" data-sub="${s.id}"
+             role="tab" aria-selected="${s.id === activeSub}">${s.label}</button>`
+  ).join('');
+  boardSubnav.classList.remove('hidden');
+}
+
+async function switchToCategory(cat, forceSub) {
+  document.querySelectorAll('.board-cat').forEach((b) => {
+    const isActive = b.dataset.cat === cat;
+    b.classList.toggle('board-cat--active', isActive);
+    b.setAttribute('aria-selected', String(isActive));
   });
+
+  activeCat = cat;
+  const subs  = CAT_SUBS[cat] ?? [];
+  const sub   = forceSub ?? catLastSub[cat] ?? (subs.length > 0 ? subs[0].id : null);
+  activeSubTab = sub;
+  if (sub) catLastSub[cat] = sub;
+
+  renderSubNav(cat, sub);
+  await activateContent(cat, sub);
+}
+
+async function switchToSubTab(cat, sub) {
+  document.querySelectorAll('.board-subcat').forEach((b) => {
+    const isActive = b.dataset.sub === sub;
+    b.classList.toggle('board-subcat--active', isActive);
+    b.setAttribute('aria-selected', String(isActive));
+  });
+
+  activeSubTab   = sub;
+  catLastSub[cat] = sub;
+  await activateContent(cat, sub);
+}
+
+// Primary category clicks
+document.querySelectorAll('.board-cat').forEach((btn) => {
+  btn.addEventListener('click', () => switchToCategory(btn.dataset.cat));
+});
+
+// Sub-tab clicks (delegated — sub-nav is dynamically rendered)
+document.getElementById('board-subnav').addEventListener('click', (e) => {
+  const btn = e.target.closest('.board-subcat');
+  if (btn) switchToSubTab(btn.dataset.cat, btn.dataset.sub);
 });
 
 // ── Filter event listeners ────────────────────────────────────────────────────
@@ -479,13 +625,12 @@ function renderOverview({ published, draft, docCount }) {
   }
 }
 
-// Tab links inside overview cards
+// Tab links inside overview cards and other panels
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-tab-link]');
   if (!btn) return;
-  const target = btn.dataset.tabLink;
-  const tabEl = document.querySelector(`.board-tab[data-tab="${target}"]`);
-  if (tabEl) tabEl.click();
+  const dest = TAB_LINK_MAP[btn.dataset.tabLink];
+  if (dest) switchToCategory(dest.cat, dest.sub);
 });
 
 function applyActionFilters() {
@@ -849,10 +994,14 @@ searchInput.addEventListener('input', () => {
   if (!q) {
     searchStatus.textContent = '';
     searchResults.innerHTML  = '';
+    searchResultsPanel.classList.add('hidden');
+    activateContent(activeCat, activeSubTab);
     return;
   }
   searchStatus.textContent = 'Searching…';
   searchResults.innerHTML  = '';
+  hideAllContent();
+  searchResultsPanel.classList.remove('hidden');
   searchDebounce = setTimeout(() => runSearch(q), 350);
 });
 
@@ -2608,7 +2757,7 @@ function renderAlterations() {
     altList.innerHTML = `
       <div class="registry-empty">
         <p>No alteration requests yet.</p>
-        <p class="field-hint">Use the form above to draft the first request.</p>
+        <p class="field-hint">Go to Documents → Generate Auth Request to draft the first request.</p>
       </div>`;
     return;
   }
@@ -2774,6 +2923,8 @@ ${paras}
 <h2>Owner Acknowledgment</h2>
 <p>By signing below, the owner acknowledges that this request requires Strata Council approval before any work commences, and that proceeding without approval may result in a requirement to restore the strata lot and/or common property at the owner's expense.</p>
 <div class="sig">
+  <p>&nbsp;</p>
+  <p>&nbsp;</p>
   <p>Owner Signature: &nbsp;_____________________________&nbsp;&nbsp;&nbsp; Date: _______________</p>
   <p>Printed Name: ${escHtml(ownerName)}</p>
   <p>Strata Lot: ${escHtml(strataLot)}</p>
