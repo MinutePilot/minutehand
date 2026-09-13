@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://unpkg.com/html-docx-js@0.3.1/dist/html-docx.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
@@ -67,7 +68,14 @@
                    autocomplete="off" autocorrect="off" spellcheck="false">
             <span id="search-status" class="search-status"></span>
           </div>
-          <a href="/app.html" class="btn-ghost">← Generate Minutes</a>
+          <div class="board-account-bar" id="board-account-bar">
+            <span id="board-credits" class="credits-badge"></span>
+            <a href="/app.html?buy=credits" class="btn-link" id="board-buy-credits-link">Buy credits</a>
+            <span class="account-sep">·</span>
+            <span id="board-user-email" class="account-email"></span>
+            <span class="account-sep">·</span>
+            <button id="board-signout-btn" class="btn-link">Sign out</button>
+          </div>
         </div>
       </div>
 
@@ -688,7 +696,147 @@
 
       </div>
 
-    </div>
+      <!-- Generate Minutes view ─────────────────────────────────────────────── -->
+      <div id="generate-view" class="hidden" role="tabpanel">
+
+        <!-- Form state -->
+        <div id="gen-form">
+        <div class="tools-section">
+          <h3 class="tools-section__heading">Generate Minutes</h3>
+
+          <div class="form-group">
+            <label for="gen-template">Meeting type</label>
+            <select id="gen-template">
+              <option value="STRATA">Strata Council (BC)</option>
+              <option value="HOA_GENERIC">HOA Board</option>
+              <option value="NONPROFIT_BOARD">Nonprofit Board</option>
+              <option value="TEAM_INFORMAL">Team / Informal Meeting</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Upload audio recording <span class="optional">(.mp3, .m4a, .wav)</span></label>
+            <div id="gen-audio-drop" class="drop-zone">
+              <input type="file" id="gen-audio-input" accept=".mp3,.m4a,.wav,.mp4,.ogg,.webm" hidden>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m0-9L7 6m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13v2a2 2 0 002 2h10a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <span>Drag audio here or <button type="button" id="gen-audio-browse" class="btn-link">browse</button></span>
+            </div>
+            <p id="gen-audio-status" class="file-status hidden"></p>
+            <div id="gen-upload-progress" class="upload-progress-wrap hidden">
+              <div class="upload-bar-track"><div id="gen-upload-bar" class="upload-bar"></div></div>
+              <span id="gen-upload-label" class="upload-label">Uploading…</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Upload .docx notes <span class="optional">(optional — up to 5 files)</span></label>
+            <div id="gen-docx-drop" class="drop-zone">
+              <input type="file" id="gen-docx-input" accept=".docx" multiple hidden>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m0-9L7 6m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13v2a2 2 0 002 2h10a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <span>Drag .docx here or <button type="button" id="gen-docx-browse" class="btn-link">browse</button></span>
+            </div>
+            <p id="gen-docx-status" class="file-status hidden"></p>
+          </div>
+
+          <div class="form-group">
+            <label for="gen-notes" id="gen-notes-label">Meeting notes or transcript</label>
+            <textarea id="gen-notes" rows="12"
+              placeholder="Paste your meeting notes, rough transcript, or any combination of both here…"
+              spellcheck="false"></textarea>
+            <p class="field-hint" id="gen-notes-hint">Include date, location, attendees, and any motions made if you have them.</p>
+          </div>
+
+          <!-- Attendee pre-selection — Board Plan + roster only -->
+          <div id="gen-attendee-section" class="hidden">
+            <div class="attendee-section__header">
+              <label class="attendee-section__label">Who attended?</label>
+              <p class="field-hint">Active members are pre-selected. Uncheck anyone who was absent.</p>
+            </div>
+            <div id="gen-attendee-list" class="attendee-checkbox-list"></div>
+            <div class="attendee-guest-row">
+              <input type="text" id="gen-guest-input"
+                     placeholder="Add a guest or unlisted attendee…" autocomplete="off">
+              <button type="button" id="gen-guest-add" class="btn-secondary">Add</button>
+            </div>
+            <ul id="gen-guest-list" class="attendee-guest-list"></ul>
+          </div>
+
+          <div class="form-footer">
+            <button id="gen-btn" class="btn-primary">Generate Minutes</button>
+            <p id="gen-error" class="error hidden"></p>
+          </div>
+        </div>
+        </div><!-- /gen-form -->
+
+        <!-- Speaker confirmation state -->
+        <div id="gen-speaker-section" class="hidden">
+        <div class="tools-section">
+          <h3 class="tools-section__heading">Confirm Speaker Names</h3>
+          <p class="field-hint" style="margin-bottom:1rem">We detected <strong id="gen-speaker-count"></strong> speaker(s). Edit names below — pre-filled where introductions were detected in the first two minutes.</p>
+          <div id="gen-speaker-list" class="speaker-list"></div>
+          <div class="form-footer">
+            <button id="gen-confirm-speakers" class="btn-primary">Generate Minutes</button>
+            <button id="gen-back-to-form" class="btn-ghost">← Back</button>
+            <p id="gen-speaker-error" class="error hidden"></p>
+          </div>
+        </div>
+        </div><!-- /gen-speaker-section -->
+
+        <!-- Result state -->
+        <div id="gen-result-section" class="hidden">
+        <div class="tools-section">
+          <div class="result-header">
+            <h3 class="tools-section__heading" style="margin:0">Meeting Minutes</h3>
+            <div class="result-actions">
+              <button id="gen-download" class="btn-secondary">Download .docx</button>
+              <button id="gen-reset" class="btn-ghost">Start over</button>
+            </div>
+          </div>
+          <div id="gen-preview" class="minutes-preview" style="margin-top:1rem"></div>
+        </div>
+        </div><!-- /gen-result-section -->
+
+      </div><!-- /generate-view -->
+
+      <!-- Plan-gate view — shown for locked categories (non-subscribers) ───── -->
+      <div id="plan-gate-view" class="hidden" role="tabpanel">
+        <div class="tools-section" style="text-align:center;padding:2rem 1rem">
+          <p style="font-size:1rem;margin-bottom:1rem" id="plan-gate-msg">This feature requires the Board Plan.</p>
+          <a href="/app.html?plan=board_plan" class="btn-primary">Get Board Plan — $75 CAD/year</a>
+          <p class="field-hint" style="margin-top:0.75rem">Includes 12 meeting credits + full governance suite. 30-day full refund.</p>
+        </div>
+      </div>
+
+      <!-- Org-setup view — shown when Board Plan subscriber has no org yet ─── -->
+      <div id="org-setup-view" class="hidden" role="tabpanel">
+        <div class="tools-section">
+          <h3 class="tools-section__heading">Set Up Your Organization</h3>
+          <p class="field-hint" style="margin-bottom:1rem">This is the anchor record for all your governance data. You only do this once.</p>
+          <div class="member-form__grid">
+            <div class="form-group">
+              <label for="board-org-name">Organization name <span class="required-mark">*</span></label>
+              <input type="text" id="board-org-name"
+                     placeholder="e.g. KAS 1117 Strata Corporation" autocomplete="organization">
+              <p class="field-hint">Use the legal name as it appears on your governing documents.</p>
+            </div>
+            <div class="form-group">
+              <label for="board-org-type">Organization type</label>
+              <select id="board-org-type">
+                <option value="STRATA">Strata Council (BC)</option>
+                <option value="HOA_GENERIC">HOA Board</option>
+                <option value="NONPROFIT_BOARD">Nonprofit Board</option>
+                <option value="TEAM_INFORMAL">Team / Informal Meeting</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-footer">
+            <button id="board-org-save" class="btn-primary">Save &amp; Continue</button>
+          </div>
+          <p id="board-org-error" class="error hidden"></p>
+        </div>
+      </div>
+
+    </div><!-- /board-view -->
 
   </main>
 
@@ -715,7 +863,7 @@
         <p class="site-footer__copy">&copy; 2026 TOP SPIDER CANADA. All rights reserved.</p>
       </div>
       <nav class="site-footer__nav" aria-label="Footer navigation">
-        <a href="/app.html">Open App</a>
+        <a href="/board.html">Dashboard</a>
         <a href="/#pricing">Pricing</a>
         <a href="/refund.html">Refund Policy</a>
         <a href="/terms.html">Terms</a>

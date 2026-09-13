@@ -45,6 +45,18 @@ let overviewLoaded     = false;
 
 let activeTemplate = 'agm';
 
+let hasBoardPlan        = false;
+let creditBalance       = null;
+let rosterMembers       = [];
+let selectedGuests      = [];
+let genAudioFile        = null;
+let genPendingTranscript = '';
+let genPendingSpeakers   = [];
+let genCurrentMarkdown   = '';
+let genCurrentMeetingId  = null;
+let genOrgPendingCat     = null;
+let genOrgPendingSub     = null;
+
 // ── Element refs ──────────────────────────────────────────────────────────────
 
 const loadingView    = document.getElementById('loading-view');
@@ -168,6 +180,52 @@ const altReviewSection    = document.getElementById('alt-review-section');
 const toolsExportSection  = document.getElementById('tools-export-section');
 const toolsVoteSection    = document.getElementById('tools-vote-section');
 
+// Generate Minutes view refs
+const generateView          = document.getElementById('generate-view');
+const genForm               = document.getElementById('gen-form');
+const genSpeakerSection     = document.getElementById('gen-speaker-section');
+const genResultSection      = document.getElementById('gen-result-section');
+const genTemplate           = document.getElementById('gen-template');
+const genAudioDrop          = document.getElementById('gen-audio-drop');
+const genAudioInput         = document.getElementById('gen-audio-input');
+const genAudioBrowse        = document.getElementById('gen-audio-browse');
+const genAudioStatus        = document.getElementById('gen-audio-status');
+const genUploadProgressWrap = document.getElementById('gen-upload-progress');
+const genUploadBar          = document.getElementById('gen-upload-bar');
+const genUploadLabel        = document.getElementById('gen-upload-label');
+const genDocxDrop           = document.getElementById('gen-docx-drop');
+const genDocxInput          = document.getElementById('gen-docx-input');
+const genDocxBrowse         = document.getElementById('gen-docx-browse');
+const genDocxStatus         = document.getElementById('gen-docx-status');
+const genNotesEl            = document.getElementById('gen-notes');
+const genNotesLabel         = document.getElementById('gen-notes-label');
+const genNotesHint          = document.getElementById('gen-notes-hint');
+const genAttendeeSect       = document.getElementById('gen-attendee-section');
+const genAttendeeList       = document.getElementById('gen-attendee-list');
+const genGuestInput         = document.getElementById('gen-guest-input');
+const genGuestAdd           = document.getElementById('gen-guest-add');
+const genGuestList          = document.getElementById('gen-guest-list');
+const genBtn                = document.getElementById('gen-btn');
+const genError              = document.getElementById('gen-error');
+const genSpeakerCount       = document.getElementById('gen-speaker-count');
+const genSpeakerListEl      = document.getElementById('gen-speaker-list');
+const genConfirmSpeakers    = document.getElementById('gen-confirm-speakers');
+const genBackToForm         = document.getElementById('gen-back-to-form');
+const genSpeakerError       = document.getElementById('gen-speaker-error');
+const genPreview            = document.getElementById('gen-preview');
+const genDownload           = document.getElementById('gen-download');
+const genReset              = document.getElementById('gen-reset');
+const planGateView          = document.getElementById('plan-gate-view');
+const planGateMsg           = document.getElementById('plan-gate-msg');
+const orgSetupView          = document.getElementById('org-setup-view');
+const boardOrgName          = document.getElementById('board-org-name');
+const boardOrgType          = document.getElementById('board-org-type');
+const boardOrgSave          = document.getElementById('board-org-save');
+const boardOrgError         = document.getElementById('board-org-error');
+const boardCredits          = document.getElementById('board-credits');
+const boardUserEmail        = document.getElementById('board-user-email');
+const boardSignoutBtn       = document.getElementById('board-signout-btn');
+
 // ── Auth + init ───────────────────────────────────────────────────────────────
 
 supabaseClient.auth.onAuthStateChange(async (_event, session) => {
@@ -181,66 +239,521 @@ async function init() {
     return;
   }
 
+  // Load credits for all authenticated users
+  await loadCredits();
+
+  // Load plan status
   const { data: sub } = await supabaseClient
     .from('subscriptions')
     .select('board_plan_active, expires_at')
     .eq('user_id', currentUser.id)
     .maybeSingle();
-
-  const active = sub?.board_plan_active === true &&
+  hasBoardPlan = sub?.board_plan_active === true &&
                  (!sub.expires_at || new Date(sub.expires_at) > new Date());
 
-  if (!active) {
-    showAccess('no-plan');
-    return;
+  // Load org and roster if plan subscriber
+  if (hasBoardPlan) {
+    const { data: org } = await supabaseClient
+      .from('organizations')
+      .select('id, name, org_type, portal_token')
+      .eq('owner_id', currentUser.id)
+      .maybeSingle();
+    userOrg = org ?? null;
+    if (userOrg) {
+      orgNameHeading.textContent = userOrg.name;
+      orgTypeLabel.textContent   = ORG_TYPE_LABELS[userOrg.org_type] ?? userOrg.org_type;
+      renderPortalLink();
+      const { data: members } = await supabaseClient
+        .from('roster')
+        .select('id, name, role')
+        .eq('org_id', userOrg.id)
+        .eq('status', 'active')
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true });
+      rosterMembers = members ?? [];
+    }
   }
 
-  const { data: org } = await supabaseClient
-    .from('organizations')
-    .select('id, name, org_type, portal_token')
-    .eq('owner_id', currentUser.id)
-    .maybeSingle();
+  // Update account bar
+  if (boardUserEmail) boardUserEmail.textContent = currentUser.email;
 
-  if (!org) {
-    showAccess('no-org');
-    return;
-  }
-
-  userOrg = org;
+  // Show board view for all authenticated users
   loadingView.classList.add('hidden');
   boardView.classList.remove('hidden');
-  orgNameHeading.textContent = org.name;
-  orgTypeLabel.textContent   = ORG_TYPE_LABELS[org.org_type] ?? org.org_type;
-  renderPortalLink();
 
-  await Promise.all([loadMotions(), loadActionItems()]);
-  loadOverview();
-  loadMeetingsList();
+  // Pre-render attendee section (if roster available)
+  renderGenAttendeeSection();
+
+  // Pre-load board-plan data if plan + org
+  if (hasBoardPlan && userOrg) {
+    await Promise.all([loadMotions(), loadActionItems()]);
+    loadOverview();
+    loadMeetingsList();
+  }
+
+  // Default landing: Meetings → Generate Minutes
+  await switchToCategory('meetings', 'generate');
 }
 
 function showAccess(type) {
   loadingView.classList.add('hidden');
   accessSection.classList.remove('hidden');
+  accessMsg.textContent   = 'Sign in to access your MinuteHand dashboard.';
+  accessActions.innerHTML = `<a href="/app.html" class="btn-primary">Sign in</a>`;
+}
 
-  if (type === 'not-signed-in') {
-    accessMsg.textContent   = 'Sign in to access your Governance Records.';
-    accessActions.innerHTML = `<a href="/app.html" class="btn-primary">Sign in</a>`;
+// ── Credits ───────────────────────────────────────────────────────────────────
 
-  } else if (type === 'no-plan') {
-    accessMsg.innerHTML =
-      'Track every motion, action item, and governance document across all your meetings — ' +
-      'without re-entering data each time. Included in the ' +
-      '<strong>Board Plan</strong> ($75 CAD/year, 30-day refund).';
-    accessUpsell?.classList.remove('hidden');
-    accessActions.innerHTML =
-      `<a href="/app.html?plan=board_plan" class="btn-primary">Get Board Plan — $75 CAD/year</a>` +
-      `<a href="/app.html" class="btn-ghost">← Back to app</a>`;
+async function loadCredits() {
+  if (!currentUser) return;
+  const { data } = await supabaseClient
+    .from('credits')
+    .select('balance')
+    .eq('user_id', currentUser.id)
+    .single();
+  creditBalance = data?.balance ?? 0;
+  renderBoardCreditsDisplay();
+}
 
-  } else if (type === 'no-org') {
-    accessMsg.textContent   = 'Set up your organization in the app to start using Governance Records.';
-    accessActions.innerHTML = `<a href="/app.html" class="btn-primary">Go to app</a>`;
+function renderBoardCreditsDisplay() {
+  if (!boardCredits) return;
+  boardCredits.textContent = creditBalance === 1 ? '1 credit' : `${creditBalance} credits`;
+  boardCredits.className = 'credits-badge' + (creditBalance === 0 ? ' credits-badge--empty' : '');
+}
+
+// ── Sign-out ──────────────────────────────────────────────────────────────────
+
+boardSignoutBtn?.addEventListener('click', async () => {
+  await supabaseClient.auth.signOut();
+  window.location.reload();
+});
+
+// ── Org setup (inline for Board Plan subscribers) ─────────────────────────────
+
+boardOrgSave?.addEventListener('click', async () => {
+  const name = boardOrgName?.value.trim();
+  if (!name) {
+    if (boardOrgError) { boardOrgError.textContent = 'Please enter your organization name.'; boardOrgError.classList.remove('hidden'); }
+    return;
+  }
+  boardOrgError?.classList.add('hidden');
+  boardOrgSave.disabled = true;
+  boardOrgSave.textContent = 'Saving…';
+
+  const { data, error } = await supabaseClient
+    .from('organizations')
+    .insert({ owner_id: currentUser.id, name, org_type: boardOrgType?.value ?? 'STRATA' })
+    .select('id, name, org_type, portal_token')
+    .single();
+
+  boardOrgSave.disabled = false;
+  boardOrgSave.textContent = 'Save & Continue';
+
+  if (error) {
+    if (boardOrgError) { boardOrgError.textContent = error.message || 'Could not save. Please try again.'; boardOrgError.classList.remove('hidden'); }
+    return;
+  }
+
+  userOrg = data;
+  orgNameHeading.textContent = userOrg.name;
+  orgTypeLabel.textContent   = ORG_TYPE_LABELS[userOrg.org_type] ?? userOrg.org_type;
+  renderPortalLink();
+  rosterMembers = [];
+
+  // Pre-load board plan data now that org exists
+  await Promise.all([loadMotions(), loadActionItems()]);
+  loadOverview();
+  loadMeetingsList();
+
+  // Go to wherever the user was trying to get to, or fall back to overview
+  const pendingCat = genOrgPendingCat ?? 'overview';
+  const pendingSub = genOrgPendingSub ?? null;
+  genOrgPendingCat = null;
+  genOrgPendingSub = null;
+  await switchToCategory(pendingCat, pendingSub);
+});
+
+// ── Generate Minutes: attendee section ────────────────────────────────────────
+
+function renderGenAttendeeSection() {
+  if (!genAttendeeSect) return;
+  if (!hasBoardPlan || rosterMembers.length === 0) {
+    genAttendeeSect.classList.add('hidden');
+    return;
+  }
+  genAttendeeList.innerHTML = rosterMembers.map((m, i) =>
+    `<label class="attendee-cb-label">` +
+    `<input type="checkbox" id="gen-cb-${i}" checked>` +
+    `<span class="attendee-cb-name">${escHtml(m.name)}</span>` +
+    `<span class="attendee-cb-role">${escHtml(m.role)}</span>` +
+    `</label>`
+  ).join('');
+  selectedGuests = [];
+  renderGenGuestList();
+  genAttendeeSect.classList.remove('hidden');
+}
+
+function renderGenGuestList() {
+  if (!genGuestList) return;
+  genGuestList.innerHTML = selectedGuests.map((name, i) =>
+    `<li>${escHtml(name)}` +
+    `<button class="btn-link gen-guest-remove" data-index="${i}" aria-label="Remove">&#x2715;</button>` +
+    `</li>`
+  ).join('');
+}
+
+function addGenGuest() {
+  const name = genGuestInput?.value.trim();
+  if (!name) return;
+  selectedGuests.push(name);
+  if (genGuestInput) genGuestInput.value = '';
+  renderGenGuestList();
+}
+
+function getGenSelectedAttendees() {
+  if (!hasBoardPlan || rosterMembers.length === 0) return null;
+  const members = rosterMembers
+    .filter((_, i) => document.getElementById(`gen-cb-${i}`)?.checked)
+    .map((m) => ({ name: m.name, role: m.role, is_guest: false }));
+  const guests = selectedGuests.map((name) => ({ name, role: null, is_guest: true }));
+  const all = [...members, ...guests];
+  return all.length > 0 ? all : null;
+}
+
+genGuestAdd?.addEventListener('click', addGenGuest);
+genGuestInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addGenGuest(); } });
+genGuestList?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.gen-guest-remove');
+  if (btn) { selectedGuests.splice(Number(btn.dataset.index), 1); renderGenGuestList(); }
+});
+
+// ── Generate Minutes: .docx upload ────────────────────────────────────────────
+
+genDocxBrowse?.addEventListener('click', () => genDocxInput?.click());
+genDocxDrop?.addEventListener('click', (e) => { if (e.target !== genDocxBrowse) genDocxInput?.click(); });
+genDocxInput?.addEventListener('change', () => { if (genDocxInput.files.length) loadGenDocxFiles(genDocxInput.files); });
+genDocxDrop?.addEventListener('dragover',  (e) => { e.preventDefault(); genDocxDrop.classList.add('drag-over'); });
+genDocxDrop?.addEventListener('dragleave', () => genDocxDrop.classList.remove('drag-over'));
+genDocxDrop?.addEventListener('drop', (e) => {
+  e.preventDefault();
+  genDocxDrop.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) loadGenDocxFiles(e.dataTransfer.files);
+});
+
+async function loadGenDocxFiles(files) {
+  const docxFiles = Array.from(files).filter((f) => f.name.endsWith('.docx'));
+  if (docxFiles.length === 0) { genSetFileStatus(genDocxStatus, 'Only .docx files are supported.', 'error'); return; }
+  if (docxFiles.length > 5)   { genSetFileStatus(genDocxStatus, 'Maximum 5 files at a time.', 'error'); return; }
+  const plural = docxFiles.length > 1;
+  genSetFileStatus(genDocxStatus, `Reading ${plural ? docxFiles.length + ' files' : docxFiles[0].name}…`, '');
+  try {
+    const texts = await Promise.all(docxFiles.map(async (file) => {
+      const buffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+      return result.value.trim();
+    }));
+    if (genNotesEl) genNotesEl.value = texts.join('\n\n');
+    const label = plural
+      ? `✓ ${docxFiles.length} files imported: ${docxFiles.map((f) => f.name).join(', ')}`
+      : `✓ ${docxFiles[0].name} imported`;
+    genSetFileStatus(genDocxStatus, label, 'success');
+  } catch {
+    genSetFileStatus(genDocxStatus, 'Could not read one or more files. Are they valid .docx files?', 'error');
   }
 }
+
+// ── Generate Minutes: audio upload ────────────────────────────────────────────
+
+const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
+
+genAudioBrowse?.addEventListener('click', () => genAudioInput?.click());
+genAudioDrop?.addEventListener('click', (e) => { if (e.target !== genAudioBrowse) genAudioInput?.click(); });
+genAudioInput?.addEventListener('change', () => { if (genAudioInput.files[0]) genSelectAudioFile(genAudioInput.files[0]); });
+genAudioDrop?.addEventListener('dragover',  (e) => { e.preventDefault(); genAudioDrop.classList.add('drag-over'); });
+genAudioDrop?.addEventListener('dragleave', () => genAudioDrop.classList.remove('drag-over'));
+genAudioDrop?.addEventListener('drop', (e) => {
+  e.preventDefault();
+  genAudioDrop.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) genSelectAudioFile(e.dataTransfer.files[0]);
+});
+
+function genSelectAudioFile(file) {
+  const allowed = ['audio/mpeg','audio/mp4','audio/wav','audio/ogg','audio/webm','video/mp4'];
+  const byExt   = /\.(mp3|m4a|wav|ogg|webm|mp4)$/i.test(file.name);
+  if (!allowed.includes(file.type) && !byExt) {
+    genSetFileStatus(genAudioStatus, 'Unsupported file type. Use .mp3, .m4a, or .wav.', 'error'); return;
+  }
+  if (file.size > MAX_AUDIO_BYTES) {
+    const mb = (file.size / 1024 / 1024).toFixed(0);
+    genSetFileStatus(genAudioStatus, `File is ${mb} MB — max is 50 MB. Re-export at a lower bitrate.`, 'error'); return;
+  }
+  genAudioFile = file;
+  const mb = (file.size / 1024 / 1024).toFixed(1);
+  genSetFileStatus(genAudioStatus, `✓ ${file.name} (${mb} MB) — ready`, 'success');
+  if (genNotesLabel) genNotesLabel.textContent = 'Additional notes or agenda (optional)';
+  if (genNotesHint)  genNotesHint.textContent  = 'Anything not captured in the recording.';
+  if (genNotesEl)    genNotesEl.placeholder    = 'Paste any supplementary notes or agenda here… (optional)';
+}
+
+// ── Generate Minutes: main flow ───────────────────────────────────────────────
+
+genBtn?.addEventListener('click', async () => {
+  const notes = genNotesEl?.value.trim() ?? '';
+  if (!genAudioFile && !notes) {
+    genShowError('Please add meeting notes or upload an audio recording.'); return;
+  }
+  genHideError();
+  if (genAudioFile) {
+    await genRunAudioFlow(notes);
+  } else {
+    await genRunGenerateFlow(notes);
+  }
+});
+
+async function genRunAudioFlow(supplementaryNotes) {
+  let filename;
+  try {
+    genSetLoadingBtn(true, 'Uploading…');
+    genUploadProgressWrap?.classList.remove('hidden');
+    filename = await genUploadAudioToStorage(genAudioFile);
+    genUploadProgressWrap?.classList.add('hidden');
+  } catch (err) {
+    genUploadProgressWrap?.classList.add('hidden');
+    genSetLoadingBtn(false);
+    genShowError(err.message || 'Upload failed. Please try again.');
+    return;
+  }
+  try {
+    genSetLoadingBtn(true, 'Transcribing…');
+    genAddStatusRow('This may take a minute or two for longer recordings…');
+    const audioUrl = `${CONFIG.supabaseUrl}/storage/v1/object/public/audio/${filename}`;
+    const data = await callEdgeFn('transcribe', { audioUrl });
+    genRemoveStatusRow();
+    genPendingTranscript = data.rawTranscript;
+    genPendingSpeakers   = data.speakers;
+    genSpeakerSection.dataset.supplementaryNotes = supplementaryNotes;
+    genShowSpeakerSection(data.speakers);
+  } catch (err) {
+    genRemoveStatusRow();
+    genSetLoadingBtn(false);
+    genShowError(err.message || 'Transcription failed. Please try again.');
+  }
+}
+
+function genShowSpeakerSection(speakers) {
+  genSetLoadingBtn(false);
+  if (genSpeakerCount) genSpeakerCount.textContent = speakers.length;
+  genSpeakerListEl.innerHTML = speakers.map((s) => `
+    <div class="speaker-row">
+      <label for="gspk-${s.id}">${escHtml(s.label)}</label>
+      <input type="text" id="gspk-${s.id}"
+        class="speaker-name-input${s.guessedName ? ' guessed' : ''}"
+        data-speaker-id="${s.id}" data-speaker-label="${escHtml(s.label)}"
+        placeholder="Name (leave blank to keep '${escHtml(s.label)}')"
+        value="${escHtml(s.guessedName ?? '')}">
+    </div>
+  `).join('');
+  generateView.classList.remove('hidden');
+  genForm.classList.add('hidden');
+  genSpeakerSection.classList.remove('hidden');
+  genResultSection.classList.add('hidden');
+}
+
+genConfirmSpeakers?.addEventListener('click', async () => {
+  const namedTranscript = genApplyConfirmedNames(genPendingTranscript);
+  const supplementary   = genSpeakerSection.dataset.supplementaryNotes || '';
+  let combined = `[TRANSCRIPT]\n${namedTranscript}`;
+  if (supplementary) combined += `\n\n[ADDITIONAL NOTES]\n${supplementary}`;
+  showGenForm();
+  await genRunGenerateFlow(combined);
+});
+
+genBackToForm?.addEventListener('click', showGenForm);
+
+function genApplyConfirmedNames(rawTranscript) {
+  let t = rawTranscript;
+  genSpeakerListEl.querySelectorAll('.speaker-name-input').forEach((input) => {
+    const label = input.dataset.speakerLabel;
+    const name  = input.value.trim() || label;
+    t = t.replace(new RegExp(`^${label}:`, 'gm'), `${name}:`);
+  });
+  return t;
+}
+
+async function genRunGenerateFlow(notes) {
+  genSetLoadingBtn(true, 'Generating…');
+  genAddStatusRow('This usually takes 15–30 seconds…');
+  const attendees = getGenSelectedAttendees();
+  try {
+    const data = await callEdgeFn('generate-minutes', {
+      notes,
+      template: genTemplate?.value ?? 'STRATA',
+      ...(attendees ? { attendees } : {}),
+    });
+    genRemoveStatusRow();
+    genCurrentMarkdown  = data.minutes;
+    genCurrentMeetingId = data.meeting_id ?? null;
+    await loadCredits();
+    genPreview.innerHTML = marked.parse(preprocessMarkdown(data.minutes));
+    generateView.classList.remove('hidden');
+    genForm.classList.add('hidden');
+    genSpeakerSection.classList.add('hidden');
+    genResultSection.classList.remove('hidden');
+  } catch (err) {
+    genRemoveStatusRow();
+    genSetLoadingBtn(false);
+    if (err.status === 402) {
+      window.location.href = '/app.html?buy=credits';
+    } else if (err.status === 401) {
+      window.location.href = '/app.html';
+    } else {
+      genShowError(err.message || 'Something went wrong. Please try again.');
+    }
+  }
+}
+
+genDownload?.addEventListener('click', () => {
+  if (!genCurrentMarkdown) return;
+  const fullHtml = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+  body    { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.3; color: #000; margin: 0; }
+  h1      { font-size: 13pt; font-weight: bold; text-align: center; margin: 0 0 2pt; }
+  h2      { font-size: 11pt; font-weight: bold; color: #111; margin: 0 0 1pt; }
+  h3      { font-size: 11pt; font-weight: bold; color: #111; margin: 0 0 5pt; }
+  h4      { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: .04em; color: #000; border-bottom: 1pt solid #888; padding-bottom: 2pt; margin: 12pt 0 4pt; }
+  h5      { font-size: 11pt; font-weight: bold; color: #222; margin: 6pt 0 2pt; }
+  p       { margin: 0 0 5pt; }
+  blockquote { margin: 1pt 0; padding: 0; border: none; color: #555; font-size: 10pt; }
+  hr      { border: none; border-top: 1pt solid #888; margin: 8pt 0; }
+  table   { width: 100%; border-collapse: collapse; margin: 6pt 0; font-size: 10pt; }
+  th      { background: #e8e8e8; font-weight: bold; text-align: left; padding: 4pt 7pt; border: 1pt solid #999; color: #000; }
+  td      { padding: 4pt 7pt; border: 1pt solid #ccc; vertical-align: top; }
+  ul, ol  { margin: 2pt 0 5pt 18pt; }
+  li      { margin-bottom: 2pt; }
+</style></head><body>${marked.parse(preprocessMarkdown(genCurrentMarkdown))}</body></html>`;
+  const blob = htmlDocx.asBlob(fullHtml, { margins: { top: 720, right: 720, bottom: 720, left: 720 } });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: `meeting-minutes-${genToday()}.docx` });
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+genReset?.addEventListener('click', () => {
+  genCurrentMarkdown  = '';
+  genCurrentMeetingId = null;
+  genPendingTranscript = '';
+  genPendingSpeakers   = [];
+  genAudioFile         = null;
+  if (genAudioInput)  genAudioInput.value  = '';
+  if (genDocxInput)   genDocxInput.value   = '';
+  genAudioStatus?.classList.add('hidden');
+  genDocxStatus?.classList.add('hidden');
+  genUploadProgressWrap?.classList.add('hidden');
+  if (genNotesLabel) genNotesLabel.textContent = 'Meeting notes or transcript';
+  if (genNotesHint)  genNotesHint.textContent  = 'Include date, location, attendees, and any motions made if you have them.';
+  if (genNotesEl) {
+    genNotesEl.value = '';
+    genNotesEl.placeholder = 'Paste your meeting notes, rough transcript, or any combination of both here…';
+  }
+  selectedGuests = [];
+  renderGenAttendeeSection();
+  showGenForm();
+});
+
+// ── Audio storage upload ──────────────────────────────────────────────────────
+
+function genUploadAudioToStorage(file) {
+  return new Promise((resolve, reject) => {
+    const ext      = file.name.split('.').pop() || 'mp3';
+    const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const url      = `${CONFIG.supabaseUrl}/storage/v1/object/audio/${filename}`;
+    const xhr      = new XMLHttpRequest();
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round(e.loaded / e.total * 100);
+        if (genUploadBar)   genUploadBar.style.width    = `${pct}%`;
+        if (genUploadLabel) genUploadLabel.textContent  = `Uploading… ${pct}%`;
+      }
+    });
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) { resolve(filename); }
+      else {
+        let msg = `Upload failed (${xhr.status})`;
+        try { msg = JSON.parse(xhr.responseText).message || msg; } catch { /* ignore */ }
+        reject(new Error(msg));
+      }
+    });
+    xhr.addEventListener('error', () => reject(new Error('Upload failed — check your connection.')));
+    xhr.addEventListener('abort', () => reject(new Error('Upload cancelled.')));
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Authorization', `Bearer ${CONFIG.supabaseAnonKey}`);
+    xhr.setRequestHeader('apikey', CONFIG.supabaseAnonKey);
+    xhr.setRequestHeader('x-upsert', 'false');
+    if (file.type) xhr.setRequestHeader('Content-Type', file.type);
+    xhr.send(file);
+  });
+}
+
+// ── Edge function helper (with status + code error props) ─────────────────────
+
+async function callEdgeFn(name, payload) {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  const jwt = session?.access_token ?? CONFIG.supabaseAnonKey;
+  const resp = await fetch(`${CONFIG.supabaseUrl}/functions/v1/${name}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${jwt}`,
+      'apikey': CONFIG.supabaseAnonKey,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) {
+    const err   = await resp.json().catch(() => ({}));
+    const error = new Error(err.error || `Server error (${resp.status})`);
+    error.status = resp.status;
+    error.code   = err.code ?? null;
+    throw error;
+  }
+  return resp.json();
+}
+
+// ── Generate Minutes: UI helpers ──────────────────────────────────────────────
+
+function genSetLoadingBtn(on, label) {
+  if (!genBtn) return;
+  genBtn.disabled    = on;
+  genBtn.textContent = on ? (label || 'Working…') : 'Generate Minutes';
+}
+
+function genAddStatusRow(text) {
+  genRemoveStatusRow();
+  if (!genBtn) return;
+  const row = document.createElement('div');
+  row.id = 'gen-status-row';
+  row.className = 'loading-row';
+  row.innerHTML = `<div class="spinner"></div><span>${text}</span>`;
+  genBtn.insertAdjacentElement('afterend', row);
+}
+
+function genRemoveStatusRow() { document.getElementById('gen-status-row')?.remove(); }
+
+function genSetFileStatus(el, msg, type) {
+  if (!el) return;
+  el.textContent = msg;
+  el.className   = `file-status${type ? ' ' + type : ''}`;
+  el.classList.remove('hidden');
+}
+
+function genShowError(msg) {
+  if (!genError) return;
+  genError.textContent = msg;
+  genError.classList.remove('hidden');
+}
+
+function genHideError() { genError?.classList.add('hidden'); }
+
+function genToday() { return new Date().toISOString().slice(0, 10); }
 
 // ── Load motions ──────────────────────────────────────────────────────────────
 
@@ -346,8 +859,9 @@ function renderMotions() {
 const CAT_SUBS = {
   overview:  [],
   meetings:  [
-    { id: 'portal',  label: 'Publish & Portal' },
-    { id: 'agenda',  label: 'Next Agenda' },
+    { id: 'generate', label: 'Generate Minutes' },
+    { id: 'portal',   label: 'Publish & Portal' },
+    { id: 'agenda',   label: 'Next Agenda' },
   ],
   work: [
     { id: 'actions',    label: 'Action Items' },
@@ -369,6 +883,7 @@ const CAT_SUBS = {
 // Map old tab-link names to new category + sub
 const TAB_LINK_MAP = {
   'overview':    { cat: 'overview',   sub: null          },
+  'generate':    { cat: 'meetings',   sub: 'generate'    },
   'actions':     { cat: 'work',       sub: 'actions'     },
   'minutes':     { cat: 'meetings',   sub: 'portal'      },
   'agenda':      { cat: 'meetings',   sub: 'agenda'      },
@@ -388,6 +903,7 @@ const allContentViews = [
   overviewView, motionsView, actionsView, agendaView,
   minutesView, toolsView, membersView, documentsView,
   templatesView, alterationsView,
+  generateView, planGateView, orgSetupView,
 ];
 
 function hideAllContent() {
@@ -404,13 +920,31 @@ async function activateContent(cat, sub) {
   toolsExportSection.classList.remove('hidden');
   toolsVoteSection.classList.remove('hidden');
 
+  // Generate and Overview are open to all authenticated users
+  const isUngated = cat === 'overview' || (cat === 'meetings' && sub === 'generate');
+
+  if (!isUngated && !hasBoardPlan) {
+    planGateMsg.textContent = getPlanGateMessage(cat);
+    planGateView.classList.remove('hidden');
+    return;
+  }
+
+  if (!isUngated && hasBoardPlan && !userOrg) {
+    genOrgPendingCat = cat;
+    genOrgPendingSub = sub;
+    orgSetupView.classList.remove('hidden');
+    return;
+  }
+
   switch (cat) {
     case 'overview':
       overviewView.classList.remove('hidden');
       break;
 
     case 'meetings':
-      if (sub === 'portal') {
+      if (sub === 'generate') {
+        showGenForm();
+      } else if (sub === 'portal') {
         minutesView.classList.remove('hidden');
       } else if (sub === 'agenda') {
         agendaView.classList.remove('hidden');
@@ -461,6 +995,18 @@ async function activateContent(cat, sub) {
       if (!membersLoaded) loadMembers();
       break;
   }
+}
+
+function getPlanGateMessage(cat) {
+  const labels = { work: 'Work Tracker', documents: 'Documents', tools: 'Tools', members: 'Member Registry' };
+  return `${labels[cat] ?? 'This feature'} requires the Board Plan.`;
+}
+
+function showGenForm() {
+  generateView.classList.remove('hidden');
+  genForm.classList.remove('hidden');
+  genSpeakerSection.classList.add('hidden');
+  genResultSection.classList.add('hidden');
 }
 
 function renderSubNav(cat, activeSub) {
@@ -904,18 +1450,20 @@ function downloadAgendaDocx() {
 
   const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-  body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 2cm; }
-  h2 { font-size: 14pt; margin: 0 0 2pt; }
-  p { margin: 2pt 0; }
-  ol { margin: 12pt 0 0; padding-left: 18pt; }
-  ol li { margin-bottom: 8pt; }
-  ul { margin: 4pt 0 0; padding-left: 18pt; }
-  ul li { margin-bottom: 3pt; }
-  .agenda-header { margin-bottom: 16pt; border-bottom: 1pt solid #888; padding-bottom: 8pt; }
+  body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 0; line-height: 1.3; }
+  h2   { font-size: 13pt; font-weight: bold; text-align: center; margin: 0 0 2pt; }
+  p    { margin: 2pt 0; }
+  ol   { margin: 8pt 0 0; padding-left: 18pt; }
+  ol li { margin-bottom: 6pt; }
+  ul   { margin: 3pt 0 0; padding-left: 18pt; }
+  ul li { margin-bottom: 2pt; }
+  .agenda-header { text-align: center; margin-bottom: 12pt; border-bottom: 1pt solid #888; padding-bottom: 6pt; }
+  .agenda-header p { color: #555; font-size: 10pt; }
+  .agenda-header p:last-child { font-size: 11pt; color: #000; }
 </style>
 </head><body>${bodyHtml}</body></html>`;
 
-  const blob = htmlDocx.asBlob(fullHtml, { orientation: 'portrait' });
+  const blob = htmlDocx.asBlob(fullHtml, { orientation: 'portrait', margins: { top: 720, right: 720, bottom: 720, left: 720 } });
   const slug = agendaMeetingDate.value || 'agenda';
   const name = userOrg.name.replace(/[^a-zA-Z0-9]+/g, '_');
   const url  = URL.createObjectURL(blob);
@@ -1483,11 +2031,12 @@ function downloadMotionsDocx() {
 
   const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-  body  { font-family: Calibri, Arial, sans-serif; font-size: 9.5pt; margin: 2cm 1.5cm; }
-  h1    { font-size: 13pt; margin: 0 0 3pt; }
-  .sub  { font-size: 10pt; color: #555; margin: 2pt 0 0; }
-  .gen  { font-size: 8.5pt; color: #888; margin: 5pt 0 0; }
-  table { width: 100%; border-collapse: collapse; margin-top: 14pt; font-size: 9pt; }
+  body  { font-family: Calibri, Arial, sans-serif; font-size: 9.5pt; margin: 0; }
+  h1    { font-size: 13pt; font-weight: bold; text-align: center; margin: 0 0 2pt; }
+  .sub  { font-size: 10pt; color: #555; margin: 1pt 0 0; text-align: center; }
+  .gen  { font-size: 8.5pt; color: #888; margin: 3pt 0 0; text-align: center; }
+  hr    { border: none; border-top: 1pt solid #888; margin: 6pt 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 9pt; }
   th    { background: #dce3ec; text-align: left; padding: 5pt 7pt;
           border: 1pt solid #aab; font-weight: bold; }
   td    { padding: 4pt 7pt; border: 1pt solid #ccc; vertical-align: top; }
@@ -1497,6 +2046,7 @@ function downloadMotionsDocx() {
   <h1>${escHtml(userOrg.name)}</h1>
   <p class="sub">Motions &amp; Decisions Register — ${escHtml(year)}</p>
   <p class="gen">Generated ${generatedDate} &nbsp;|&nbsp; ${motions.length} motion${motions.length !== 1 ? 's' : ''}</p>
+  <hr>
   <table>
     <thead><tr>
       <th>Date</th><th>Meeting</th><th>Motion</th><th>Result</th>
@@ -1506,7 +2056,7 @@ function downloadMotionsDocx() {
   </table>
 </body></html>`;
 
-  const blob = htmlDocx.asBlob(fullHtml, { orientation: 'landscape' });
+  const blob = htmlDocx.asBlob(fullHtml, { orientation: 'landscape', margins: { top: 720, right: 720, bottom: 720, left: 720 } });
   triggerDownload(blob, exportFilename() + '.docx');
 }
 
@@ -2466,18 +3016,21 @@ function memberRole(id) {
 function wrapDocx(bodyHtml) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-  body  { font-family: "Times New Roman", Times, serif; font-size: 12pt; margin: 0; }
-  h1    { font-size: 14pt; text-align: center; text-transform: uppercase; margin: 0 0 18pt; }
-  h2    { font-size: 12pt; text-transform: uppercase; margin: 18pt 0 6pt; }
-  p     { margin: 0 0 8pt; line-height: 1.45; }
-  ol    { margin: 0 0 8pt; padding-left: 22pt; }
-  li    { margin-bottom: 5pt; line-height: 1.45; }
+  body  { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 0; line-height: 1.3; }
+  h1    { font-size: 13pt; font-weight: bold; text-align: center; text-transform: uppercase;
+          letter-spacing: 0.04em; margin: 10pt 0 8pt; }
+  h2    { font-size: 11pt; font-weight: bold; text-transform: uppercase;
+          letter-spacing: 0.04em; margin: 9pt 0 3pt; }
+  p     { margin: 0 0 5pt; }
+  ol    { margin: 0 0 6pt; padding-left: 18pt; }
+  li    { margin-bottom: 3pt; }
   table { border-collapse: collapse; }
-  .corp { font-weight: bold; text-align: center; }
+  hr    { border: none; border-top: 1pt solid #888; margin: 6pt 0; }
+  .corp { font-size: 13pt; font-weight: bold; text-align: center; margin: 0; }
   .sig-block table { width: 100%; }
   .sig-block td { width: 50%; padding-top: 36pt; vertical-align: top; padding-right: 24pt; }
-  .disclaimer { font-size: 9pt; color: #555; margin-top: 36pt;
-                border-top: 1pt solid #bbb; padding-top: 8pt; }
+  .disclaimer { font-size: 9pt; color: #555; margin-top: 24pt;
+                border-top: 1pt solid #888; padding-top: 6pt; }
 </style>
 </head><body>${bodyHtml}</body></html>`;
 }
@@ -2712,7 +3265,7 @@ templateDownloadBtn.addEventListener('click', () => {
   }
 
   const html  = def.generate(userOrg, allMembers, values);
-  const blob  = htmlDocx.asBlob(html, { orientation: 'portrait' });
+  const blob  = htmlDocx.asBlob(html, { orientation: 'portrait', margins: { top: 720, right: 720, bottom: 720, left: 720 } });
   const fname = def.filename(userOrg, values);
   const url   = URL.createObjectURL(blob);
   const a     = Object.assign(document.createElement('a'), { href: url, download: fname });
@@ -3122,18 +3675,19 @@ function buildApprovalLetterHtml({ orgName, ownerName, strataLot, informalDescri
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
   body  { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 0; line-height: 1.3; }
-  .org  { font-size: 13pt; font-weight: bold; margin: 0 0 18pt; }
-  h2    { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em; margin: 14pt 0 6pt; }
-  p     { margin: 0 0 8pt; }
-  ol    { margin: 4pt 0 10pt; padding-left: 18pt; }
-  li    { margin-bottom: 6pt; line-height: 1.4; }
-  .re   { font-weight: bold; margin: 14pt 0 8pt; }
-  .dec  { font-size: 12pt; font-weight: bold; margin: 14pt 0; color: ${decisionColour}; }
-  .quo  { border-left: 3pt solid #ccc; padding: 5pt 10pt; margin: 6pt 0 14pt; font-style: italic; color: #444; }
-  hr    { border: none; border-top: 1pt solid #ccc; margin: 16pt 0; }
-  .sig  { margin-top: 32pt; }
+  .org  { font-size: 13pt; font-weight: bold; text-align: center; margin: 0; }
+  h2    { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em; margin: 9pt 0 3pt; }
+  p     { margin: 0 0 5pt; }
+  ol    { margin: 4pt 0 8pt; padding-left: 18pt; }
+  li    { margin-bottom: 5pt; line-height: 1.3; }
+  .re   { font-weight: bold; margin: 12pt 0 6pt; }
+  .dec  { font-size: 12pt; font-weight: bold; margin: 12pt 0; color: ${decisionColour}; }
+  .quo  { border-left: 3pt solid #ccc; padding: 5pt 10pt; margin: 6pt 0 12pt; font-style: italic; color: #444; }
+  hr    { border: none; border-top: 1pt solid #888; margin: 8pt 0; }
+  .sig  { margin-top: 28pt; }
 </style></head><body>
 <p class="org">${escHtml(orgName)}</p>
+<hr>
 <p>${escHtml(decisionDateStr)}</p>
 <p style="margin-top:14pt">${escHtml(ownerName)}<br>Strata Lot ${escHtml(strataLot)}<br>${escHtml(orgName)}</p>
 <p class="re">RE: OWNER ALTERATION REQUEST — STRATA LOT ${escHtml(strataLot)}</p>

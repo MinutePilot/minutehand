@@ -135,9 +135,10 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     delete signinSection.dataset.pendingBoardPlan;
     if (pendingBoardPlan && !hasBoardPlan) {
       showSection(buyBoardPlanSection);
-    } else if (comingFromSignin || (hasBoardPlan && !userOrg)) {
-      if (hasBoardPlan && !userOrg) showSection(orgSetupSection);
-      else showSection(formSection);
+    } else if (hasBoardPlan && !userOrg) {
+      showSection(orgSetupSection);
+    } else if (comingFromSignin) {
+      window.location.href = '/board.html';
     }
   } else {
     creditBalance = null;
@@ -145,12 +146,13 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
   }
 });
 
-// On page load: handle returning from PayPal or ?plan=board_plan deep-link
+// On page load: handle returning from PayPal or ?plan=board_plan or ?buy=credits
 (async () => {
   const params  = new URLSearchParams(window.location.search);
   const payment = params.get('payment');
   const orderId = params.get('token'); // PayPal passes the order ID as ?token=
   const plan    = params.get('plan');
+  const buy     = params.get('buy');
 
   if (payment === 'approved' && orderId) {
     window.history.replaceState({}, '', window.location.pathname);
@@ -164,11 +166,10 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
         if (hasBoardPlan && !userOrg) {
           showSection(orgSetupSection);
         } else {
-          showSection(formSection);
+          window.location.href = '/board.html';
         }
-        showToast('Board Plan activated — welcome to Governance Records!', 'success');
       } else {
-        showPaymentSuccessToast();
+        window.location.href = '/board.html';
       }
     } catch (err) {
       toast.remove();
@@ -176,10 +177,9 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     }
   } else if (payment === 'cancelled') {
     window.history.replaceState({}, '', window.location.pathname);
+    window.location.href = '/board.html';
   } else if (plan === 'board_plan') {
     window.history.replaceState({}, '', window.location.pathname);
-    // Show board plan section once auth state loads (handled in onAuthStateChange)
-    // For unauthenticated users: show sign-in first, then redirect to board plan
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (!session) {
       setAuthMode('signup');
@@ -187,6 +187,15 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
       signinSection.dataset.pendingBoardPlan = '1';
     } else {
       showSection(buyBoardPlanSection);
+    }
+  } else if (buy === 'credits') {
+    window.history.replaceState({}, '', window.location.pathname);
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) {
+      setAuthMode('signin');
+      showSection(signinSection);
+    } else {
+      showSection(buyCreditsSection);
     }
   }
 })();
@@ -516,11 +525,11 @@ orgSaveBtn.addEventListener('click', async () => {
   }
 
   userOrg = data;
-  showSection(formSection);
+  window.location.href = '/board.html';
 });
 
-backFromCreditsBtn.addEventListener('click', () => showSection(formSection));
-backFromBoardPlanBtn?.addEventListener('click', () => showSection(formSection));
+backFromCreditsBtn.addEventListener('click', () => { window.location.href = '/board.html'; });
+backFromBoardPlanBtn?.addEventListener('click', () => { window.location.href = '/board.html'; });
 
 boardPlanCheckoutBtn?.addEventListener('click', async () => {
   boardPlanCheckoutError.classList.add('hidden');
@@ -776,25 +785,25 @@ downloadBtn.addEventListener('click', () => {
   if (!currentMinutesMarkdown) return;
   const fullHtml = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>
-  body    { font-family: Georgia, 'Times New Roman', serif; font-size: 10.5pt; line-height: 1.65; color: #000; }
-  h1      { font-size: 17pt; font-weight: bold; text-align: center; text-transform: uppercase; letter-spacing: .05em; margin: 0 0 8pt; }
-  h2      { font-size: 14pt; font-weight: bold; color: #111; margin: 0 0 1pt; }
-  h3      { font-size: 14pt; font-weight: bold; color: #111; margin: 0 0 8pt; }
-  h4      { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: .04em; color: #111; border-bottom: 1pt solid #555; padding-bottom: 2pt; margin: 16pt 0 5pt; }
-  h5      { font-size: 10.5pt; font-weight: bold; color: #222; margin: 8pt 0 3pt; }
+  body    { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.3; color: #000; margin: 0; }
+  h1      { font-size: 13pt; font-weight: bold; text-align: center; margin: 0 0 2pt; }
+  h2      { font-size: 11pt; font-weight: bold; color: #111; margin: 0 0 1pt; }
+  h3      { font-size: 11pt; font-weight: bold; color: #111; margin: 0 0 5pt; }
+  h4      { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: .04em; color: #000; border-bottom: 1pt solid #888; padding-bottom: 2pt; margin: 12pt 0 4pt; }
+  h5      { font-size: 11pt; font-weight: bold; color: #222; margin: 6pt 0 2pt; }
   p       { margin: 0 0 5pt; }
   blockquote { margin: 1pt 0; padding: 0; border: none; color: #555; font-size: 10pt; }
-  hr      { border: none; border-top: 1pt solid #ccc; margin: 10pt 0; }
-  table   { width: 100%; border-collapse: collapse; margin: 8pt 0; font-size: 10pt; font-family: Georgia, 'Times New Roman', serif; }
-  th      { background: #e0e0e0; font-weight: bold; text-align: left; padding: 5pt 8pt; border: 1pt solid #999; color: #000; }
-  td      { padding: 5pt 8pt; border: 1pt solid #ccc; vertical-align: top; }
-  ul, ol  { margin: 3pt 0 6pt 20pt; }
+  hr      { border: none; border-top: 1pt solid #888; margin: 8pt 0; }
+  table   { width: 100%; border-collapse: collapse; margin: 6pt 0; font-size: 10pt; }
+  th      { background: #e8e8e8; font-weight: bold; text-align: left; padding: 4pt 7pt; border: 1pt solid #999; color: #000; }
+  td      { padding: 4pt 7pt; border: 1pt solid #ccc; vertical-align: top; }
+  ul, ol  { margin: 2pt 0 5pt 18pt; }
   li      { margin-bottom: 2pt; }
   strong  { font-weight: bold; }
   em      { font-style: italic; }
 </style></head><body>${marked.parse(preprocessMarkdown(currentMinutesMarkdown))}</body></html>`;
 
-  const blob = htmlDocx.asBlob(fullHtml);
+  const blob = htmlDocx.asBlob(fullHtml, { margins: { top: 720, right: 720, bottom: 720, left: 720 } });
   const url  = URL.createObjectURL(blob);
   const a    = Object.assign(document.createElement('a'), { href: url, download: `meeting-minutes-${today()}.docx` });
   a.click();
