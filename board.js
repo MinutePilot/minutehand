@@ -21,6 +21,7 @@ const supabaseClient = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabase
 
 let currentUser    = null;
 let userOrg        = null;
+let userRole       = null; // 'owner' | 'admin' | 'member'
 let allMotions     = [];
 let allActionItems = [];
 let agendaNewItems  = [];
@@ -225,6 +226,7 @@ const boardOrgError         = document.getElementById('board-org-error');
 const boardCredits          = document.getElementById('board-credits');
 const boardUserEmail        = document.getElementById('board-user-email');
 const boardSignoutBtn       = document.getElementById('board-signout-btn');
+const appAccessView         = document.getElementById('app-access-view');
 
 // ── Auth + init ───────────────────────────────────────────────────────────────
 
@@ -242,27 +244,36 @@ async function init() {
   // Load credits for all authenticated users
   await loadCredits();
 
-  // Load plan status
-  const { data: sub } = await supabaseClient
-    .from('subscriptions')
-    .select('board_plan_active, expires_at')
+  // Load org membership (works for owners and invited members alike)
+  const { data: membership } = await supabaseClient
+    .from('org_members')
+    .select('role, organizations(id, name, org_type, portal_token, owner_id)')
     .eq('user_id', currentUser.id)
     .maybeSingle();
-  hasBoardPlan = sub?.board_plan_active === true &&
-                 (!sub.expires_at || new Date(sub.expires_at) > new Date());
 
-  // Load org and roster if plan subscriber
-  if (hasBoardPlan) {
-    const { data: org } = await supabaseClient
-      .from('organizations')
-      .select('id, name, org_type, portal_token')
-      .eq('owner_id', currentUser.id)
+  userRole = membership?.role ?? null;
+  userOrg  = membership?.organizations ?? null;
+
+  if (userOrg) {
+    // Org exists → owner has (or had) a board plan; treat as plan-enabled.
+    // Server-side edge functions re-check the subscription before billing.
+    hasBoardPlan = true;
+  } else {
+    // No org yet — check own subscription (owner who bought plan but hasn't set up org)
+    const { data: sub } = await supabaseClient
+      .from('subscriptions')
+      .select('board_plan_active, expires_at')
+      .eq('user_id', currentUser.id)
       .maybeSingle();
-    userOrg = org ?? null;
-    if (userOrg) {
-      orgNameHeading.textContent = userOrg.name;
-      orgTypeLabel.textContent   = ORG_TYPE_LABELS[userOrg.org_type] ?? userOrg.org_type;
-      renderPortalLink();
+    hasBoardPlan = sub?.board_plan_active === true &&
+                   (!sub.expires_at || new Date(sub.expires_at) > new Date());
+  }
+
+  if (userOrg) {
+    orgNameHeading.textContent = userOrg.name;
+    orgTypeLabel.textContent   = ORG_TYPE_LABELS[userOrg.org_type] ?? userOrg.org_type;
+    renderPortalLink();
+    if (hasBoardPlan) {
       const { data: members } = await supabaseClient
         .from('roster')
         .select('id, name, role')
@@ -306,10 +317,12 @@ function showAccess(type) {
 
 async function loadCredits() {
   if (!currentUser) return;
+  // Use org owner's credit balance (shared pool); fall back to own balance
+  const billingUserId = userOrg?.owner_id ?? currentUser.id;
   const { data } = await supabaseClient
     .from('credits')
     .select('balance')
-    .eq('user_id', currentUser.id)
+    .eq('user_id', billingUserId)
     .single();
   creditBalance = data?.balance ?? 0;
   renderBoardCreditsDisplay();
@@ -326,6 +339,179 @@ function renderBoardCreditsDisplay() {
 boardSignoutBtn?.addEventListener('click', async () => {
   await supabaseClient.auth.signOut();
   window.location.reload();
+});
+
+// ── App Access (org member management) ───────────────────────────────────────
+
+const ROLE_LABELS = { owner: 'Owner', admin: 'Administrator', member: 'Council Member' };
+
+function userIsAdmin() { return userRole === 'owner' || userRole === 'admin'; }
+
+async function loadAppAccess() {
+  if (!userOrg) return;
+  const listEl     = document.getElementById('app-access-list');
+  const pendingSec = document.getElementById('pending-invites-section');
+  const pendingEl  = document.getElementById('pending-invites-list');
+  const inviteBtn  = document.getElementById('invite-member-btn');
+  if (!listEl) return;
+
+  listEl.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading…</span></div>';
+
+  // Show invite button for admins/owners
+  inviteBtn?.classList.toggle('hidden', !userIsAdmin());
+
+  const [membersRes, invitesRes] = await Promise.all([
+    supabaseClient
+      .from('org_members')
+      .select('id, user_id, role, email, joined_at')
+      .eq('org_id', userOrg.id)
+      .order('joined_at', { ascending: true }),
+    userIsAdmin()
+      ? supabaseClient
+          .from('org_invitations')
+          .select('id, role, invitee_email, created_at, expires_at')
+          .eq('org_id', userOrg.id)
+          .is('used_by', null)
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  if (membersRes.error) {
+    listEl.innerHTML = `<p class="error">Failed to load members: ${escHtml(membersRes.error.message)}</p>`;
+    return;
+  }
+
+  const members = membersRes.data ?? [];
+  const invites = invitesRes.data ?? [];
+
+  listEl.innerHTML = members.map((m) => {
+    const isMe = m.user_id === currentUser.id;
+    const canRemove = userIsAdmin() && m.role !== 'owner' && !isMe;
+    const canPromote = userRole === 'owner' && m.role === 'member' && !isMe;
+    const canDemote  = userRole === 'owner' && m.role === 'admin'  && !isMe;
+    return `<div class="app-access-card" data-member-id="${m.id}" data-user-id="${m.user_id}">
+  <div class="app-access-card__info">
+    <span class="app-access-card__email">${escHtml(m.email ?? 'Unknown user')}${isMe ? ' <span class="you-badge">you</span>' : ''}</span>
+    <span class="role-badge role-badge--${m.role}">${ROLE_LABELS[m.role] ?? m.role}</span>
+  </div>
+  <div class="app-access-card__actions">
+    ${canPromote ? `<button class="btn-link promote-member-btn" data-id="${m.id}" data-role="admin">Make Administrator</button>` : ''}
+    ${canDemote  ? `<button class="btn-link demote-member-btn"  data-id="${m.id}" data-role="member">Make Council Member</button>` : ''}
+    ${canRemove  ? `<button class="btn-link remove-member-btn danger-link" data-id="${m.id}" data-email="${escHtml(m.email ?? 'this member')}">Remove</button>` : ''}
+  </div>
+</div>`;
+  }).join('');
+
+  if (invites.length > 0 && pendingSec && pendingEl) {
+    pendingEl.innerHTML = invites.map((inv) => `
+<div class="app-access-card app-access-card--pending" data-invite-id="${inv.id}">
+  <div class="app-access-card__info">
+    <span class="app-access-card__email">${escHtml(inv.invitee_email || 'Link not yet claimed')}</span>
+    <span class="role-badge role-badge--${inv.role}">${ROLE_LABELS[inv.role] ?? inv.role}</span>
+    <span class="pending-badge">Pending</span>
+  </div>
+  <div class="app-access-card__actions">
+    <button class="btn-link revoke-invite-btn danger-link" data-id="${inv.id}">Revoke</button>
+  </div>
+</div>`).join('');
+    pendingSec.classList.remove('hidden');
+  } else {
+    pendingSec?.classList.add('hidden');
+  }
+}
+
+// Delegated clicks inside app-access-list
+
+document.getElementById('app-access-list')?.addEventListener('click', async (e) => {
+  const removeBtn  = e.target.closest('.remove-member-btn');
+  const promoteBtn = e.target.closest('.promote-member-btn');
+  const demoteBtn  = e.target.closest('.demote-member-btn');
+
+  if (removeBtn) {
+    const email = removeBtn.dataset.email;
+    if (!confirm(`Remove ${email} from this organization? They will lose access immediately.`)) return;
+    removeBtn.disabled = true;
+    const { error } = await supabaseClient.from('org_members').delete().eq('id', removeBtn.dataset.id);
+    if (error) { showToast('Could not remove member: ' + error.message, 'error'); removeBtn.disabled = false; return; }
+    showToast(`${email} removed.`, 'success');
+    loadAppAccess();
+  }
+
+  if (promoteBtn || demoteBtn) {
+    const btn  = promoteBtn ?? demoteBtn;
+    const role = btn.dataset.role;
+    btn.disabled = true;
+    const { error } = await supabaseClient.from('org_members').update({ role }).eq('id', btn.dataset.id);
+    if (error) { showToast('Could not update role: ' + error.message, 'error'); btn.disabled = false; return; }
+    showToast('Role updated.', 'success');
+    loadAppAccess();
+  }
+});
+
+document.getElementById('pending-invites-list')?.addEventListener('click', async (e) => {
+  const revokeBtn = e.target.closest('.revoke-invite-btn');
+  if (!revokeBtn) return;
+  revokeBtn.disabled = true;
+  const { error } = await supabaseClient.from('org_invitations').delete().eq('id', revokeBtn.dataset.id);
+  if (error) { showToast('Could not revoke invite: ' + error.message, 'error'); revokeBtn.disabled = false; return; }
+  showToast('Invite revoked.', 'success');
+  loadAppAccess();
+});
+
+// Invite member flow
+
+document.getElementById('invite-member-btn')?.addEventListener('click', () => {
+  document.getElementById('invite-panel')?.classList.remove('hidden');
+  document.getElementById('invite-link-wrap')?.classList.add('hidden');
+  document.getElementById('invite-error')?.classList.add('hidden');
+  document.getElementById('invite-email').value = '';
+  document.querySelector('input[name="invite-role"][value="admin"]').checked = true;
+});
+
+document.getElementById('cancel-invite-btn')?.addEventListener('click', () => {
+  document.getElementById('invite-panel')?.classList.add('hidden');
+});
+
+document.getElementById('generate-invite-btn')?.addEventListener('click', async () => {
+  if (!userOrg) return;
+  const genBtn = document.getElementById('generate-invite-btn');
+  const errEl  = document.getElementById('invite-error');
+  const role   = document.querySelector('input[name="invite-role"]:checked')?.value ?? 'member';
+  const email  = document.getElementById('invite-email')?.value.trim() || null;
+
+  genBtn.disabled = true;
+  genBtn.textContent = 'Generating…';
+  errEl?.classList.add('hidden');
+
+  const { data: invite, error } = await supabaseClient
+    .from('org_invitations')
+    .insert({ org_id: userOrg.id, role, invitee_email: email, created_by: currentUser.id })
+    .select('token')
+    .single();
+
+  genBtn.disabled = false;
+  genBtn.textContent = 'Generate invite link';
+
+  if (error || !invite) {
+    if (errEl) { errEl.textContent = error?.message || 'Could not generate link.'; errEl.classList.remove('hidden'); }
+    return;
+  }
+
+  const link = `${window.location.origin}/join.html?token=${invite.token}`;
+  const linkInput = document.getElementById('invite-link-input');
+  if (linkInput) linkInput.value = link;
+  document.getElementById('invite-link-wrap')?.classList.remove('hidden');
+  loadAppAccess();
+});
+
+document.getElementById('invite-link-copy')?.addEventListener('click', () => {
+  const input = document.getElementById('invite-link-input');
+  if (!input) return;
+  navigator.clipboard.writeText(input.value).then(() => {
+    const btn = document.getElementById('invite-link-copy');
+    if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 2000); }
+  });
 });
 
 // ── Org setup (inline for Board Plan subscribers) ─────────────────────────────
@@ -877,7 +1063,10 @@ const CAT_SUBS = {
     { id: 'calculator', label: 'Vote Calculator' },
     { id: 'export',     label: 'Annual Export' },
   ],
-  members: [],
+  members: [
+    { id: 'roster',     label: 'Council Roster' },
+    { id: 'app-access', label: 'App Access'      },
+  ],
 };
 
 // Map old tab-link names to new category + sub
@@ -889,7 +1078,8 @@ const TAB_LINK_MAP = {
   'agenda':      { cat: 'meetings',   sub: 'agenda'      },
   'documents':   { cat: 'documents',  sub: 'library'     },
   'motions':     { cat: 'tools',      sub: 'motions'     },
-  'members':     { cat: 'members',    sub: null          },
+  'members':     { cat: 'members',    sub: 'roster'      },
+  'app-access':  { cat: 'members',    sub: 'app-access'  },
   'tools':       { cat: 'tools',      sub: 'motions'     },
   'templates':   { cat: 'documents',  sub: 'templates'   },
   'alterations': { cat: 'work',       sub: 'alt-review'  },
@@ -903,7 +1093,7 @@ const allContentViews = [
   overviewView, motionsView, actionsView, agendaView,
   minutesView, toolsView, membersView, documentsView,
   templatesView, alterationsView,
-  generateView, planGateView, orgSetupView,
+  generateView, planGateView, orgSetupView, appAccessView,
 ];
 
 function hideAllContent() {
@@ -991,8 +1181,13 @@ async function activateContent(cat, sub) {
       break;
 
     case 'members':
-      membersView.classList.remove('hidden');
-      if (!membersLoaded) loadMembers();
+      if (sub === 'app-access') {
+        appAccessView.classList.remove('hidden');
+        loadAppAccess();
+      } else {
+        membersView.classList.remove('hidden');
+        if (!membersLoaded) loadMembers();
+      }
       break;
   }
 }

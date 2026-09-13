@@ -836,6 +836,70 @@
         </div>
       </div>
 
+      <!-- App Access view ─────────────────────────────────────────────────────── -->
+      <div id="app-access-view" class="hidden" role="tabpanel">
+        <div class="tools-section">
+
+          <div class="app-access-header">
+            <h3 class="tools-section__heading">App Access</h3>
+            <button id="invite-member-btn" class="btn-secondary hidden">Invite member</button>
+          </div>
+
+          <!-- Invite panel (shown when invite button clicked) -->
+          <div id="invite-panel" class="hidden">
+            <div class="member-form__grid">
+              <div class="form-group">
+                <label for="invite-email">Their email <span class="optional">(for your reference — not sent automatically)</span></label>
+                <input type="email" id="invite-email" placeholder="president@example.com" autocomplete="off">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Access level</label>
+              <div class="role-radio-group">
+                <label class="role-radio-label">
+                  <input type="radio" name="invite-role" value="admin" checked>
+                  <span class="role-radio-content">
+                    <strong>Administrator</strong>
+                    <span class="field-hint">Full access — can invite others, manage all governance records</span>
+                  </span>
+                </label>
+                <label class="role-radio-label">
+                  <input type="radio" name="invite-role" value="member">
+                  <span class="role-radio-content">
+                    <strong>Council Member</strong>
+                    <span class="field-hint">Can view everything and generate minutes — cannot invite or delete records</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+            <div class="form-footer">
+              <button id="generate-invite-btn" class="btn-primary">Generate invite link</button>
+              <button id="cancel-invite-btn" class="btn-ghost">Cancel</button>
+            </div>
+            <div id="invite-link-wrap" class="hidden">
+              <p class="field-hint" style="margin-bottom:0.5rem">Share this link. It expires in 7 days and can only be used once.</p>
+              <div class="invite-link-row">
+                <input type="text" id="invite-link-input" readonly>
+                <button id="invite-link-copy" class="btn-secondary">Copy</button>
+              </div>
+            </div>
+            <p id="invite-error" class="error hidden"></p>
+          </div><!-- /invite-panel -->
+
+          <!-- Current members list -->
+          <div id="app-access-list" class="app-access-list"></div>
+
+          <!-- Pending invitations -->
+          <div id="pending-invites-section" class="hidden" style="margin-top:1.5rem">
+            <h4 style="font-size:0.85rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:0.75rem">Pending Invites</h4>
+            <div id="pending-invites-list"></div>
+          </div>
+
+          <p id="app-access-error" class="error hidden"></p>
+
+        </div>
+      </div><!-- /app-access-view -->
+
     </div><!-- /board-view -->
 
   </main>

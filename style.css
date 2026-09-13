@@ -1550,6 +1550,143 @@ body.landing {
   align-items: center;
 }
 
+/* ── App Access (org member management) ── */
+
+.app-access-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.app-access-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.app-access-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  flex-wrap: wrap;
+}
+
+.app-access-card--pending {
+  opacity: 0.75;
+  background: var(--bg);
+}
+
+.app-access-card__info {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.app-access-card__email {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.app-access-card__actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.role-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: 0.15rem 0.55rem;
+  border-radius: 100px;
+}
+
+.role-badge--owner  { background: var(--primary); color: #fff; }
+.role-badge--admin  { background: var(--accent, #0a7c5c); color: #fff; }
+.role-badge--member { background: var(--border); color: var(--text); }
+
+.you-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.pending-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.danger-link { color: var(--error, #c0392b) !important; }
+.danger-link:hover { opacity: 0.8; }
+
+/* Invite panel */
+
+.role-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.role-radio-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.role-radio-label:has(input:checked) {
+  border-color: var(--primary);
+  background: rgba(15,110,86,.04);
+}
+
+.role-radio-label input[type="radio"] {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+  accent-color: var(--primary);
+}
+
+.role-radio-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.role-radio-content .field-hint { margin: 0; }
+
+.invite-link-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.invite-link-row input {
+  flex: 1;
+  font-size: 0.8rem;
+  font-family: monospace;
+  background: var(--bg);
+  color: var(--text);
+}
+
 .board-search-wrap {
   display: flex;
   align-items: center;

@@ -301,11 +301,23 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // ── Credit check ──────────────────────────────────────────────────────────
+  // ── Credit check (shared org pool) ───────────────────────────────────────
+  // Resolve the billing user: org owner's account if caller is a member,
+  // otherwise the caller's own account.
+
+  const { data: billingUserId, error: billingError } = await supabaseAdmin.rpc(
+    "get_billing_user_id",
+    { p_user_id: user.id }
+  );
+
+  if (billingError) {
+    console.error("Billing user lookup error:", billingError);
+    return json({ error: "Failed to resolve billing account" }, 500);
+  }
 
   const { data: hasCredit, error: creditError } = await supabaseAdmin.rpc(
     "check_and_deduct_credit",
-    { p_user_id: user.id }
+    { p_user_id: billingUserId ?? user.id }
   );
 
   if (creditError) {
@@ -335,23 +347,25 @@ Deno.serve(async (req: Request) => {
   if (!notes) return json({ error: "notes is required" }, 400);
 
   // ── Board Plan tier check ─────────────────────────────────────────────────
+  // Check billing user's plan (org owner for members, self otherwise).
 
-  const { data: isBoardPlan } = await supabaseAdmin.rpc("has_board_plan", { p_user_id: user.id });
+  const effectiveBillingUser = billingUserId ?? user.id;
+  const { data: isBoardPlan } = await supabaseAdmin.rpc("has_board_plan", { p_user_id: effectiveBillingUser });
 
   let orgId: string | null = null;
   if (isBoardPlan) {
-    const { data: org } = await supabaseAdmin
-      .from("organizations")
-      .select("id")
-      .eq("owner_id", user.id)
+    // Find org via org_members (works for both owners and invited members)
+    const { data: membership } = await supabaseAdmin
+      .from("org_members")
+      .select("org_id")
+      .eq("user_id", user.id)
       .maybeSingle();
 
-    if (!org) {
-      // Restore the credit — we're not generating anything
-      await supabaseAdmin.rpc("restore_credit", { p_user_id: user.id });
+    if (!membership) {
+      await supabaseAdmin.rpc("restore_credit", { p_user_id: effectiveBillingUser });
       return json({ error: "Organization not set up", code: "NO_ORG" }, 402);
     }
-    orgId = org.id;
+    orgId = membership.org_id;
   }
 
   // ── Generate ──────────────────────────────────────────────────────────────
@@ -374,7 +388,7 @@ Deno.serve(async (req: Request) => {
     rawText = msg.content[0].type === "text" ? msg.content[0].text : "";
   } catch (err) {
     console.error("Anthropic API error:", err);
-    await supabaseAdmin.rpc("restore_credit", { p_user_id: user.id });
+    await supabaseAdmin.rpc("restore_credit", { p_user_id: effectiveBillingUser });
     return json({ error: "Failed to generate minutes. Please try again." }, 500);
   }
 

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MinuteHand — Join Organization</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="container">
+      <a href="/" class="logo" aria-label="MinuteHand home">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <circle cx="14" cy="14" r="13" stroke="currentColor" stroke-width="2"/>
+          <line x1="14" y1="14" x2="14" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="14" y1="14" x2="19" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        MinuteHand
+      </a>
+    </div>
+  </header>
+
+  <main>
+    <div class="container" style="max-width:480px;padding-top:3rem;padding-bottom:3rem">
+
+      <!-- Loading state -->
+      <div id="loading-view">
+        <div class="loading-row" style="justify-content:center;padding:3rem 0">
+          <div class="spinner"></div><span>Checking invite link…</span>
+        </div>
+      </div>
+
+      <!-- Invalid / expired token -->
+      <div id="invalid-view" class="card hidden" style="text-align:center;padding:2rem">
+        <p style="font-size:1.1rem;font-weight:600;margin-bottom:0.5rem">This invite link is invalid or has expired.</p>
+        <p class="field-hint">Ask your administrator to generate a new invite link.</p>
+        <a href="/" class="btn-ghost" style="margin-top:1rem">Go home</a>
+      </div>
+
+      <!-- Valid invite — sign in / sign up to accept -->
+      <div id="invite-view" class="card hidden">
+        <p class="field-hint" style="margin-bottom:0.25rem">You've been invited to join</p>
+        <h1 id="join-org-name" style="font-size:1.3rem;margin:0 0 0.25rem"></h1>
+        <p class="field-hint" style="margin-bottom:1.5rem">as <strong id="join-role-label"></strong></p>
+
+        <!-- Already signed in — accept button -->
+        <div id="join-accept-wrap" class="hidden">
+          <p style="margin-bottom:1rem">You're signed in as <strong id="join-current-email"></strong>.</p>
+          <button id="join-accept-btn" class="btn-primary" style="width:100%">Join organization</button>
+          <p style="margin-top:0.75rem;font-size:0.85rem;text-align:center">
+            Not you? <button id="join-signout-switch" class="btn-link">Sign out and use a different account</button>
+          </p>
+        </div>
+
+        <!-- Not signed in — auth form -->
+        <div id="join-auth-wrap">
+          <div class="auth-tabs" style="margin-bottom:1rem">
+            <button id="join-tab-signin" class="auth-tab auth-tab--active">Sign In</button>
+            <button id="join-tab-signup" class="auth-tab">Create Account</button>
+          </div>
+          <div class="form-group">
+            <label for="join-email">Email</label>
+            <input type="email" id="join-email" autocomplete="email" placeholder="your@email.com">
+          </div>
+          <div class="form-group">
+            <label for="join-password">Password</label>
+            <input type="password" id="join-password" autocomplete="current-password" placeholder="••••••••">
+          </div>
+          <p id="join-auth-error" class="error hidden"></p>
+          <button id="join-auth-btn" class="btn-primary" style="width:100%;margin-top:0.5rem">Sign In &amp; Join</button>
+        </div>
+
+        <p id="join-error" class="error hidden" style="margin-top:1rem"></p>
+      </div>
+
+      <!-- Success -->
+      <div id="success-view" class="card hidden" style="text-align:center;padding:2rem">
+        <p style="font-size:1.1rem;font-weight:600;margin-bottom:0.5rem">You're in!</p>
+        <p class="field-hint" id="success-msg"></p>
+        <a href="/board.html" class="btn-primary" style="margin-top:1.25rem;display:inline-block">Open dashboard →</a>
+      </div>
+
+    </div>
+  </main>
+
+<script>
+if (typeof CONFIG === 'undefined') console.error('MinuteHand: config.js not loaded.');
+
+const supabaseClient = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
+  auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true },
+});
+
+const ROLE_LABELS = { owner: 'Owner', admin: 'Administrator', member: 'Council Member' };
+
+const loadingView   = document.getElementById('loading-view');
+const invalidView   = document.getElementById('invalid-view');
+const inviteView    = document.getElementById('invite-view');
+const successView   = document.getElementById('success-view');
+const joinOrgName   = document.getElementById('join-org-name');
+const joinRoleLabel = document.getElementById('join-role-label');
+const joinAcceptWrap = document.getElementById('join-accept-wrap');
+const joinAuthWrap  = document.getElementById('join-auth-wrap');
+const joinCurrentEmail = document.getElementById('join-current-email');
+const joinAcceptBtn = document.getElementById('join-accept-btn');
+const joinAuthBtn   = document.getElementById('join-auth-btn');
+const joinEmail     = document.getElementById('join-email');
+const joinPassword  = document.getElementById('join-password');
+const joinAuthError = document.getElementById('join-auth-error');
+const joinError     = document.getElementById('join-error');
+const successMsg    = document.getElementById('success-msg');
+const tabSignin     = document.getElementById('join-tab-signin');
+const tabSignup     = document.getElementById('join-tab-signup');
+
+const params = new URLSearchParams(window.location.search);
+const token  = params.get('token');
+
+let authMode   = 'signin';
+let inviteData = null;
+
+function show(el) {
+  [loadingView, invalidView, inviteView, successView].forEach((v) => v?.classList.add('hidden'));
+  el?.classList.remove('hidden');
+}
+
+function showJoinError(msg) {
+  if (joinError) { joinError.textContent = msg; joinError.classList.remove('hidden'); }
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  tabSignin.className = 'auth-tab' + (mode === 'signin' ? ' auth-tab--active' : '');
+  tabSignup.className = 'auth-tab' + (mode === 'signup' ? ' auth-tab--active' : '');
+  joinAuthBtn.textContent = mode === 'signin' ? 'Sign In & Join' : 'Create Account & Join';
+  joinPassword.autocomplete = mode === 'signin' ? 'current-password' : 'new-password';
+  joinAuthError?.classList.add('hidden');
+}
+
+tabSignin?.addEventListener('click', () => setAuthMode('signin'));
+tabSignup?.addEventListener('click', () => setAuthMode('signup'));
+
+async function acceptAndRedirect() {
+  const result = await supabaseClient.rpc('accept_invitation', { p_token: token });
+  const data = result.data;
+  if (!data || data.error) {
+    const msgs = {
+      not_authenticated: 'You must be signed in to accept this invite.',
+      invalid_token: 'This invite link is invalid.',
+      already_used: 'This invite link has already been used.',
+      expired: 'This invite link has expired. Ask your administrator for a new one.',
+    };
+    showJoinError(msgs[data?.error] ?? 'Could not accept invite. Please try again.');
+    if (joinAcceptBtn) { joinAcceptBtn.disabled = false; joinAcceptBtn.textContent = 'Join organization'; }
+    return;
+  }
+  if (successMsg) successMsg.textContent = `You've joined ${inviteData?.org_name ?? 'the organization'}.`;
+  show(successView);
+}
+
+joinAcceptBtn?.addEventListener('click', async () => {
+  joinAcceptBtn.disabled = true;
+  joinAcceptBtn.textContent = 'Joining…';
+  joinError?.classList.add('hidden');
+  await acceptAndRedirect();
+});
+
+document.getElementById('join-signout-switch')?.addEventListener('click', async () => {
+  await supabaseClient.auth.signOut();
+  joinAcceptWrap?.classList.add('hidden');
+  joinAuthWrap?.classList.remove('hidden');
+});
+
+joinAuthBtn?.addEventListener('click', async () => {
+  const email    = joinEmail?.value.trim();
+  const password = joinPassword?.value;
+  if (!email)    { if (joinAuthError) { joinAuthError.textContent = 'Please enter your email.'; joinAuthError.classList.remove('hidden'); } return; }
+  if (!password) { if (joinAuthError) { joinAuthError.textContent = 'Please enter your password.'; joinAuthError.classList.remove('hidden'); } return; }
+  if (authMode === 'signup' && password.length < 6) {
+    if (joinAuthError) { joinAuthError.textContent = 'Password must be at least 6 characters.'; joinAuthError.classList.remove('hidden'); } return;
+  }
+
+  joinAuthBtn.disabled = true;
+  joinAuthBtn.textContent = 'Working…';
+  joinAuthError?.classList.add('hidden');
+
+  try {
+    if (authMode === 'signup') {
+      const { error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) throw error;
+    } else {
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    }
+    // onAuthStateChange will fire and call acceptAndRedirect
+  } catch (err) {
+    if (joinAuthError) { joinAuthError.textContent = err.message || 'Something went wrong.'; joinAuthError.classList.remove('hidden'); }
+    joinAuthBtn.disabled = false;
+    joinAuthBtn.textContent = authMode === 'signin' ? 'Sign In & Join' : 'Create Account & Join';
+  }
+});
+
+// Auth state: if signed in, show accept button; if not, show auth form
+supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+  if (!inviteData) return; // wait for peek to complete first
+  if (session?.user) {
+    if (joinCurrentEmail) joinCurrentEmail.textContent = session.user.email;
+    joinAuthWrap?.classList.add('hidden');
+    joinAcceptWrap?.classList.remove('hidden');
+    // If we just signed in via the auth form, auto-accept
+    if (_event === 'SIGNED_IN') {
+      if (joinAcceptBtn) { joinAcceptBtn.disabled = true; joinAcceptBtn.textContent = 'Joining…'; }
+      await acceptAndRedirect();
+    }
+  } else {
+    joinAcceptWrap?.classList.add('hidden');
+    joinAuthWrap?.classList.remove('hidden');
+  }
+});
+
+// On load: peek at the invite token
+(async () => {
+  if (!token) { show(invalidView); return; }
+
+  const { data, error } = await supabaseClient.rpc('peek_invitation', { p_token: token });
+
+  if (error || !data?.valid) { show(invalidView); return; }
+
+  inviteData = data;
+  if (joinOrgName)   joinOrgName.textContent   = data.org_name ?? 'your organization';
+  if (joinRoleLabel) joinRoleLabel.textContent  = ROLE_LABELS[data.role] ?? data.role;
+
+  show(inviteView);
+
+  // Check if already signed in
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session?.user) {
+    if (joinCurrentEmail) joinCurrentEmail.textContent = session.user.email;
+    joinAuthWrap?.classList.add('hidden');
+    joinAcceptWrap?.classList.remove('hidden');
+  }
+})();
+</script>
+
+</body>
+</html>
