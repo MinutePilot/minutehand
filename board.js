@@ -2703,7 +2703,7 @@ async function draftAlterationRequest() {
 
 function buildRequestPreviewHtml({ ownerName, strataLot, formalRequest, dateSubmitted }) {
   const paras = formalRequest.split(/\n\n+/).filter(Boolean)
-    .map((p) => `<p>${escHtml(p.trim())}</p>`).join('');
+    .map((p) => `<p style="margin:0 0 0.7em">${escHtml(p.trim())}</p>`).join('');
 
   return `<div class="agenda-doc">
   <div class="agenda-header">
@@ -2739,18 +2739,18 @@ function buildRequestDocHtml({ ownerName, strataLot, formalRequest, dateSubmitte
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-  body  { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 2.5cm; line-height: 1.3; }
-  .org  { font-size: 13pt; font-weight: bold; text-align: center; margin: 0 0 3pt; }
-  .sub  { text-align: center; color: #333; margin: 0 0 16pt; font-size: 11pt; letter-spacing: 0.04em; }
-  hr    { border: none; border-top: 1pt solid #888; margin: 12pt 0; }
-  table { border-collapse: collapse; margin-bottom: 12pt; }
-  td    { padding: 3pt 14pt 3pt 0; vertical-align: top; }
-  td:first-child { font-weight: bold; min-width: 120pt; }
-  h2    { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em; margin: 14pt 0 6pt; }
-  p     { margin: 0 0 8pt; }
-  ul    { margin: 4pt 0 10pt; padding-left: 18pt; }
-  li    { margin-bottom: 4pt; }
-  .sig  { margin-top: 28pt; }
+  body  { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 1.8cm 2cm; line-height: 1.25; }
+  .org  { font-size: 13pt; font-weight: bold; text-align: center; margin: 0; }
+  .sub  { text-align: center; color: #333; margin: 0; font-size: 11pt; letter-spacing: 0.04em; }
+  hr    { border: none; border-top: 1pt solid #888; margin: 3pt 0; }
+  table { border-collapse: collapse; margin: 0; width: 100%; }
+  td    { padding: 1pt 10pt 1pt 0; vertical-align: top; }
+  td:first-child { font-weight: bold; width: 110pt; }
+  h2    { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em; margin: 9pt 0 3pt; }
+  p     { margin: 0 0 5pt; }
+  ul    { margin: 2pt 0 6pt; padding-left: 16pt; }
+  li    { margin-bottom: 2pt; }
+  .sig  { margin-top: 16pt; }
 </style></head><body>
 <p class="org">${escHtml(orgName)}</p>
 <p class="sub">OWNER ALTERATION REQUEST</p>
@@ -2771,12 +2771,11 @@ ${paras}
   <li>Does not affect the structure of the building, any common property systems, or the interests of any other strata lot; and</li>
   <li>Will be maintained in good condition at the owner's sole expense.</li>
 </ul>
-<hr>
 <h2>Owner Acknowledgment</h2>
 <p>By signing below, the owner acknowledges that this request requires Strata Council approval before any work commences, and that proceeding without approval may result in a requirement to restore the strata lot and/or common property at the owner's expense.</p>
 <div class="sig">
   <p>Owner Signature: &nbsp;_____________________________&nbsp;&nbsp;&nbsp; Date: _______________</p>
-  <p style="margin-top:6pt">Printed Name: ${escHtml(ownerName)}</p>
+  <p>Printed Name: ${escHtml(ownerName)}</p>
   <p>Strata Lot: ${escHtml(strataLot)}</p>
 </div>
 </body></html>`;
