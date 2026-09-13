@@ -740,7 +740,6 @@ body.landing {
   z-index: 10;
 }
 
-.site-header .logo-img { mix-blend-mode: screen; }
 .site-header .nav-link { color: rgba(255,255,255,0.75); }
 .site-header .nav-link:hover { color: #fff; }
 
@@ -1366,7 +1365,6 @@ body.landing {
 
 .site-footer .logo-img {
   height: 30px;
-  mix-blend-mode: screen;
 }
 
 .site-footer__copy {
