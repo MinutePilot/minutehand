@@ -114,7 +114,7 @@ CREATE TABLE org_invitations (
   org_id         UUID        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   role           TEXT        NOT NULL DEFAULT 'member'
                  CHECK (role IN ('admin', 'member')),
-  token          TEXT        NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(24), 'hex'),
+  token          TEXT        NOT NULL UNIQUE DEFAULT replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''),
   invitee_email  TEXT,       -- optional note for the inviter's reference
   created_by     UUID        NOT NULL REFERENCES auth.users(id),
   used_by        UUID        REFERENCES auth.users(id),
