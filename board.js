@@ -224,6 +224,7 @@ const boardOrgType          = document.getElementById('board-org-type');
 const boardOrgSave          = document.getElementById('board-org-save');
 const boardOrgError         = document.getElementById('board-org-error');
 const boardCredits          = document.getElementById('board-credits');
+const boardBuyCreditsLink   = document.getElementById('board-buy-credits-link');
 const boardUserEmail        = document.getElementById('board-user-email');
 const boardSignoutBtn       = document.getElementById('board-signout-btn');
 const appAccessView         = document.getElementById('app-access-view');
@@ -287,6 +288,9 @@ async function init() {
 
   // Update account bar
   if (boardUserEmail) boardUserEmail.textContent = currentUser.email;
+  // Non-owner org members cannot purchase credits into the shared pool —
+  // hide the link so they don't buy credits that land on their own unused account.
+  boardBuyCreditsLink?.classList.toggle('hidden', userRole === 'admin' || userRole === 'member');
 
   // Show board view for all authenticated users
   loadingView.classList.add('hidden');
@@ -317,14 +321,10 @@ function showAccess(type) {
 
 async function loadCredits() {
   if (!currentUser) return;
-  // Use org owner's credit balance (shared pool); fall back to own balance
-  const billingUserId = userOrg?.owner_id ?? currentUser.id;
-  const { data } = await supabaseClient
-    .from('credits')
-    .select('balance')
-    .eq('user_id', billingUserId)
-    .single();
-  creditBalance = data?.balance ?? 0;
+  // get_org_credit_balance is SECURITY DEFINER and resolves the shared pool
+  // (org owner's balance) for all org members, bypassing credits RLS.
+  const { data } = await supabaseClient.rpc('get_org_credit_balance', { p_user_id: currentUser.id });
+  creditBalance = data ?? 0;
   renderBoardCreditsDisplay();
 }
 
@@ -789,7 +789,12 @@ async function genRunGenerateFlow(notes) {
     genRemoveStatusRow();
     genSetLoadingBtn(false);
     if (err.status === 402) {
-      window.location.href = '/app.html?buy=credits';
+      if (userRole === 'owner' || !userOrg) {
+        window.location.href = '/app.html?buy=credits';
+      } else {
+        genSetLoadingBtn(false);
+        genShowError('Your organization is out of credits. Ask your administrator to add more.');
+      }
     } else if (err.status === 401) {
       window.location.href = '/app.html';
     } else {
