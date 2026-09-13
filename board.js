@@ -379,10 +379,10 @@ async function loadOverview() {
       .select('id, published', { count: 'exact' })
       .eq('org_id', userOrg.id),
     supabaseClient
-      .from('governance_documents')
+      .from('documents')
       .select('id', { count: 'exact' })
       .eq('org_id', userOrg.id)
-      .eq('archived', false),
+      .eq('status', 'active'),
   ]);
 
   const meetings      = meetingsCountRes.data ?? [];
