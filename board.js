@@ -228,6 +228,7 @@ const boardBuyCreditsLink   = document.getElementById('board-buy-credits-link');
 const boardUserEmail        = document.getElementById('board-user-email');
 const boardSignoutBtn       = document.getElementById('board-signout-btn');
 const appAccessView         = document.getElementById('app-access-view');
+const bylawsView            = document.getElementById('bylaws-view');
 const aiArchivedSection     = document.getElementById('ai-archived-section');
 const toggleArchivedAiBtn   = document.getElementById('toggle-archived-ai-btn');
 const archivedAiCount       = document.getElementById('archived-ai-count');
@@ -315,6 +316,9 @@ async function init() {
     loadOverview();
     loadMeetingsList();
   }
+
+  // Persistent "Leave a review" button — check once after org is known
+  initReviewButton();
 
   // Default landing: Meetings → Generate Minutes
   await switchToCategory('meetings', 'generate');
@@ -837,7 +841,128 @@ genDownload?.addEventListener('click', () => {
   const a    = Object.assign(document.createElement('a'), { href: url, download: `meeting-minutes-${genToday()}.docx` });
   a.click();
   URL.revokeObjectURL(url);
+  maybeShowReviewModal();
 });
+
+// ── Review modal ───────────────────────────────────────────────────────────────
+//
+// Trigger logic:
+//   Auto-modal fires on the 2nd successful .docx export for this org on this
+//   browser, provided (a) the org has no existing review row in the DB and
+//   (b) the auto-modal hasn't already fired on this browser for this org.
+//
+//   localStorage keys (both scoped to org so multi-org edge case is safe):
+//     mh_exports_{orgId}      — download counter
+//     mh_review_shown_{orgId} — set when auto-modal fires; prevents re-trigger
+//
+//   The mh_review_prompted key (old per-browser, unscoped flag) is removed.
+//
+// Persistent button:
+//   Shown in the site footer when logged in and org has no review in DB.
+//   Disappears after the user submits. Opens the same modal.
+
+async function maybeShowReviewModal() {
+  if (!userOrg?.id) return;
+  const orgId = userOrg.id;
+
+  // Increment per-org export counter
+  const countKey = `mh_exports_${orgId}`;
+  const newCount = (parseInt(localStorage.getItem(countKey) ?? '0', 10)) + 1;
+  localStorage.setItem(countKey, String(newCount));
+
+  // Only eligible on/after the 2nd export
+  if (newCount < 2) return;
+
+  // Auto-modal already shown on this browser for this org — don't re-trigger
+  const shownKey = `mh_review_shown_${orgId}`;
+  if (localStorage.getItem(shownKey)) return;
+
+  // DB check: any review row for this org (approved or pending) → skip
+  const { count: existing } = await supabaseClient
+    .from('reviews')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId);
+  if (existing > 0) return;
+
+  // All conditions met — show once and mark as shown
+  localStorage.setItem(shownKey, '1');
+  document.getElementById('review-modal')?.classList.remove('hidden');
+}
+
+async function initReviewButton() {
+  const btn = document.getElementById('review-persistent-btn');
+  if (!btn) return;
+  if (!userOrg?.id) { btn.classList.add('hidden'); return; }
+
+  const { count: existing } = await supabaseClient
+    .from('reviews')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', userOrg.id);
+
+  if (existing > 0) {
+    btn.classList.add('hidden');
+  } else {
+    btn.classList.remove('hidden');
+    btn.onclick = () => document.getElementById('review-modal')?.classList.remove('hidden');
+  }
+}
+
+(function initReviewModal() {
+  const modal      = document.getElementById('review-modal');
+  const closeBtn   = document.getElementById('review-modal-close');
+  const skipBtn    = document.getElementById('review-skip-board');
+  const submitBtn  = document.getElementById('review-submit-board');
+  const msgEl      = document.getElementById('review-msg-board');
+  const starsEl    = document.getElementById('review-stars');
+  let selectedRating = 0;
+
+  function closeModal() { modal?.classList.add('hidden'); }
+
+  closeBtn?.addEventListener('click', closeModal);
+  skipBtn?.addEventListener('click', closeModal);
+  modal?.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+  starsEl?.addEventListener('click', e => {
+    const btn = e.target.closest('.star-btn');
+    if (!btn) return;
+    selectedRating = parseInt(btn.dataset.value, 10);
+    starsEl.querySelectorAll('.star-btn').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.value, 10) <= selectedRating);
+    });
+  });
+
+  submitBtn?.addEventListener('click', async () => {
+    if (!selectedRating) {
+      msgEl.textContent = 'Please select a star rating.';
+      msgEl.classList.remove('hidden');
+      return;
+    }
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting…';
+    try {
+      const session = (await supabaseClient.auth.getSession()).data?.session;
+      const { error } = await supabaseClient.from('reviews').insert({
+        user_id:      session?.user?.id ?? null,
+        org_id:       userOrg?.id ?? null,
+        rating:       selectedRating,
+        review_text:  document.getElementById('review-text-board')?.value.trim() || null,
+        display_name: document.getElementById('review-name-board')?.value.trim() || null,
+      });
+      if (error) throw error;
+      msgEl.textContent = 'Thank you — your review has been submitted!';
+      msgEl.classList.remove('hidden');
+      // Hide the persistent button now that a review exists
+      document.getElementById('review-persistent-btn')?.classList.add('hidden');
+      setTimeout(closeModal, 2000);
+    } catch (err) {
+      console.error('review submit', err);
+      msgEl.textContent = 'Something went wrong. Please try again later.';
+      msgEl.classList.remove('hidden');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit review';
+    }
+  });
+})();
 
 genReset?.addEventListener('click', () => {
   genCurrentMarkdown  = '';
@@ -1072,6 +1197,7 @@ const CAT_SUBS = {
     { id: 'library',     label: 'Library' },
     { id: 'templates',   label: 'Generate Templates' },
     { id: 'alt-request', label: 'Generate Auth Request' },
+    { id: 'bylaws',      label: 'Bylaws' },
   ],
   tools: [
     { id: 'motions',    label: 'Motions & Decisions' },
@@ -1109,6 +1235,7 @@ const allContentViews = [
   minutesView, toolsView, membersView, documentsView,
   templatesView, alterationsView,
   generateView, planGateView, orgSetupView, appAccessView,
+  bylawsView,
 ];
 
 function hideAllContent() {
@@ -1179,6 +1306,9 @@ async function activateContent(cat, sub) {
         alterationsView.classList.remove('hidden');
         altReviewSection.classList.add('hidden');
         if (!alterationsLoaded) loadAlterations();
+      } else if (sub === 'bylaws') {
+        bylawsView.classList.remove('hidden');
+        loadBylaws();
       }
       break;
 
@@ -2457,7 +2587,7 @@ function calculateVote() {
   } else {
     const passes = inFavour >= required;
     vcBadge.className     = `vc-result__badge vc-badge--${passes ? 'passes' : 'falls-short'}`;
-    vcBadge.textContent   = passes ? 'PASSES' : 'FALLS SHORT';
+    vcBadge.textContent   = passes ? 'Meets selected threshold' : 'Below selected threshold';
     vcSummary.textContent = `${inFavour} vote${inFavour !== 1 ? 's' : ''} in favour — ` +
       `${passes ? 'meets' : 'does not meet'} the ${required}-vote requirement.`;
     vcDetail.textContent  = `${tLabel}: ${formula}.`;
@@ -3176,7 +3306,7 @@ const TEMPLATE_DEFS = {
         placeholder: 'IT IS HEREBY RESOLVED THAT the strata council approves…',
         rows: 6, fullWidth: true },
       { id: 'signing_members',   type: 'member-multi', label: 'Signing members', required: true,
-        hint: 'Under s. 26(3) of the Strata Property Act, a majority of all strata council members must sign.',
+        hint: 'Written resolutions typically require all council members to sign under Standard Bylaws — check your strata’s bylaws to confirm the requirement that applies to you.',
         fullWidth: true },
     ],
     generate: generateWrittenResolution,
@@ -3388,9 +3518,7 @@ function generateAgmNotice(org, members, v) {
   const proxySection = v.proxy_deadline ? `
     <h2>Proxies</h2>
     <p>Owners who are unable to attend may vote by proxy. Completed proxy forms must be
-    received by the Secretary no later than <b>${escHtml(fmtDateMedium(v.proxy_deadline))}</b>.
-    A proxy must be in writing, signed by the owner, and submitted before the commencement
-    of the meeting.</p>` : '';
+    received by the Secretary no later than <b>${escHtml(fmtDateMedium(v.proxy_deadline))}</b>.</p>` : '';
 
   const chairId = v.chairperson;
   const secId   = v.secretary;
@@ -4286,4 +4414,573 @@ altGenerateApprovalBtn.addEventListener('click', generateDecisionLetter);
 altCancelApprovalBtn.addEventListener('click', () => {
   altApprovalSection.classList.add('hidden');
   activeApprovalId = null;
+});
+
+// ── Bylaws feature ─────────────────────────────────────────────────────────────
+
+let bylawsDocument   = null;   // current bylaws_documents row
+let bylawsParameters = [];     // current bylaws_parameters rows
+let bylawsLoaded     = false;
+let bylawsActiveTab  = 'document';
+
+// ── DOM refs ───────────────────────────────────────────────────────────────────
+const bylawsLastReviewed     = document.getElementById('bylaws-last-reviewed');
+const bylawsStalenessNotice  = document.getElementById('bylaws-staleness-notice');
+const bylawsInnerTabs        = document.getElementById('bylaws-inner-tabs');
+const bylawsConfirmBadge     = document.getElementById('bylaws-confirm-badge');
+const bylawsDocumentPanel    = document.getElementById('bylaws-document-panel');
+const bylawsEmpty            = document.getElementById('bylaws-empty');
+const bylawsDropZone         = document.getElementById('bylaws-drop-zone');
+const bylawsFileInput        = document.getElementById('bylaws-file-input');
+const bylawsBrowseBtn        = document.getElementById('bylaws-browse-btn');
+const bylawsUploadError      = document.getElementById('bylaws-upload-error');
+const bylawsProcessing       = document.getElementById('bylaws-processing');
+const bylawsStatusMsg        = document.getElementById('bylaws-status-msg');
+const bylawsLowQuality       = document.getElementById('bylaws-low-quality');
+const bylawsManualText       = document.getElementById('bylaws-manual-text');
+const bylawsManualSubmit     = document.getElementById('bylaws-manual-submit');
+const bylawsManualCancel     = document.getElementById('bylaws-manual-cancel');
+const bylawsManualError      = document.getElementById('bylaws-manual-error');
+const bylawsDocInfo          = document.getElementById('bylaws-doc-info');
+const bylawsDocFilename      = document.getElementById('bylaws-doc-filename');
+const bylawsDocDate          = document.getElementById('bylaws-doc-date');
+const bylawsDocOcrNote       = document.getElementById('bylaws-doc-ocr-note');
+const bylawsReplaceBtn       = document.getElementById('bylaws-replace-btn');
+const bylawsReplaceForm      = document.getElementById('bylaws-replace-form');
+const bylawsReplaceDropZone  = document.getElementById('bylaws-replace-drop-zone');
+const bylawsReplaceInput     = document.getElementById('bylaws-replace-input');
+const bylawsReplaceBrowse    = document.getElementById('bylaws-replace-browse');
+const bylawsReplaceError     = document.getElementById('bylaws-replace-error');
+const bylawsConfirmPanel     = document.getElementById('bylaws-confirm-panel');
+const bylawsUnconfirmedSect  = document.getElementById('bylaws-unconfirmed-section');
+const bylawsConfirmedSect    = document.getElementById('bylaws-confirmed-section');
+const bylawsRejectedSect     = document.getElementById('bylaws-rejected-section');
+const bylawsParamsUnconfirmed= document.getElementById('bylaws-params-unconfirmed');
+const bylawsParamsConfirmed  = document.getElementById('bylaws-params-confirmed');
+const bylawsParamsRejected   = document.getElementById('bylaws-params-rejected');
+const bylawsConfirmEmpty     = document.getElementById('bylaws-confirm-empty');
+const bylawsSearchPanel      = document.getElementById('bylaws-search-panel');
+const bylawsSearchInput      = document.getElementById('bylaws-search-input');
+const bylawsSearchResults    = document.getElementById('bylaws-search-results');
+const bylawsSearchEmpty      = document.getElementById('bylaws-search-empty');
+
+// ── State helpers ──────────────────────────────────────────────────────────────
+
+function bylawsSwitchInnerTab(tab) {
+  bylawsActiveTab = tab;
+  document.querySelectorAll('.bylaws-tab').forEach((b) => {
+    b.classList.toggle('bylaws-tab--active', b.dataset.bylawsTab === tab);
+  });
+  bylawsDocumentPanel.classList.toggle('hidden', tab !== 'document');
+  bylawsConfirmPanel.classList.toggle('hidden',  tab !== 'confirm');
+  bylawsSearchPanel.classList.toggle('hidden',   tab !== 'search');
+}
+
+function bylawsShowDocumentState(state) {
+  // state: 'empty' | 'processing' | 'low-quality' | 'doc-info'
+  bylawsEmpty.classList.toggle('hidden',      state !== 'empty');
+  bylawsProcessing.classList.toggle('hidden', state !== 'processing');
+  bylawsLowQuality.classList.toggle('hidden', state !== 'low-quality');
+  bylawsDocInfo.classList.toggle('hidden',    state !== 'doc-info');
+}
+
+function bylawsUpdateHeader() {
+  if (!bylawsDocument) {
+    bylawsLastReviewed.classList.add('hidden');
+    bylawsStalenessNotice.classList.add('hidden');
+    bylawsInnerTabs.classList.add('hidden');
+    return;
+  }
+  bylawsInnerTabs.classList.remove('hidden');
+  bylawsStalenessNotice.classList.remove('hidden');
+
+  const reviewed = bylawsDocument.last_reviewed_at;
+  if (reviewed) {
+    bylawsLastReviewed.textContent = `Bylaws last reviewed: ${fmtDateMedium(reviewed.split('T')[0])}`;
+    bylawsLastReviewed.classList.remove('hidden');
+  } else {
+    bylawsLastReviewed.classList.add('hidden');
+  }
+
+  const pending = bylawsParameters.filter((p) => p.status === 'unconfirmed').length;
+  if (pending > 0) {
+    bylawsConfirmBadge.textContent = String(pending);
+    bylawsConfirmBadge.classList.remove('hidden');
+  } else {
+    bylawsConfirmBadge.classList.add('hidden');
+  }
+}
+
+// ── Load ───────────────────────────────────────────────────────────────────────
+
+async function loadBylaws() {
+  if (!userOrg) return;
+  bylawsLoaded = false;
+
+  const [{ data: docs }, { data: params }] = await Promise.all([
+    supabaseClient
+      .from('bylaws_documents')
+      .select('*')
+      .eq('org_id', userOrg.id)
+      .order('created_at', { ascending: false })
+      .limit(1),
+    supabaseClient
+      .from('bylaws_parameters')
+      .select('*')
+      .eq('org_id', userOrg.id)
+      .order('category, created_at'),
+  ]);
+
+  bylawsDocument   = docs?.[0] ?? null;
+  bylawsParameters = params ?? [];
+  bylawsLoaded     = true;
+
+  bylawsUpdateHeader();
+  renderBylawsDocumentTab();
+  renderBylawsConfirmTab();
+}
+
+// ── Document tab renderer ──────────────────────────────────────────────────────
+
+function renderBylawsDocumentTab() {
+  if (!bylawsDocument) {
+    bylawsShowDocumentState('empty');
+    return;
+  }
+
+  if (bylawsDocument.status === 'processing') {
+    bylawsStatusMsg.textContent = 'Extraction in progress — this may take up to a minute…';
+    bylawsShowDocumentState('processing');
+    // Poll every 5 s until done
+    setTimeout(async () => {
+      const { data } = await supabaseClient
+        .from('bylaws_documents')
+        .select('*')
+        .eq('id', bylawsDocument.id)
+        .single();
+      if (data) bylawsDocument = data;
+      if (bylawsDocument.status === 'processing') {
+        renderBylawsDocumentTab();  // re-poll
+      } else {
+        bylawsLoaded = false;
+        await loadBylaws();
+        bylawsSwitchInnerTab('confirm');
+      }
+    }, 5000);
+    return;
+  }
+
+  if (bylawsDocument.ocr_quality === 'low') {
+    bylawsShowDocumentState('low-quality');
+    return;
+  }
+
+  bylawsDocFilename.textContent = bylawsDocument.filename;
+  bylawsDocDate.textContent     = fmtDateMedium(bylawsDocument.created_at.split('T')[0]);
+  bylawsDocOcrNote.textContent  = bylawsDocument.ocr_method === 'mammoth'
+    ? 'Text extracted from Word document.'
+    : bylawsDocument.ocr_method === 'manual'
+      ? 'Text was entered manually.'
+      : 'Text extracted from PDF.';
+
+  bylawsShowDocumentState('doc-info');
+}
+
+// ── Confirm tab renderer ───────────────────────────────────────────────────────
+
+const CATEGORY_LABELS = {
+  quorum:                      'Quorum',
+  voting_thresholds:           'Voting Thresholds',
+  notice_periods:              'Notice Periods',
+  proxy_rules:                 'Proxy Rules',
+  written_resolution:          'Written Resolution',
+  fining:                      'Fining',
+  standard_bylaw_modification: 'Standard Bylaw Modification',
+};
+
+function renderParamCard(p) {
+  const statusClass = p.status === 'confirmed' || p.status === 'edited'
+    ? 'bylaw-param-card--confirmed'
+    : p.status === 'rejected'
+      ? 'bylaw-param-card--rejected'
+      : '';
+
+  const displayValue = p.status === 'edited' ? p.confirmed_value : p.extracted_value;
+  const catLabel     = CATEGORY_LABELS[p.category] ?? p.category;
+  const confLabel    = p.confidence === 'high' ? 'High confidence'
+    : p.confidence === 'medium' ? 'Medium confidence'
+    : 'Low confidence';
+
+  const actionBtns = p.status === 'unconfirmed'
+    ? `<button class="btn-primary bylaw-confirm-btn"  data-id="${p.id}">Confirm</button>
+       <button class="btn-ghost   bylaw-edit-btn"     data-id="${p.id}">Edit</button>
+       <button class="btn-ghost   bylaw-reject-btn"   data-id="${p.id}">Reject</button>`
+    : p.status === 'rejected'
+      ? `<button class="btn-ghost bylaw-unconfirm-btn" data-id="${p.id}">Undo rejection</button>`
+      : `<button class="btn-ghost bylaw-edit-btn"      data-id="${p.id}">Edit</button>
+         <button class="btn-ghost bylaw-reject-btn"    data-id="${p.id}">Reject</button>`;
+
+  return `<div class="bylaw-param-card ${statusClass}" data-param-id="${p.id}">
+  <div class="bylaw-param-header">
+    <span class="bylaw-cat-badge">${escHtml(catLabel)}</span>
+    <span class="bylaw-confidence-badge bylaw-confidence-badge--${p.confidence}">${escHtml(confLabel)}</span>
+    <span class="bylaw-param-label">${escHtml(p.label)}</span>
+  </div>
+  <p class="bylaw-param-value">${escHtml(displayValue ?? '')}</p>
+  ${p.source_text ? `<blockquote class="bylaw-source-text">${escHtml(p.source_text)}</blockquote>` : ''}
+  <div class="bylaw-param-actions">${actionBtns}</div>
+  <div class="bylaw-edit-area hidden" id="bylaw-edit-${p.id}">
+    <textarea id="bylaw-edit-input-${p.id}" rows="2">${escHtml(displayValue ?? '')}</textarea>
+    <div style="display:flex;gap:0.5rem">
+      <button class="btn-primary bylaw-save-edit-btn" data-id="${p.id}">Save</button>
+      <button class="btn-ghost   bylaw-cancel-edit-btn" data-id="${p.id}">Cancel</button>
+    </div>
+  </div>
+</div>`;
+}
+
+function renderBylawsConfirmTab() {
+  const unconfirmed = bylawsParameters.filter((p) => p.status === 'unconfirmed');
+  const confirmed   = bylawsParameters.filter((p) => p.status === 'confirmed' || p.status === 'edited');
+  const rejected    = bylawsParameters.filter((p) => p.status === 'rejected');
+
+  bylawsParamsUnconfirmed.innerHTML = unconfirmed.map(renderParamCard).join('');
+  bylawsParamsConfirmed.innerHTML   = confirmed.map(renderParamCard).join('');
+  bylawsParamsRejected.innerHTML    = rejected.map(renderParamCard).join('');
+
+  bylawsUnconfirmedSect.classList.toggle('hidden', unconfirmed.length === 0);
+  bylawsConfirmedSect.classList.toggle('hidden',   confirmed.length  === 0);
+  bylawsRejectedSect.classList.toggle('hidden',    rejected.length   === 0);
+  bylawsConfirmEmpty.classList.toggle('hidden',    bylawsParameters.length > 0);
+
+  bylawsUpdateHeader();
+}
+
+// ── Confirm / Edit / Reject actions ───────────────────────────────────────────
+
+async function bylawsSetParamStatus(id, status, confirmedValue) {
+  const now = new Date().toISOString();
+  const session = (await supabaseClient.auth.getSession()).data?.session;
+
+  const update = {
+    status,
+    confirmed_at:    status === 'unconfirmed' ? null : now,
+    confirmed_by:    status === 'unconfirmed' ? null : (session?.user?.id ?? null),
+    confirmed_value: confirmedValue ?? null,
+    updated_at:      now,
+  };
+
+  const { error } = await supabaseClient
+    .from('bylaws_parameters')
+    .update(update)
+    .eq('id', id);
+
+  if (error) { showToast(`Failed to update: ${error.message}`, 'error'); return; }
+
+  const idx = bylawsParameters.findIndex((p) => p.id === id);
+  if (idx !== -1) bylawsParameters[idx] = { ...bylawsParameters[idx], ...update };
+
+  // If all params confirmed, update document.last_reviewed_at
+  const allDone = bylawsParameters.every((p) => p.status !== 'unconfirmed');
+  if (allDone && bylawsDocument) {
+    await supabaseClient
+      .from('bylaws_documents')
+      .update({ last_reviewed_at: now, status: 'confirmed', updated_at: now })
+      .eq('id', bylawsDocument.id);
+    bylawsDocument.last_reviewed_at = now;
+    bylawsDocument.status = 'confirmed';
+  }
+
+  renderBylawsConfirmTab();
+}
+
+function handleBylawsConfirmClick(e) {
+  const confirmBtn   = e.target.closest('.bylaw-confirm-btn');
+  const editBtn      = e.target.closest('.bylaw-edit-btn');
+  const rejectBtn    = e.target.closest('.bylaw-reject-btn');
+  const unconfirmBtn = e.target.closest('.bylaw-unconfirm-btn');
+  const saveEditBtn  = e.target.closest('.bylaw-save-edit-btn');
+  const cancelEditBtn= e.target.closest('.bylaw-cancel-edit-btn');
+
+  if (confirmBtn) {
+    bylawsSetParamStatus(confirmBtn.dataset.id, 'confirmed', null);
+  } else if (editBtn) {
+    const area = document.getElementById(`bylaw-edit-${editBtn.dataset.id}`);
+    area?.classList.remove('hidden');
+    area?.querySelector('textarea')?.focus();
+  } else if (rejectBtn) {
+    bylawsSetParamStatus(rejectBtn.dataset.id, 'rejected', null);
+  } else if (unconfirmBtn) {
+    bylawsSetParamStatus(unconfirmBtn.dataset.id, 'unconfirmed', null);
+  } else if (saveEditBtn) {
+    const val = document.getElementById(`bylaw-edit-input-${saveEditBtn.dataset.id}`)?.value.trim();
+    if (!val) return;
+    bylawsSetParamStatus(saveEditBtn.dataset.id, 'edited', val);
+  } else if (cancelEditBtn) {
+    document.getElementById(`bylaw-edit-${cancelEditBtn.dataset.id}`)?.classList.add('hidden');
+  }
+}
+
+bylawsConfirmPanel?.addEventListener('click', handleBylawsConfirmClick);
+
+// ── Search ─────────────────────────────────────────────────────────────────────
+
+let bylawsSearchTimer = null;
+
+function highlightTerms(text, terms) {
+  if (!terms.length) return escHtml(text);
+  const re = new RegExp(`(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+  return escHtml(text).replace(re, '<mark>$1</mark>');
+}
+
+async function bylawsDoSearch(q) {
+  bylawsSearchResults.innerHTML = '';
+  bylawsSearchEmpty.classList.add('hidden');
+
+  if (!q.trim() || q.trim().length < 2) return;
+  if (!userOrg) return;
+
+  const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+
+  // Client-side filter over chunks (avoids a Supabase FTS RPC call for this phase)
+  // For larger bylaw corpora a server-side tsvector query would be better,
+  // but client-side is correct for the typical single-document case.
+  const { data: chunks } = await supabaseClient
+    .from('bylaws_chunks')
+    .select('section_ref, chunk_text')
+    .eq('org_id', userOrg.id)
+    .order('chunk_index');
+
+  if (!chunks || chunks.length === 0) {
+    bylawsSearchEmpty.classList.remove('hidden');
+    return;
+  }
+
+  const matches = chunks.filter((c) =>
+    terms.every((t) => c.chunk_text.toLowerCase().includes(t))
+  );
+
+  if (matches.length === 0) {
+    bylawsSearchEmpty.classList.remove('hidden');
+    return;
+  }
+
+  bylawsSearchResults.innerHTML = matches.slice(0, 20).map((c) => `
+    <div class="bylaws-search-result">
+      <div class="bylaws-search-result__ref">${c.section_ref ? escHtml(c.section_ref) : 'Bylaws text'}</div>
+      <div class="bylaws-search-result__text">${highlightTerms(c.chunk_text, terms)}</div>
+    </div>
+  `).join('');
+
+  if (matches.length > 20) {
+    bylawsSearchResults.insertAdjacentHTML('beforeend',
+      `<p class="field-hint" style="margin-top:0.75rem">Showing first 20 of ${matches.length} matches. Narrow your search to see more specific results.</p>`
+    );
+  }
+}
+
+bylawsSearchInput?.addEventListener('input', (e) => {
+  clearTimeout(bylawsSearchTimer);
+  bylawsSearchTimer = setTimeout(() => bylawsDoSearch(e.target.value), 350);
+});
+
+// ── Inner tab switching ────────────────────────────────────────────────────────
+
+bylawsInnerTabs?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.bylaws-tab');
+  if (!btn) return;
+  bylawsSwitchInnerTab(btn.dataset.bylawsTab);
+});
+
+// ── Upload ─────────────────────────────────────────────────────────────────────
+
+async function bylawsHandleFile(file) {
+  bylawsUploadError.classList.add('hidden');
+  bylawsReplaceError?.classList.add('hidden');
+
+  if (!file) return;
+  if (file.size > 20 * 1024 * 1024) {
+    bylawsUploadError.textContent = 'File must be 20 MB or smaller.';
+    bylawsUploadError.classList.remove('hidden');
+    return;
+  }
+
+  const isPdf  = file.type === 'application/pdf' || file.name.endsWith('.pdf');
+  const isDocx = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    || file.name.endsWith('.docx');
+
+  if (!isPdf && !isDocx) {
+    bylawsUploadError.textContent = 'Only PDF and .docx files are accepted.';
+    bylawsUploadError.classList.remove('hidden');
+    return;
+  }
+
+  bylawsShowDocumentState('processing');
+  bylawsStatusMsg.textContent = 'Uploading…';
+
+  try {
+    // 1. Upload to storage
+    const docId       = crypto.randomUUID();
+    const storagePath = `${userOrg.id}/bylaws/${docId}/${file.name}`;
+
+    const { error: uploadErr } = await supabaseClient.storage
+      .from('governance-documents')
+      .upload(storagePath, file, { contentType: file.type });
+
+    if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
+
+    // 2. Extract text client-side for .docx (mammoth already loaded)
+    let extractedText;
+    if (isDocx) {
+      bylawsStatusMsg.textContent = 'Extracting text from Word document…';
+      const buf    = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer: buf });
+      extractedText = result.value.trim();
+    }
+
+    // 3. Insert bylaws_documents row
+    bylawsStatusMsg.textContent = 'Saving…';
+    const { data: docRow, error: insertErr } = await supabaseClient
+      .from('bylaws_documents')
+      .insert({
+        org_id:       userOrg.id,
+        uploaded_by:  (await supabaseClient.auth.getSession()).data?.session?.user?.id ?? null,
+        storage_path: storagePath,
+        filename:     file.name,
+        file_size:    file.size,
+        mime_type:    file.type || (isPdf ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+        status:       'processing',
+      })
+      .select()
+      .single();
+
+    if (insertErr) throw new Error(`Database error: ${insertErr.message}`);
+    bylawsDocument = docRow;
+
+    // 4. Call extract-bylaws edge function
+    bylawsStatusMsg.textContent = 'Extracting provisions (this may take up to a minute)…';
+    const session   = (await supabaseClient.auth.getSession()).data?.session;
+    const response  = await fetch(`${CONFIG.supabaseUrl}/functions/v1/extract-bylaws`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${session?.access_token}`,
+        'apikey':        CONFIG.supabaseAnonKey,
+      },
+      body: JSON.stringify({
+        document_id:    docRow.id,
+        org_id:         userOrg.id,
+        storage_path:   storagePath,
+        mime_type:      docRow.mime_type,
+        extracted_text: extractedText,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) throw new Error(result.error ?? 'Extraction failed');
+
+    // 5. Reload and decide which state to show
+    bylawsLoaded = false;
+    await loadBylaws();
+
+    if (bylawsDocument?.ocr_quality === 'low') {
+      bylawsShowDocumentState('low-quality');
+    } else {
+      bylawsSwitchInnerTab('confirm');
+    }
+
+  } catch (err) {
+    bylawsShowDocumentState('empty');
+    bylawsUploadError.textContent = err.message;
+    bylawsUploadError.classList.remove('hidden');
+  }
+}
+
+// ── Manual text fallback (low-quality scan) ───────────────────────────────────
+
+bylawsManualSubmit?.addEventListener('click', async () => {
+  const text = bylawsManualText?.value.trim();
+  if (!text) {
+    bylawsManualError.textContent = 'Please paste the bylaw text first.';
+    bylawsManualError.classList.remove('hidden');
+    return;
+  }
+  if (!bylawsDocument) return;
+
+  bylawsManualSubmit.disabled = true;
+  bylawsManualError.classList.add('hidden');
+  bylawsStatusMsg.textContent  = 'Extracting provisions…';
+  bylawsShowDocumentState('processing');
+
+  try {
+    const session  = (await supabaseClient.auth.getSession()).data?.session;
+    const response = await fetch(`${CONFIG.supabaseUrl}/functions/v1/extract-bylaws`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${session?.access_token}`,
+        'apikey':        CONFIG.supabaseAnonKey,
+      },
+      body: JSON.stringify({
+        document_id:    bylawsDocument.id,
+        org_id:         userOrg.id,
+        storage_path:   bylawsDocument.storage_path,
+        mime_type:      bylawsDocument.mime_type,
+        extracted_text: text,
+      }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? 'Extraction failed');
+
+    // Update ocr_method to 'manual' on the document
+    await supabaseClient
+      .from('bylaws_documents')
+      .update({ ocr_method: 'manual', ocr_quality: 'ok', updated_at: new Date().toISOString() })
+      .eq('id', bylawsDocument.id);
+
+    bylawsLoaded = false;
+    await loadBylaws();
+    bylawsSwitchInnerTab('confirm');
+  } catch (err) {
+    bylawsManualError.textContent = err.message;
+    bylawsManualError.classList.remove('hidden');
+    bylawsShowDocumentState('low-quality');
+    bylawsManualSubmit.disabled = false;
+  }
+});
+
+bylawsManualCancel?.addEventListener('click', () => {
+  bylawsShowDocumentState(bylawsDocument ? 'doc-info' : 'empty');
+});
+
+// ── Drop zone wiring ───────────────────────────────────────────────────────────
+
+function wireBylawsDropZone(dropZone, fileInput, browseBtn, onFile) {
+  browseBtn?.addEventListener('click', () => fileInput?.click());
+  fileInput?.addEventListener('change', () => { if (fileInput.files[0]) onFile(fileInput.files[0]); });
+
+  dropZone?.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drop-zone--active'); });
+  dropZone?.addEventListener('dragleave', () => dropZone.classList.remove('drop-zone--active'));
+  dropZone?.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drop-zone--active');
+    const f = e.dataTransfer?.files[0];
+    if (f) onFile(f);
+  });
+}
+
+wireBylawsDropZone(bylawsDropZone, bylawsFileInput, bylawsBrowseBtn, bylawsHandleFile);
+
+// Replace document drop zone
+wireBylawsDropZone(
+  bylawsReplaceDropZone,
+  bylawsReplaceInput,
+  bylawsReplaceBrowse,
+  bylawsHandleFile
+);
+
+bylawsReplaceBtn?.addEventListener('click', () => {
+  bylawsReplaceForm?.classList.toggle('hidden');
 });

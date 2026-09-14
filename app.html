@@ -71,12 +71,12 @@
           <span class="pack-save">save 43%</span>
         </button>
       </div>
-      <p class="buy-intro" style="margin-top:1.25rem">
+      <p class="buy-intro buy-intro--spaced">
         Need more than credits?
         <button id="show-board-plan-from-credits-btn" class="btn-link">See the Board Plan ($75/yr)</button>
       </p>
       <p id="checkout-error" class="error hidden"></p>
-      <button id="back-from-credits-btn" class="btn-ghost" style="margin-top:1.25rem">← Back</button>
+      <button id="back-from-credits-btn" class="btn-ghost btn-ghost--mt">← Back</button>
     </section>
 
     <section id="buy-board-plan-section" class="card hidden">
@@ -95,7 +95,7 @@
         <li>Auto-generated next-meeting agenda from open items</li>
         <li>Full-text search across all meeting content</li>
         <li>Council roster with role history</li>
-        <li>Special resolution vote calculator</li>
+        <li>Vote calculator</li>
         <li>Governance document library with version history</li>
         <li>Document templates: AGM Notice, SGM Notice, Written Resolution</li>
         <li>Owner-facing minutes portal (secure per-organization link)</li>
@@ -107,7 +107,7 @@
         <button id="board-plan-checkout-btn" class="btn-primary">Get Board Plan — $75 CAD/year</button>
         <p id="board-plan-checkout-error" class="error hidden"></p>
       </div>
-      <button id="back-from-board-plan-btn" class="btn-ghost" style="margin-top:1rem">← Back</button>
+      <button id="back-from-board-plan-btn" class="btn-ghost btn-ghost--mt">← Back</button>
     </section>
 
     <section id="org-setup-section" class="card hidden">
@@ -268,6 +268,9 @@
         </div>
       </div>
       <div id="minutes-preview" class="minutes-preview"></div>
+      <p class="result-review-prompt">
+        <button id="review-persistent-btn" class="btn-link hidden" type="button">Leave a review</button>
+      </p>
     </section>
 
   </main>
@@ -291,6 +294,33 @@
       </nav>
     </div>
   </footer>
+
+  <!-- Review modal -->
+  <div id="review-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="review-modal-app-heading">
+    <div class="modal-inner modal-inner--narrow">
+      <button class="modal-close" id="review-modal-close" aria-label="Close">✕</button>
+      <h2 id="review-modal-app-heading" style="margin:0 0 0.5rem">How are we doing?</h2>
+      <p style="margin:0 0 1.25rem;color:var(--text-muted);font-size:0.9rem">Takes 30 seconds. Your feedback helps us improve MinuteHand.</p>
+      <div class="review-stars" id="review-stars" role="group" aria-label="Star rating">
+        <button class="star-btn" data-value="1" aria-label="1 star">★</button>
+        <button class="star-btn" data-value="2" aria-label="2 stars">★</button>
+        <button class="star-btn" data-value="3" aria-label="3 stars">★</button>
+        <button class="star-btn" data-value="4" aria-label="4 stars">★</button>
+        <button class="star-btn" data-value="5" aria-label="5 stars">★</button>
+      </div>
+      <div class="form-group" style="margin-top:1rem">
+        <label for="review-text-app" style="font-weight:500">Your review <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+        <textarea id="review-text-app" rows="3" placeholder="What's working well? What could be better?" style="resize:vertical"></textarea>
+        <p class="field-hint">If you're happy for us to share your review on the MinuteHand homepage, leave your name below.</p>
+        <input type="text" id="review-name-app" placeholder="Your name or title (optional — e.g. Strata Council Secretary)">
+      </div>
+      <div class="form-footer" style="margin-top:1rem">
+        <button id="review-submit-app" class="btn-primary">Submit review</button>
+        <button id="review-skip-app" class="btn-ghost">Not now</button>
+      </div>
+      <p id="review-msg-app" class="signin-message hidden" style="margin-top:0.75rem"></p>
+    </div>
+  </div>
 
   <script src="config.js"></script>
   <script src="app.js"></script>

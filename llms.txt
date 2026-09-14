@@ -30,7 +30,7 @@ Board Plan features:
 - Auto-generated next-meeting agenda from open action items
 - Full-text search across all meeting content
 - Council roster with role history
-- Special resolution vote calculator
+- Vote calculator
 - Governance document library with version history and archived versions
 - Document templates: AGM Notice, SGM Notice, Written Resolution
 - Owner-facing minutes portal — a secure per-organization link where strata owners can read and download published minutes without creating an account

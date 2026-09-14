@@ -30,7 +30,7 @@
     </div>
 
     <section id="access-section" class="card hidden">
-      <h1 style="font-size:1.2rem;margin-bottom:0.5rem">Governance Records</h1>
+      <h1 class="section-hero-heading">Governance Records</h1>
       <p id="access-msg"></p>
       <div id="access-upsell" class="hidden" style="margin-top:1rem">
         <p style="margin-bottom:0.75rem;font-size:0.95rem">The Board Plan ($75 CAD/year) unlocks:</p>
@@ -127,6 +127,10 @@
           <button class="btn-link overview-recent__more" data-tab-link="motions">View all motions →</button>
         </div>
 
+        <p class="overview-review-prompt">
+          <button id="review-persistent-btn" class="btn-link hidden" type="button">Leave a review</button>
+        </p>
+
       </div>
 
       <div id="motions-view" class="hidden" role="tabpanel">
@@ -222,7 +226,7 @@
                    readonly aria-label="Owner portal link">
             <button id="portal-copy-btn" class="btn-secondary">Copy link</button>
           </div>
-          <p id="portal-copy-confirm" class="field-hint hidden" style="color:var(--accent)">
+          <p id="portal-copy-confirm" class="field-hint hidden" style="color:var(--success)">
             Link copied to clipboard.
           </p>
           <div style="margin-top:0.75rem">
@@ -628,11 +632,11 @@
           <div class="member-form__grid">
             <div class="form-group">
               <label>Decision <span class="required-mark">*</span></label>
-              <div style="display:flex;gap:1.5rem;margin-top:0.3rem">
-                <label style="font-weight:normal;display:flex;align-items:center;gap:0.4rem">
+              <div class="inline-option-group">
+                <label class="inline-option-label">
                   <input type="radio" name="alt-decision" value="approved" checked> Approved
                 </label>
-                <label style="font-weight:normal;display:flex;align-items:center;gap:0.4rem">
+                <label class="inline-option-label">
                   <input type="radio" name="alt-decision" value="denied"> Denied
                 </label>
               </div>
@@ -662,7 +666,7 @@
               </p>
             </div>
             <div class="form-group" style="grid-column: 1 / -1">
-              <label style="display:flex;align-items:flex-start;gap:0.5rem;font-weight:normal;cursor:pointer">
+              <label class="inline-option-label" style="align-items:flex-start">
                 <input type="checkbox" id="alt-nontransfer" checked style="margin-top:0.2rem;flex-shrink:0">
                 <span>
                   This authorization does not transfer to a future owner
@@ -900,7 +904,7 @@
 
           <!-- Pending invitations -->
           <div id="pending-invites-section" class="hidden" style="margin-top:1.5rem">
-            <h4 style="font-size:0.85rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:0.75rem">Pending Invites</h4>
+            <h4 class="bylaws-group-heading">Pending Invites</h4>
             <div id="pending-invites-list"></div>
           </div>
 
@@ -908,6 +912,113 @@
 
         </div>
       </div><!-- /app-access-view -->
+
+      <!-- Bylaws view ──────────────────────────────────────────────────────────── -->
+      <div id="bylaws-view" class="hidden" role="tabpanel">
+        <div class="tools-section">
+
+          <div class="bylaws-header">
+            <h3 class="tools-section__heading" style="margin:0">Bylaws</h3>
+            <span id="bylaws-last-reviewed" class="bylaws-reviewed-badge hidden"></span>
+          </div>
+
+          <!-- Staleness warning — shown when a document exists -->
+          <div id="bylaws-staleness-notice" class="bylaws-staleness-notice hidden">
+            <p>Bylaws can be amended at AGMs and SGMs. If your strata has passed bylaw amendments since this document was uploaded, the extracted data below may be out of date. Review and re-upload after any amendment meeting.</p>
+          </div>
+
+          <!-- Inner tabs — shown once a document is loaded -->
+          <div id="bylaws-inner-tabs" class="bylaws-inner-tabs hidden">
+            <button class="bylaws-tab bylaws-tab--active" data-bylaws-tab="document">Document</button>
+            <button class="bylaws-tab" data-bylaws-tab="confirm">Review Extractions <span id="bylaws-confirm-badge" class="bylaws-confirm-badge hidden"></span></button>
+            <button class="bylaws-tab" data-bylaws-tab="search">Search</button>
+          </div>
+
+          <!-- ── Document panel ── -->
+          <div id="bylaws-document-panel">
+
+            <!-- Empty state -->
+            <div id="bylaws-empty">
+              <p style="margin-bottom:1rem">Upload your strata's bylaws to extract key provisions for review, and to enable bylaw-aware features. MinuteHand will identify quorum rules, voting thresholds, notice periods, and more — then ask you to confirm each extraction before it's used.</p>
+              <div id="bylaws-drop-zone" class="drop-zone">
+                <input type="file" id="bylaws-file-input" accept=".pdf,.docx" hidden>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m0-9L7 6m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13v2a2 2 0 002 2h10a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                <span>Drag a PDF or .docx here or <button type="button" id="bylaws-browse-btn" class="btn-link">browse</button></span>
+              </div>
+              <p class="field-hint" style="margin-top:0.5rem">Accepts PDF (including scanned) and Word (.docx) — up to 20 MB. Most bylaws from the Land Title Office are PDF.</p>
+              <p id="bylaws-upload-error" class="error hidden" style="margin-top:0.75rem"></p>
+            </div>
+
+            <!-- Processing/uploading state -->
+            <div id="bylaws-processing" class="hidden">
+              <p id="bylaws-status-msg" class="bylaws-status-msg">Uploading…</p>
+              <div class="bylaws-spinner"></div>
+            </div>
+
+            <!-- Low quality OCR warning -->
+            <div id="bylaws-low-quality" class="hidden">
+              <p class="error" style="margin-bottom:0.75rem">MinuteHand couldn't extract readable text from this file — the scan quality may be too low for automatic extraction.</p>
+              <p style="margin-bottom:0.75rem">You can paste the bylaw text manually to continue:</p>
+              <textarea id="bylaws-manual-text" rows="14" placeholder="Paste your bylaw text here…" style="resize:vertical"></textarea>
+              <div class="form-footer" style="margin-top:0.75rem">
+                <button id="bylaws-manual-submit" class="btn-primary">Extract from pasted text</button>
+                <button id="bylaws-manual-cancel" class="btn-ghost">Cancel</button>
+              </div>
+              <p id="bylaws-manual-error" class="error hidden" style="margin-top:0.5rem"></p>
+            </div>
+
+            <!-- Active document info -->
+            <div id="bylaws-doc-info" class="hidden">
+              <div class="bylaws-doc-meta">
+                <p style="margin:0 0 0.25rem"><strong id="bylaws-doc-filename"></strong></p>
+                <p class="field-hint" style="margin:0 0 0.25rem">Uploaded <span id="bylaws-doc-date"></span></p>
+                <p class="field-hint" id="bylaws-doc-ocr-note" style="margin:0"></p>
+              </div>
+              <button id="bylaws-replace-btn" class="btn-ghost" style="margin-top:1rem">Replace bylaws document…</button>
+              <div id="bylaws-replace-form" class="hidden" style="margin-top:1rem">
+                <div id="bylaws-replace-drop-zone" class="drop-zone">
+                  <input type="file" id="bylaws-replace-input" accept=".pdf,.docx" hidden>
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m0-9L7 6m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13v2a2 2 0 002 2h10a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  <span>Drag a file here or <button type="button" id="bylaws-replace-browse" class="btn-link">browse</button></span>
+                </div>
+                <p id="bylaws-replace-error" class="error hidden" style="margin-top:0.5rem"></p>
+              </div>
+            </div>
+
+          </div><!-- /bylaws-document-panel -->
+
+          <!-- ── Confirm panel ── -->
+          <div id="bylaws-confirm-panel" class="hidden">
+            <p class="field-hint" style="margin-bottom:1.25rem">Review each extracted provision against its source text. <strong>Confirm</strong> if correct, <strong>Edit</strong> to correct the extracted value, or <strong>Reject</strong> if the extraction is wrong. Only confirmed provisions will be used in future features.</p>
+            <div id="bylaws-unconfirmed-section" class="hidden">
+              <h4 class="bylaws-group-heading">Awaiting review</h4>
+              <div id="bylaws-params-unconfirmed"></div>
+            </div>
+            <div id="bylaws-confirmed-section" class="hidden">
+              <h4 class="bylaws-group-heading">Confirmed</h4>
+              <div id="bylaws-params-confirmed"></div>
+            </div>
+            <div id="bylaws-rejected-section" class="hidden">
+              <h4 class="bylaws-group-heading">Rejected</h4>
+              <div id="bylaws-params-rejected"></div>
+            </div>
+            <p id="bylaws-confirm-empty" class="field-hint hidden" style="margin-top:1rem">No provisions were extracted from this document. If the bylaws contain quorum rules, notice periods, or other listed provisions, try replacing with a cleaner file or paste the text manually.</p>
+          </div><!-- /bylaws-confirm-panel -->
+
+          <!-- ── Search panel ── -->
+          <div id="bylaws-search-panel" class="hidden">
+            <div class="form-group" style="margin-bottom:1rem">
+              <input type="search" id="bylaws-search-input" class="bylaws-search-input"
+                     placeholder="Search bylaws text — e.g. quorum, proxy, fine…"
+                     autocomplete="off" spellcheck="false">
+            </div>
+            <p class="field-hint" style="margin-bottom:1rem">Results show the matching text and section reference exactly as written in the uploaded bylaws — no paraphrasing or AI interpretation.</p>
+            <div id="bylaws-search-results"></div>
+            <p id="bylaws-search-empty" class="field-hint hidden">No matches found.</p>
+          </div><!-- /bylaws-search-panel -->
+
+        </div>
+      </div><!-- /bylaws-view -->
 
     </div><!-- /board-view -->
 
@@ -940,6 +1051,33 @@
       </nav>
     </div>
   </footer>
+
+  <!-- Review modal -->
+  <div id="review-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="review-modal-heading">
+    <div class="modal-inner modal-inner--narrow">
+      <button class="modal-close" id="review-modal-close" aria-label="Close">✕</button>
+      <h2 id="review-modal-heading" style="margin:0 0 0.5rem">How are we doing?</h2>
+      <p style="margin:0 0 1.25rem;color:var(--text-muted);font-size:0.9rem">Takes 30 seconds. Your feedback helps us improve MinuteHand.</p>
+      <div class="review-stars" id="review-stars" role="group" aria-label="Star rating">
+        <button class="star-btn" data-value="1" aria-label="1 star">★</button>
+        <button class="star-btn" data-value="2" aria-label="2 stars">★</button>
+        <button class="star-btn" data-value="3" aria-label="3 stars">★</button>
+        <button class="star-btn" data-value="4" aria-label="4 stars">★</button>
+        <button class="star-btn" data-value="5" aria-label="5 stars">★</button>
+      </div>
+      <div class="form-group" style="margin-top:1rem">
+        <label for="review-text-board" style="font-weight:500">Your review <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+        <textarea id="review-text-board" rows="3" placeholder="What's working well? What could be better?" style="resize:vertical"></textarea>
+        <p class="field-hint">If you're happy for us to share your review on the MinuteHand homepage, leave your name below.</p>
+        <input type="text" id="review-name-board" placeholder="Your name or title (optional — e.g. Strata Council Secretary)">
+      </div>
+      <div class="form-footer" style="margin-top:1rem">
+        <button id="review-submit-board" class="btn-primary">Submit review</button>
+        <button id="review-skip-board" class="btn-ghost">Not now</button>
+      </div>
+      <p id="review-msg-board" class="signin-message hidden" style="margin-top:0.75rem"></p>
+    </div>
+  </div>
 
   <script src="config.js"></script>
   <script src="board.js"></script>

@@ -237,6 +237,7 @@ async function loadBoardPlanState() {
   }
 
   renderAttendeeSection();
+  initReviewButton();
 }
 
 async function refreshCreditBalance() {
@@ -808,7 +809,109 @@ downloadBtn.addEventListener('click', () => {
   const a    = Object.assign(document.createElement('a'), { href: url, download: `meeting-minutes-${today()}.docx` });
   a.click();
   URL.revokeObjectURL(url);
+  maybeShowReviewModal();
 });
+
+// ── Review modal ───────────────────────────────────────────────────────────────
+//
+// Same trigger logic as board.js — see comment there for full explanation.
+
+async function maybeShowReviewModal() {
+  if (!userOrg?.id) return;
+  const orgId = userOrg.id;
+
+  const countKey = `mh_exports_${orgId}`;
+  const newCount = (parseInt(localStorage.getItem(countKey) ?? '0', 10)) + 1;
+  localStorage.setItem(countKey, String(newCount));
+
+  if (newCount < 2) return;
+
+  const shownKey = `mh_review_shown_${orgId}`;
+  if (localStorage.getItem(shownKey)) return;
+
+  const { count: existing } = await supabaseClient
+    .from('reviews')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId);
+  if (existing > 0) return;
+
+  localStorage.setItem(shownKey, '1');
+  document.getElementById('review-modal')?.classList.remove('hidden');
+}
+
+async function initReviewButton() {
+  const btn = document.getElementById('review-persistent-btn');
+  if (!btn) return;
+  if (!userOrg?.id) { btn.classList.add('hidden'); return; }
+
+  const { count: existing } = await supabaseClient
+    .from('reviews')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', userOrg.id);
+
+  if (existing > 0) {
+    btn.classList.add('hidden');
+  } else {
+    btn.classList.remove('hidden');
+    btn.onclick = () => document.getElementById('review-modal')?.classList.remove('hidden');
+  }
+}
+
+(function initReviewModal() {
+  const modal      = document.getElementById('review-modal');
+  const closeBtn   = document.getElementById('review-modal-close');
+  const skipBtn    = document.getElementById('review-skip-app');
+  const submitBtn  = document.getElementById('review-submit-app');
+  const msgEl      = document.getElementById('review-msg-app');
+  const starsEl    = document.getElementById('review-stars');
+  let selectedRating = 0;
+
+  function closeModal() { modal?.classList.add('hidden'); }
+
+  closeBtn?.addEventListener('click', closeModal);
+  skipBtn?.addEventListener('click', closeModal);
+  modal?.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+  starsEl?.addEventListener('click', e => {
+    const btn = e.target.closest('.star-btn');
+    if (!btn) return;
+    selectedRating = parseInt(btn.dataset.value, 10);
+    starsEl.querySelectorAll('.star-btn').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.value, 10) <= selectedRating);
+    });
+  });
+
+  submitBtn?.addEventListener('click', async () => {
+    if (!selectedRating) {
+      msgEl.textContent = 'Please select a star rating.';
+      msgEl.classList.remove('hidden');
+      return;
+    }
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting…';
+    try {
+      const session = (await supabaseClient.auth.getSession()).data?.session;
+      const { error } = await supabaseClient.from('reviews').insert({
+        user_id:      session?.user?.id ?? null,
+        org_id:       userOrg?.id ?? null,
+        rating:       selectedRating,
+        review_text:  document.getElementById('review-text-app')?.value.trim() || null,
+        display_name: document.getElementById('review-name-app')?.value.trim() || null,
+      });
+      if (error) throw error;
+      msgEl.textContent = 'Thank you — your review has been submitted!';
+      msgEl.classList.remove('hidden');
+      document.getElementById('review-persistent-btn')?.classList.add('hidden');
+      setTimeout(closeModal, 2000);
+    } catch (err) {
+      console.error('review submit', err);
+      msgEl.textContent = 'Something went wrong. Please try again later.';
+      msgEl.classList.remove('hidden');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit review';
+    }
+  });
+})();
 
 // ── Reset ─────────────────────────────────────────────────────────────────────
 

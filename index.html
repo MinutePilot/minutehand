@@ -59,7 +59,7 @@
           "name": "Board Plan",
           "price": "75.00",
           "priceCurrency": "CAD",
-          "description": "Annual plan with 12 included meeting credits plus full Governance Records suite: motion registry, action item tracking, auto-generated agendas, full-text search, board roster, special resolution vote calculator, governance document library with version history, governance document templates, and owner-facing minutes portal. 30-day full refund."
+          "description": "Annual plan with 12 included meeting credits plus full Governance Records suite: motion registry, action item tracking, auto-generated agendas, full-text search, board roster, vote calculator, governance document library with version history, governance document templates, and owner-facing minutes portal. 30-day full refund."
         }
       ]
     },
@@ -76,7 +76,7 @@
       "Board Plan: auto-generated next-meeting agendas",
       "Board Plan: full-text search across all meeting content",
       "Board Plan: council/board roster with role history",
-      "Board Plan: special resolution vote calculator",
+      "Board Plan: vote calculator",
       "Board Plan: governance document library with version history",
       "Board Plan: governance document templates (AGM Notice, SGM Notice, Written Resolution)",
       "Board Plan: owner-facing minutes portal with secure per-organization link"
@@ -103,7 +103,7 @@
         "name": "What is included in the Board Plan?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "The Board Plan ($75 CAD/year) includes 12 meeting credits plus the full Governance Records suite: a motion and decision registry, cross-meeting action item tracking, auto-generated next-meeting agendas, full-text search across all meeting content, a council roster with role history, a special resolution vote calculator, a governance document library with version history, governance document templates (AGM Notice, SGM Notice, Written Resolution), and an owner-facing minutes portal with a secure per-organization link. A 30-day full refund is available."
+          "text": "The Board Plan ($75 CAD/year) includes 12 meeting credits plus the full Governance Records suite: a motion and decision registry, cross-meeting action item tracking, auto-generated next-meeting agendas, full-text search across all meeting content, a council roster with role history, a vote calculator, a governance document library with version history, governance document templates (AGM Notice, SGM Notice, Written Resolution), and an owner-facing minutes portal with a secure per-organization link. A 30-day full refund is available."
         }
       },
       {
@@ -202,19 +202,35 @@
           <a href="/board.html" class="btn-primary btn-lg">Generate Your Minutes →</a>
           <p class="hero__resource"><a href="#agenda-template" id="agenda-template-link">Free: strata council meeting agenda template →</a></p>
         </div>
-        <div class="hero__mockup" aria-label="MinuteHand screenshots">
-          <div class="mockup-carousel">
-            <img src="/screenshots/app-input.png"       class="mockup-slide active" alt="MinuteHand app: two .docx files imported and ready" loading="eager">
-            <img src="/screenshots/minutes-preview.png" class="mockup-slide"        alt="MinuteHand output: formatted meeting minutes in browser" loading="lazy">
-            <img src="/screenshots/minutes-word-1.png"  class="mockup-slide"        alt="MinuteHand .docx downloaded and open in Microsoft Word" loading="lazy">
-            <img src="/screenshots/minutes-word-2.png"  class="mockup-slide"        alt="MinuteHand minutes showing action items table in Word" loading="lazy">
+        <div class="hero__feature-card" aria-hidden="true">
+          <div class="hfc__header">
+            <span class="hfc__title">Motion &amp; Decision Registry</span>
+            <span class="hfc__count">23 motions</span>
           </div>
-          <div class="mockup-dots" aria-hidden="true">
-            <span class="mockup-dot active"></span>
-            <span class="mockup-dot"></span>
-            <span class="mockup-dot"></span>
-            <span class="mockup-dot"></span>
-          </div>
+          <input class="hfc__search" placeholder="Search motions, decisions…" disabled tabindex="-1">
+          <ul class="hfc__rows">
+            <li class="hfc__row">
+              <span class="result-badge result-badge--carried">Carried</span>
+              <span class="hfc__text">Approve 2024–25 budget of $312,600</span>
+              <span class="hfc__date">Nov 2024 AGM</span>
+            </li>
+            <li class="hfc__row">
+              <span class="result-badge result-badge--carried">Carried</span>
+              <span class="hfc__text">Authorize roof inspection up to $4,500</span>
+              <span class="hfc__date">Sep 2024</span>
+            </li>
+            <li class="hfc__row">
+              <span class="result-badge result-badge--tabled">Tabled</span>
+              <span class="hfc__text">Review visitor parking policy</span>
+              <span class="hfc__date">Aug 2024</span>
+            </li>
+            <li class="hfc__row">
+              <span class="result-badge result-badge--defeated">Defeated</span>
+              <span class="hfc__text">Increase caretaker hours to 40 per week</span>
+              <span class="hfc__date">Jun 2024</span>
+            </li>
+          </ul>
+          <p class="hfc__footer">Searchable across all meetings &nbsp;·&nbsp; Export to Word or CSV</p>
         </div>
       </div>
     </section>
@@ -338,7 +354,6 @@
     <!-- ── Review ── -->
     <section class="lp-review" aria-labelledby="review-heading">
       <div class="container">
-        <p class="review-kicker">Independent review</p>
         <h2 id="review-heading">Built for B.C. Strata Councils — and stress-tested to prove it</h2>
         <p class="section-intro">Under B.C. Standard Bylaw 19, councils must distribute minutes to all owners within two weeks of the meeting. MinuteHand produces a professional, legally structured draft in under 30 seconds.</p>
         <div class="review-grid">
@@ -359,10 +374,14 @@
             <p>When council members make unverified claims, MinuteHand inserts professional caveats recommending engineer or legal review before the minutes are finalized.</p>
           </div>
         </div>
-        <blockquote class="review-quote">
-          <p>"For a few dollars per meeting, MinuteHand eliminates the hassle of formatting tables, aligning motions, and chasing down action items. It produces a professional, legally robust Word or PDF draft in under 30 seconds."</p>
-          <cite>— Tested with complex B.C. strata council scenarios, reviewed by Google Gemini</cite>
-        </blockquote>
+      </div>
+    </section>
+
+    <!-- ── Testimonials (populated from approved reviews) ── -->
+    <section class="lp-testimonials hidden" id="testimonials-section" aria-labelledby="testimonials-heading">
+      <div class="container">
+        <h2 id="testimonials-heading">What customers are saying</h2>
+        <div class="testimonials-grid" id="testimonials-grid"></div>
       </div>
     </section>
 
@@ -417,7 +436,7 @@
                   <li>Auto-generated next-meeting agendas — pre-populated from open items and tabled motions</li>
                   <li>Full-text search across all meeting content and documents</li>
                   <li>Council/board roster with role history</li>
-                  <li>Special resolution vote calculator</li>
+                  <li>Vote calculator</li>
                   <li>Governance document library with version history (bylaws, R&amp;R, AGM records, insurance, financial statements)</li>
                   <li>Governance document templates — AGM Notice, SGM Notice, Written Resolution</li>
                   <li>Owner-facing minutes portal — a read-only link for your building, no owner accounts required</li>
@@ -524,7 +543,7 @@
           <details class="faq-item">
             <summary class="faq-q">What's included in the Board Plan?</summary>
             <div class="faq-a">
-              <p>The Board Plan ($75 CAD/year) includes 12 meeting credits per year plus the full Governance Records suite: a motion and decision registry, cross-meeting action item tracking, auto-generated next-meeting agendas, full-text search across all meeting content, a council roster with role history, a special resolution vote calculator, a governance document library with version history, governance document templates (AGM Notice, SGM Notice, Written Resolution), and an owner-facing minutes portal with a secure per-organization link.</p>
+              <p>The Board Plan ($75 CAD/year) includes 12 meeting credits per year plus the full Governance Records suite: a motion and decision registry, cross-meeting action item tracking, auto-generated next-meeting agendas, full-text search across all meeting content, a council roster with role history, a vote calculator, a governance document library with version history, governance document templates (AGM Notice, SGM Notice, Written Resolution), and an owner-facing minutes portal with a secure per-organization link.</p>
               <p>A 30-day full refund is available — no questions asked.</p>
             </div>
           </details>
@@ -671,21 +690,6 @@ ATTENDEES:
 
 <script>
 (function () {
-  var slides = document.querySelectorAll('.mockup-slide');
-  var dots   = document.querySelectorAll('.mockup-dot');
-  var cur    = 0;
-  function go(n) {
-    slides[cur].classList.remove('active');
-    dots[cur].classList.remove('active');
-    cur = n;
-    slides[cur].classList.add('active');
-    dots[cur].classList.add('active');
-  }
-  dots.forEach(function (d, i) { d.addEventListener('click', function () { go(i); }); });
-  setInterval(function () { go((cur + 1) % slides.length); }, 4000);
-}());
-
-(function () {
   var link = document.getElementById('agenda-template-link');
   if (link) {
     link.addEventListener('click', function () {
@@ -702,6 +706,46 @@ ATTENDEES:
       setTimeout(function () { btn.textContent = 'Copy to clipboard'; }, 2000);
     });
   });
+}());
+
+(function () {
+  var SUPABASE_URL     = 'https://phzmhvslrzmrufzcjqei.supabase.co';
+  var SUPABASE_ANON    = 'sb_publishable_M_Bzj1H5y_ErDPcS-r47Gw_jYjpArps';
+  var section          = document.getElementById('testimonials-section');
+  var grid             = document.getElementById('testimonials-grid');
+  if (!section || !grid) return;
+
+  fetch(SUPABASE_URL + '/rest/v1/reviews?approved=eq.true&order=created_at.desc&limit=6', {
+    headers: {
+      'apikey':        SUPABASE_ANON,
+      'Authorization': 'Bearer ' + SUPABASE_ANON,
+    }
+  })
+  .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+  .then(function (rows) {
+    if (!rows || !rows.length) return;
+    rows.forEach(function (r) {
+      var stars = '';
+      for (var i = 0; i < r.rating; i++) stars += '★';
+      var card = document.createElement('div');
+      card.className = 'testimonial-card';
+      card.innerHTML =
+        '<div class="testimonial-stars">' + stars + '</div>' +
+        (r.review_text ? '<p class="testimonial-text">' + escHtml(r.review_text) + '</p>' : '') +
+        (r.display_name ? '<p class="testimonial-author">— ' + escHtml(r.display_name) + '</p>' : '');
+      grid.appendChild(card);
+    });
+    section.classList.remove('hidden');
+  })
+  .catch(function () { /* silently skip if fetch fails */ });
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
 }());
 </script>
 </body>

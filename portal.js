@@ -170,18 +170,25 @@ function downloadMinutes(meetingId) {
 
   const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-  body        { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 2cm; }
-  h1          { font-size: 14pt; margin: 0 0 4pt; }
-  h2          { font-size: 12pt; margin: 14pt 0 4pt; }
-  h3          { font-size: 11pt; margin: 10pt 0 3pt; }
-  p           { margin: 0 0 6pt; line-height: 1.4; }
-  ul, ol      { margin: 0 0 6pt 18pt; }
-  li          { margin-bottom: 3pt; }
-  blockquote  { margin: 4pt 0 4pt 14pt; padding-left: 8pt;
+  body        { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 0; line-height: 1.3; }
+  h1          { font-size: 13pt; font-weight: bold; text-align: center; margin: 0 0 2pt; }
+  h2          { font-size: 11pt; font-weight: bold; margin: 10pt 0 3pt; }
+  h3          { font-size: 11pt; font-weight: bold; margin: 8pt 0 2pt; }
+  h4          { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: .04em;
+                border-bottom: 1pt solid #888; padding-bottom: 2pt; margin: 12pt 0 4pt; }
+  p           { margin: 0 0 5pt; }
+  ul, ol      { margin: 0 0 5pt 18pt; }
+  li          { margin-bottom: 2pt; }
+  blockquote  { margin: 3pt 0 3pt 12pt; padding-left: 8pt;
                 border-left: 2pt solid #bbb; color: #555; font-style: italic; }
-  .doc-header { border-bottom: 1pt solid #888; padding-bottom: 6pt; margin-bottom: 14pt; }
-  .doc-footer { margin-top: 28pt; font-size: 9pt; color: #888;
-                border-top: 1pt solid #ccc; padding-top: 6pt; }
+  hr          { border: none; border-top: 1pt solid #888; margin: 6pt 0; }
+  table       { width: 100%; border-collapse: collapse; margin: 6pt 0; font-size: 10pt; }
+  th          { background: #e8e8e8; font-weight: bold; text-align: left; padding: 4pt 7pt; border: 1pt solid #999; }
+  td          { padding: 4pt 7pt; border: 1pt solid #ccc; vertical-align: top; }
+  .doc-header { border-bottom: 1pt solid #888; padding-bottom: 6pt; margin-bottom: 10pt; text-align: center; }
+  .doc-header p { color: #555; font-size: 10pt; margin: 1pt 0 0; }
+  .doc-footer { margin-top: 24pt; font-size: 9pt; color: #888;
+                border-top: 1pt solid #888; padding-top: 6pt; }
 </style>
 </head><body>
 <div class="doc-header">
@@ -195,7 +202,7 @@ ${bodyHtml}
 </div>
 </body></html>`;
 
-  const blob  = htmlDocx.asBlob(fullHtml, { orientation: 'portrait' });
+  const blob  = htmlDocx.asBlob(fullHtml, { orientation: 'portrait', margins: { top: 720, right: 720, bottom: 720, left: 720 } });
   const slug  = orgName.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 30);
   const date  = m.meeting_date || meetingId.slice(0, 8);
   const fname = `${slug}_Minutes_${date}.docx`;
