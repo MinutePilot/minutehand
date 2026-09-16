@@ -3945,3 +3945,67 @@ mark {
   gap: 0.75rem;
   flex-shrink: 0;
 }
+
+/* ── Version read-only preview modal (over editor overlay) ───────────────── */
+
+.version-preview-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.version-preview-modal.hidden { display: none; }
+
+.version-preview-modal__inner {
+  background: var(--bg);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 800px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.version-preview-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.version-preview-modal__body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 2rem 1.5rem;
+  font-size: 0.9rem;
+}
+
+.version-preview-modal__body h1 { font-size: 1.6rem; margin: 1.2rem 0 0.5rem; }
+.version-preview-modal__body h2 { font-size: 1.3rem; margin: 1rem 0 0.4rem; }
+.version-preview-modal__body h3 { font-size: 1.1rem; margin: 0.8rem 0 0.3rem; }
+.version-preview-modal__body h4 { font-size: 1rem;   margin: 0.6rem 0 0.2rem; font-weight: 600; }
+.version-preview-modal__body blockquote {
+  border-left: 3px solid var(--border);
+  margin: 0.5rem 0;
+  padding: 0.25rem 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.version-preview-modal__body hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1rem 0;
+}

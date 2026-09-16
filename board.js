@@ -1082,6 +1082,21 @@ function genRemoveStatusRow() { document.getElementById('gen-status-row')?.remov
 // Shown after generation when Claude could not determine the meeting date.
 // Blocking: the user must enter a date before continuing — no dismiss path.
 
+// Walk DOM text nodes so the replace works even if Quill wrapped part of the
+// heading text in a formatting span (splitting what was one text node).
+function replacePlaceholderInHtml(html, placeholder, replacement) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const nodes = [];
+  const walker = document.createTreeWalker(tmp, NodeFilter.SHOW_TEXT, null, false);
+  let node;
+  while ((node = walker.nextNode())) {
+    if (node.nodeValue.includes(placeholder)) nodes.push(node);
+  }
+  nodes.forEach((n) => { n.nodeValue = n.nodeValue.split(placeholder).join(replacement); });
+  return tmp.innerHTML;
+}
+
 function showDateConfirmModal(meetingId) {
   let modal = document.getElementById('date-confirm-modal');
   if (!modal) {
@@ -1157,7 +1172,7 @@ function showDateConfirmModal(meetingId) {
 
       // Fix the ### heading in stored markdown/edited_html — replace the
       // placeholder the AI wrote with the now-confirmed date string.
-      const dateLabel  = new Date(val + 'T12:00:00').toLocaleDateString('en-CA', {
+      const dateLabel   = new Date(val + 'T12:00:00').toLocaleDateString('en-CA', {
         year: 'numeric', month: 'long', day: 'numeric',
       });
       const PLACEHOLDER = '[Date not stated — please confirm]';
@@ -1168,11 +1183,15 @@ function showDateConfirmModal(meetingId) {
         .single();
       if (mData) {
         const updates = {};
+        // markdown is plain text — simple string replace is safe
         if (mData.markdown?.includes(PLACEHOLDER)) {
           updates.markdown = mData.markdown.split(PLACEHOLDER).join(dateLabel);
         }
-        if (mData.edited_html?.includes(PLACEHOLDER)) {
-          updates.edited_html = mData.edited_html.split(PLACEHOLDER).join(dateLabel);
+        // edited_html may have Quill-inserted spans around parts of the heading,
+        // so walk actual DOM text nodes rather than string-matching raw HTML.
+        if (mData.edited_html) {
+          const fixed = replacePlaceholderInHtml(mData.edited_html, PLACEHOLDER, dateLabel);
+          if (fixed !== mData.edited_html) updates.edited_html = fixed;
         }
         if (Object.keys(updates).length) {
           await supabaseClient.from('meetings').update(updates).eq('id', meetingId);
@@ -3810,8 +3829,34 @@ async function previewVersion(versionId) {
     hour: '2-digit', minute: '2-digit',
   });
 
-  quillEditor.clipboard.dangerouslyPasteHTML(data.html_content);
-  showToast(`Previewing version from ${when}. Save to keep, or close to discard.`, 'success');
+  showVersionPreviewModal(data.html_content, when);
+}
+
+// Opens a read-only modal over the editor — no path to save from here.
+// Restore (revertToVersion) is the only action that writes content back.
+function showVersionPreviewModal(html, when) {
+  let modal = document.getElementById('version-preview-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id        = 'version-preview-modal';
+    modal.className = 'version-preview-modal';
+    modal.innerHTML = `
+      <div class="version-preview-modal__inner">
+        <div class="version-preview-modal__header">
+          <span id="vpm-title"></span>
+          <button id="vpm-close-btn" class="btn-icon" title="Close preview">✕</button>
+        </div>
+        <div id="vpm-body" class="version-preview-modal__body prose"></div>
+      </div>`;
+    document.body.appendChild(modal);
+    document.getElementById('vpm-close-btn').addEventListener('click', () => {
+      modal.classList.add('hidden');
+    });
+  }
+
+  document.getElementById('vpm-title').textContent = `Read-only preview — ${when}`;
+  document.getElementById('vpm-body').innerHTML = html;
+  modal.classList.remove('hidden');
 }
 
 async function revertToVersion(versionId) {
