@@ -169,6 +169,7 @@ RULES — follow exactly:
    - # for the document title only (e.g., "MEETING MINUTES")
    - ## for the organization/corporation name (one line, immediately after the title)
    - ### for the meeting type and date (one line, e.g., "Strata Council Meeting — October 21, 2026")
+     DATE RULE: The date in this heading must be derived only from a direct, unambiguous statement in the source that this is the date of THIS meeting. Do not infer the year or date from dates mentioned in quoted documents, cited past minutes, historical motions being read into the record, or any reference that applies to a different meeting or time period. If the date is not clearly and directly stated for this meeting, use "[Date not stated — please confirm]".
    - Immediately after ###, output each meeting metadata field as its own blockquote line:
      > **Location:** value
      > **Meeting called to order:** value
@@ -214,8 +215,9 @@ The object must have exactly two top-level keys:
 
 "structured": object extracted from what you wrote in "markdown":
 {
-  "meeting_date": "YYYY-MM-DD if determinable from the source, otherwise null",
+  "meeting_date": "YYYY-MM-DD only when this meeting's own date is directly and explicitly stated in the source as the date of THIS meeting. A date found inside a quoted historical document, referenced past minutes, cited resolution, or any other material about a different meeting does NOT qualify — even if that date appears prominently in the source text. If this meeting's date is not clearly and directly stated, return null.",
   "title": "the ### heading line, e.g. 'Strata Council Meeting — September 15, 2026'",
+  MOTIONS EXTRACTION RULE: Only include motions that were formally made and voted on at THIS meeting — those identifiable by a MOVED by / SECONDED by / CARRIED or DEFEATED attribution line in the markdown above. Do not extract historical resolutions being cited, prior decisions being read into the record, or motion language quoted from past meetings. If a motion at this meeting ratifies or confirms an earlier resolution, record only the ratification motion (the one with MOVED/SECONDED/CARRIED at this meeting), not the underlying quoted text. Never log the same motion twice.
   "motions": [
     {
       "description": "the motion substance — what was moved, not the MOVED/SECONDED/CARRIED attribution line",
@@ -476,7 +478,12 @@ Deno.serve(async (req: Request) => {
     return json({ minutes: markdown, template, warning: "persist_failed" });
   }
 
-  return json({ minutes: markdown, template, meeting_id: meetingId });
+  return json({
+    minutes: markdown,
+    template,
+    meeting_id: meetingId,
+    requires_date_confirmation: meetingId !== null && (structured?.meeting_date == null),
+  });
 });
 
 function json(body: unknown, status = 200) {

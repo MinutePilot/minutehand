@@ -2517,6 +2517,47 @@ body.landing {
   .modal-inner { border-radius: 8px 8px 0 0; max-height: 90vh; overflow-y: auto; }
 }
 
+/* ── Meeting detail metadata (inside minutes modal) ── */
+
+.meeting-detail-meta {
+  margin-bottom: 0.75rem;
+}
+
+.meeting-detail-meta__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+}
+
+.meeting-detail-meta__label {
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 3rem;
+}
+
+.meeting-detail-meta__date {
+  color: var(--text);
+}
+
+.text-caution {
+  color: var(--error);
+  font-style: italic;
+}
+
+.meeting-detail-records {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-left: auto;
+}
+
+.meeting-detail-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.75rem 0 1rem;
+}
+
 /* ── Review modal ── */
 
 .modal-inner--narrow { max-width: 480px; }

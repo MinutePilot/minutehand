@@ -43,6 +43,7 @@ let activeApprovalId      = null;
 let allMeetingsList    = [];
 let meetingsListLoaded = false;
 let overviewLoaded     = false;
+let boardInitialized   = false;
 
 let activeTemplate = 'agm';
 
@@ -320,8 +321,13 @@ async function init() {
   // Persistent "Leave a review" button — check once after org is known
   initReviewButton();
 
-  // Default landing: Meetings → Generate Minutes
-  await switchToCategory('meetings', 'generate');
+  // Default landing: Meetings → Generate Minutes — only on first load.
+  // onAuthStateChange fires on TOKEN_REFRESHED (tab focus), re-running init()
+  // would reset navigation position every time the user switches browser tabs.
+  if (!boardInitialized) {
+    boardInitialized = true;
+    await switchToCategory('meetings', 'generate');
+  }
 }
 
 function showAccess(type) {
@@ -799,6 +805,9 @@ async function genRunGenerateFlow(notes) {
     genForm.classList.add('hidden');
     genSpeakerSection.classList.add('hidden');
     genResultSection.classList.remove('hidden');
+    if (data.requires_date_confirmation && genCurrentMeetingId) {
+      await showDateConfirmModal(genCurrentMeetingId);
+    }
   } catch (err) {
     genRemoveStatusRow();
     genSetLoadingBtn(false);
@@ -1063,6 +1072,90 @@ function genAddStatusRow(text) {
 }
 
 function genRemoveStatusRow() { document.getElementById('gen-status-row')?.remove(); }
+
+// ── Date confirmation modal ───────────────────────────────────────────────────
+// Shown after generation when Claude could not determine the meeting date.
+// Blocking: the user must enter a date before continuing — no dismiss path.
+
+function showDateConfirmModal(meetingId) {
+  let modal = document.getElementById('date-confirm-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id        = 'date-confirm-modal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-inner" style="max-width:420px">
+        <h2 style="font-size:1rem;font-weight:700;margin:0 0 0.75rem">Meeting Date Required</h2>
+        <p class="field-hint" style="margin-bottom:1rem">
+          The transcript didn't clearly state the date of this meeting, so the year could not be confirmed.
+          Enter the correct date — it will be stored in the Motion Registry and Action Items.
+          This step cannot be skipped.
+        </p>
+        <div class="form-group">
+          <label for="dcm-date-input">Meeting date</label>
+          <input type="date" id="dcm-date-input" class="registry-date" style="width:100%;display:block" required>
+          <span id="dcm-error" class="error hidden"></span>
+        </div>
+        <div style="margin-top:1rem">
+          <button id="dcm-confirm-btn" class="btn-primary">Confirm date</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  const input = modal.querySelector('#dcm-date-input');
+  const btn   = modal.querySelector('#dcm-confirm-btn');
+  const errEl = modal.querySelector('#dcm-error');
+
+  input.value = '';
+  errEl.classList.add('hidden');
+  modal.classList.remove('hidden');
+
+  return new Promise((resolve) => {
+    btn.onclick = async () => {
+      const val = input.value.trim();
+      if (!val) {
+        errEl.textContent = 'Please enter the meeting date.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      btn.disabled    = true;
+      btn.textContent = 'Saving…';
+      errEl.classList.add('hidden');
+
+      const { error } = await supabaseClient
+        .from('meetings')
+        .update({ meeting_date: val })
+        .eq('id', meetingId);
+
+      if (error) {
+        errEl.textContent = 'Could not save — please try again.';
+        errEl.classList.remove('hidden');
+        btn.disabled    = false;
+        btn.textContent = 'Confirm date';
+        return;
+      }
+
+      modal.classList.add('hidden');
+
+      // Update in-memory caches so the rest of the UI reflects the confirmed date
+      const cached = meetingCache.get(meetingId);
+      if (cached) cached.meeting_date = val;
+      const ml = allMeetingsList.find((m) => m.id === meetingId);
+      if (ml) ml.meeting_date = val;
+      allMotions.forEach((m) => {
+        if (m.meeting_id === meetingId && m.meetings) m.meetings.meeting_date = val;
+      });
+      allActionItems.forEach((a) => {
+        if (a.meeting_id === meetingId && a.meetings) a.meetings.meeting_date = val;
+      });
+
+      renderMotions();
+      renderMeetingsList();
+      resolve(val);
+    };
+  });
+}
 
 function genSetFileStatus(el, msg, type) {
   if (!el) return;
@@ -1343,6 +1436,7 @@ function getPlanGateMessage(cat) {
 }
 
 function showGenForm() {
+  genSetLoadingBtn(false);
   generateView.classList.remove('hidden');
   genForm.classList.remove('hidden');
   genSpeakerSection.classList.add('hidden');
@@ -1939,27 +2033,121 @@ toggleArchivedAiBtn?.addEventListener('click', () => {
 // ── Minutes modal ─────────────────────────────────────────────────────────────
 
 async function openMeetingModal(meetingId) {
-  modalBody.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading minutes…</span></div>';
+  modalBody.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading…</span></div>';
   minutesModal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
 
   if (!meetingCache.has(meetingId)) {
     const { data } = await supabaseClient
       .from('meetings')
-      .select('markdown, title, meeting_date')
+      .select('id, markdown, title, meeting_date, template, status')
       .eq('id', meetingId)
       .single();
     meetingCache.set(meetingId, data ?? null);
   }
 
   const meeting = meetingCache.get(meetingId);
-  if (meeting?.markdown) {
-    modalBody.innerHTML = marked.parse(preprocessMarkdown(meeting.markdown));
-    modalBody.scrollTop = 0;
-  } else {
+  if (!meeting?.markdown) {
     modalBody.innerHTML = '<p class="error">Could not load minutes.</p>';
+    return;
   }
+
+  const meetingMotions = allMotions.filter((m) => m.meeting_id === meetingId);
+  const meetingActions = allActionItems.filter((a) => a.meeting_id === meetingId);
+
+  const dateStr = meeting.meeting_date
+    ? new Date(meeting.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', {
+        year: 'numeric', month: 'long', day: 'numeric',
+      })
+    : null;
+
+  const recordsBadge = (meetingMotions.length + meetingActions.length > 0)
+    ? `<span class="meeting-detail-records">
+         ${meetingMotions.length} motion${meetingMotions.length !== 1 ? 's' : ''}
+         &nbsp;·&nbsp;
+         ${meetingActions.length} action item${meetingActions.length !== 1 ? 's' : ''}
+       </span>`
+    : '';
+
+  const metaHtml = `<div class="meeting-detail-meta">
+  <div class="meeting-detail-meta__row">
+    <span class="meeting-detail-meta__label">Date</span>
+    <span class="meeting-detail-meta__date" id="mdm-date-${meetingId}">
+      ${dateStr ? escHtml(dateStr) : '<span class="text-caution">Date not recorded</span>'}
+    </span>
+    ${recordsBadge}
+    <button class="btn-link mdm-edit-date" data-id="${meetingId}" data-date="${escHtml(meeting.meeting_date ?? '')}">Edit date</button>
+  </div>
+</div><hr class="meeting-detail-divider">`;
+
+  modalBody.innerHTML = metaHtml + marked.parse(preprocessMarkdown(meeting.markdown));
+  modalBody.scrollTop = 0;
 }
+
+// Delegated handler for inline date editing inside the meeting modal
+modalBody.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.mdm-edit-date');
+  if (!btn) return;
+
+  const meetingId   = btn.dataset.id;
+  const currentDate = btn.dataset.date;
+
+  // Swap to inline edit UI
+  const row = btn.closest('.meeting-detail-meta__row');
+  row.innerHTML = `
+    <span class="meeting-detail-meta__label">Date</span>
+    <input type="date" id="mdm-edit-input" class="registry-date" style="width:auto" value="${escHtml(currentDate)}">
+    <button id="mdm-save-btn" class="btn-primary btn-sm">Save</button>
+    <button id="mdm-cancel-btn" class="btn-ghost btn-sm">Cancel</button>
+    <span id="mdm-edit-error" class="field-error hidden" style="margin-left:8px"></span>`;
+
+  document.getElementById('mdm-cancel-btn').onclick = () => openMeetingModal(meetingId);
+
+  document.getElementById('mdm-save-btn').onclick = async () => {
+    const val   = document.getElementById('mdm-edit-input')?.value.trim();
+    const errEl = document.getElementById('mdm-edit-error');
+    if (!val) {
+      errEl.textContent = 'Please enter a date.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    const saveBtn          = document.getElementById('mdm-save-btn');
+    saveBtn.disabled       = true;
+    saveBtn.textContent    = 'Saving…';
+    errEl.classList.add('hidden');
+
+    const { error } = await supabaseClient
+      .from('meetings')
+      .update({ meeting_date: val })
+      .eq('id', meetingId);
+
+    if (error) {
+      errEl.textContent = 'Could not save — please try again.';
+      errEl.classList.remove('hidden');
+      saveBtn.disabled    = false;
+      saveBtn.textContent = 'Save';
+      return;
+    }
+
+    // Update in-memory caches
+    const cached = meetingCache.get(meetingId);
+    if (cached) cached.meeting_date = val;
+    const ml = allMeetingsList.find((m) => m.id === meetingId);
+    if (ml) ml.meeting_date = val;
+    allMotions.forEach((m) => {
+      if (m.meeting_id === meetingId && m.meetings) m.meetings.meeting_date = val;
+    });
+    allActionItems.forEach((a) => {
+      if (a.meeting_id === meetingId && a.meetings) a.meetings.meeting_date = val;
+    });
+
+    showToast('Meeting date updated.', 'success');
+    renderMotions();
+    renderMeetingsList();
+    meetingCache.delete(meetingId);
+    openMeetingModal(meetingId);
+  };
+});
 
 function closeModal() {
   minutesModal.classList.add('hidden');
