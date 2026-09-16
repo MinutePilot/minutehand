@@ -3766,3 +3766,182 @@ mark {
 /* ── Utility — top-spaced ghost button (back buttons in purchase flows) ───── */
 
 .btn-ghost--mt { margin-top: 1.25rem; }
+
+/* ── Minutes editor overlay ──────────────────────────────────────────────── */
+
+.editor-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-overlay.hidden { display: none; }
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.editor-header__title {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.editor-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.editor-pub-warning {
+  padding: 0.5rem 1.25rem;
+  background: #fff3cd;
+  color: #856404;
+  font-size: 0.85rem;
+  border-bottom: 1px solid #ffc107;
+  flex-shrink: 0;
+}
+
+.editor-governance-note {
+  padding: 0.4rem 1.25rem;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.editor-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-quill-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Quill snow theme overrides — fill available height */
+.editor-quill-container .ql-toolbar {
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  border-color: var(--border);
+  flex-shrink: 0;
+}
+
+.editor-quill-container .ql-container {
+  flex: 1;
+  overflow-y: auto;
+  font-family: inherit;
+  font-size: 0.9rem;
+  border: none;
+}
+
+.editor-quill-container .ql-editor {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  min-height: 100%;
+}
+
+/* Heading levels in Quill editor */
+.editor-quill-container .ql-editor h1 { font-size: 1.6rem; margin: 1.2rem 0 0.5rem; }
+.editor-quill-container .ql-editor h2 { font-size: 1.3rem; margin: 1rem 0 0.4rem; }
+.editor-quill-container .ql-editor h3 { font-size: 1.1rem; margin: 0.8rem 0 0.3rem; }
+.editor-quill-container .ql-editor h4 { font-size: 1rem;   margin: 0.6rem 0 0.2rem; font-weight: 600; }
+.editor-quill-container .ql-editor blockquote {
+  border-left: 3px solid var(--border);
+  margin: 0.5rem 0;
+  padding: 0.25rem 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.editor-quill-container .ql-editor hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1rem 0;
+}
+
+/* Version history panel — slides in at the bottom */
+.editor-version-panel {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  max-height: 260px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-version-panel.hidden { display: none; }
+
+.editor-version-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1.25rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.editor-version-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 0.25rem 0;
+}
+
+.version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  gap: 1rem;
+}
+
+.version-row:last-child { border-bottom: none; }
+
+.version-row__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.version-row__label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.version-row__when {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.version-row__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}

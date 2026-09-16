@@ -47,6 +47,11 @@ let boardInitialized   = false;
 
 let activeTemplate = 'agm';
 
+let editorMeetingId    = null;
+let editorMeetingMeta  = null;
+let quillEditor        = null;
+let editorInitialized  = false;
+
 let hasBoardPlan        = false;
 let creditBalance       = null;
 let rosterMembers       = [];
@@ -1150,6 +1155,34 @@ function showDateConfirmModal(meetingId) {
         if (a.meeting_id === meetingId && a.meetings) a.meetings.meeting_date = val;
       });
 
+      // Fix the ### heading in stored markdown/edited_html — replace the
+      // placeholder the AI wrote with the now-confirmed date string.
+      const dateLabel  = new Date(val + 'T12:00:00').toLocaleDateString('en-CA', {
+        year: 'numeric', month: 'long', day: 'numeric',
+      });
+      const PLACEHOLDER = '[Date not stated — please confirm]';
+      const { data: mData } = await supabaseClient
+        .from('meetings')
+        .select('markdown, edited_html')
+        .eq('id', meetingId)
+        .single();
+      if (mData) {
+        const updates = {};
+        if (mData.markdown?.includes(PLACEHOLDER)) {
+          updates.markdown = mData.markdown.split(PLACEHOLDER).join(dateLabel);
+        }
+        if (mData.edited_html?.includes(PLACEHOLDER)) {
+          updates.edited_html = mData.edited_html.split(PLACEHOLDER).join(dateLabel);
+        }
+        if (Object.keys(updates).length) {
+          await supabaseClient.from('meetings').update(updates).eq('id', meetingId);
+          if (cached) {
+            if (updates.markdown)    cached.markdown    = updates.markdown;
+            if (updates.edited_html) cached.edited_html = updates.edited_html;
+          }
+        }
+      }
+
       renderMotions();
       renderMeetingsList();
       resolve(val);
@@ -2040,7 +2073,7 @@ async function openMeetingModal(meetingId) {
   if (!meetingCache.has(meetingId)) {
     const { data } = await supabaseClient
       .from('meetings')
-      .select('id, markdown, title, meeting_date, template, status')
+      .select('id, markdown, edited_html, title, meeting_date, template, status, published')
       .eq('id', meetingId)
       .single();
     meetingCache.set(meetingId, data ?? null);
@@ -2048,7 +2081,7 @@ async function openMeetingModal(meetingId) {
 
   const meeting = meetingCache.get(meetingId);
   if (!meeting?.markdown) {
-    modalBody.innerHTML = '<p class="error">Could not load minutes.</p>';
+    modalBody.innerHTML = '<p class="error">Could not load meeting.</p>';
     return;
   }
 
@@ -2078,14 +2111,65 @@ async function openMeetingModal(meetingId) {
     ${recordsBadge}
     <button class="btn-link mdm-edit-date" data-id="${meetingId}" data-date="${escHtml(meeting.meeting_date ?? '')}">Edit date</button>
   </div>
+  <div class="meeting-detail-meta__actions">
+    <button class="btn-primary btn-sm mdm-edit-minutes" data-id="${meetingId}">Edit minutes</button>
+    <button class="btn-ghost btn-sm mdm-download-docx" data-id="${meetingId}">Download .docx</button>
+  </div>
 </div><hr class="meeting-detail-divider">`;
 
-  modalBody.innerHTML = metaHtml + marked.parse(preprocessMarkdown(meeting.markdown));
+  const contentHtml = meeting.edited_html
+    ?? marked.parse(preprocessMarkdown(meeting.markdown));
+
+  modalBody.innerHTML = metaHtml + contentHtml;
   modalBody.scrollTop = 0;
 }
 
-// Delegated handler for inline date editing inside the meeting modal
+// Delegated handler for actions inside the meeting modal
 modalBody.addEventListener('click', async (e) => {
+  // Edit minutes → open full-screen editor
+  const editBtn = e.target.closest('.mdm-edit-minutes');
+  if (editBtn) {
+    closeModal();
+    await openEditor(editBtn.dataset.id);
+    return;
+  }
+
+  // Download .docx from meeting record (uses edited_html if available)
+  const dlBtn = e.target.closest('.mdm-download-docx');
+  if (dlBtn) {
+    const mid = dlBtn.dataset.id;
+    const m   = meetingCache.get(mid);
+    if (!m) return;
+    const bodyHtml = m.edited_html ?? marked.parse(preprocessMarkdown(m.markdown ?? ''));
+    const fullHtml = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+  body    { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.3; color: #000; margin: 0; }
+  h1      { font-size: 13pt; font-weight: bold; text-align: center; margin: 0 0 2pt; }
+  h2      { font-size: 11pt; font-weight: bold; color: #111; margin: 0 0 1pt; }
+  h3      { font-size: 11pt; font-weight: bold; color: #111; margin: 0 0 5pt; }
+  h4      { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: .04em; color: #000; border-bottom: 1pt solid #888; padding-bottom: 2pt; margin: 12pt 0 4pt; }
+  h5      { font-size: 11pt; font-weight: bold; color: #222; margin: 6pt 0 2pt; }
+  p       { margin: 0 0 5pt; }
+  blockquote { margin: 1pt 0; padding: 0; border: none; color: #555; font-size: 10pt; }
+  hr      { border: none; border-top: 1pt solid #888; margin: 8pt 0; }
+  table   { width: 100%; border-collapse: collapse; margin: 6pt 0; font-size: 10pt; }
+  th      { background: #e8e8e8; font-weight: bold; text-align: left; padding: 4pt 7pt; border: 1pt solid #999; color: #000; }
+  td      { padding: 4pt 7pt; border: 1pt solid #ccc; vertical-align: top; }
+  ul, ol  { margin: 2pt 0 5pt 18pt; }
+  li      { margin-bottom: 2pt; }
+</style></head><body>${bodyHtml}</body></html>`;
+    const blob = htmlDocx.asBlob(fullHtml, { margins: { top: 720, right: 720, bottom: 720, left: 720 } });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), {
+      href:     url,
+      download: `meeting-minutes-${(m.meeting_date ?? genToday())}.docx`,
+    });
+    a.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  // Edit date (inline)
   const btn = e.target.closest('.mdm-edit-date');
   if (!btn) return;
 
@@ -3348,17 +3432,47 @@ function renderMeetingsList() {
 }
 
 async function publishMeeting(id) {
+  // Fetch current content — edited_html if set, otherwise rendered markdown
+  const { data: meeting } = await supabaseClient
+    .from('meetings')
+    .select('markdown, edited_html')
+    .eq('id', id)
+    .single();
+
+  const liveHtml = meeting?.edited_html
+    ?? (meeting?.markdown ? marked.parse(preprocessMarkdown(meeting.markdown)) : null);
+
+  // Get the most recent version_id (if any) to link in the audit log
+  const { data: latestVer } = await supabaseClient
+    .from('meeting_versions')
+    .select('id')
+    .eq('meeting_id', id)
+    .order('saved_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const now = new Date().toISOString();
   const { error } = await supabaseClient
     .from('meetings')
     .update({ published: true, published_at: now })
     .eq('id', id);
 
-  if (error) { alert(`Failed to publish: ${error.message}`); return; }
+  if (error) { showToast(`Failed to publish: ${error.message}`, 'error'); return; }
+
+  // Audit log — records exactly what HTML became live and when
+  await supabaseClient.from('meeting_publish_log').insert({
+    meeting_id:    id,
+    org_id:        userOrg.id,
+    action:        'published',
+    version_id:    latestVer?.id ?? null,
+    html_snapshot: liveHtml,
+    actor_id:      currentUser.id,
+  });
 
   const m = allMeetingsList.find((m) => m.id === id);
   if (m) { m.published = true; m.published_at = now; }
   renderMeetingsList();
+  showToast('Published to owner portal.', 'success');
 }
 
 async function unpublishMeeting(id) {
@@ -3367,11 +3481,357 @@ async function unpublishMeeting(id) {
     .update({ published: false, published_at: null })
     .eq('id', id);
 
-  if (error) { alert(`Failed to unpublish: ${error.message}`); return; }
+  if (error) { showToast(`Failed to unpublish: ${error.message}`, 'error'); return; }
+
+  await supabaseClient.from('meeting_publish_log').insert({
+    meeting_id: id,
+    org_id:     userOrg.id,
+    action:     'unpublished',
+    actor_id:   currentUser.id,
+  });
 
   const m = allMeetingsList.find((m) => m.id === id);
   if (m) { m.published = false; m.published_at = null; }
   renderMeetingsList();
+  showToast('Unpublished from owner portal.', 'success');
+}
+
+// ── Minutes editor ────────────────────────────────────────────────────────────
+
+function registerQuillExtensions() {
+  if (window.__quillExtensionsRegistered) return;
+  window.__quillExtensionsRegistered = true;
+
+  const BlockEmbed = Quill.import('blots/block/embed');
+  class DividerBlot extends BlockEmbed {
+    static create() { return document.createElement('hr'); }
+    static value()  { return true; }
+  }
+  DividerBlot.blotName = 'divider';
+  DividerBlot.tagName  = 'HR';
+  Quill.register(DividerBlot);
+}
+
+function cleanQuillHtml(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  tmp.querySelectorAll('.ql-ui').forEach((el) => el.remove());
+  tmp.querySelectorAll('[data-list]').forEach((el) => el.removeAttribute('data-list'));
+  tmp.querySelectorAll('.ql-cursor').forEach((el) => el.remove());
+  return tmp.innerHTML;
+}
+
+function ensureEditorOverlay() {
+  if (document.getElementById('editor-overlay')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id        = 'editor-overlay';
+  overlay.className = 'editor-overlay hidden';
+  overlay.innerHTML = `
+    <div class="editor-header">
+      <span class="editor-header__title">Edit Minutes — <span id="editor-title-span"></span></span>
+      <div class="editor-header__actions">
+        <button id="editor-history-btn" class="btn-secondary btn-sm">Version History</button>
+        <button id="editor-save-btn"    class="btn-primary btn-sm">Save</button>
+        <button id="editor-close-btn"   class="btn-icon" title="Close editor">✕</button>
+      </div>
+    </div>
+    <div id="editor-pub-warning" class="editor-pub-warning hidden">
+      This meeting is currently published. Saving will unpublish it — republish when ready.
+    </div>
+    <div class="editor-governance-note">
+      Every save creates a new version. Nothing is ever deleted — you can view or restore any prior version.
+    </div>
+    <div class="editor-body">
+      <div id="editor-quill-container" class="editor-quill-container"></div>
+    </div>
+    <div id="editor-version-panel" class="editor-version-panel hidden">
+      <div class="editor-version-panel__header">
+        <span>Version History</span>
+        <button id="editor-history-close-btn" class="btn-link">✕ Close</button>
+      </div>
+      <div id="editor-version-list" class="editor-version-list"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  document.getElementById('editor-close-btn').addEventListener('click', closeEditor);
+  document.getElementById('editor-save-btn').addEventListener('click', saveEditorVersion);
+  document.getElementById('editor-history-btn').addEventListener('click', toggleVersionPanel);
+  document.getElementById('editor-history-close-btn').addEventListener('click', toggleVersionPanel);
+}
+
+async function openEditor(meetingId) {
+  registerQuillExtensions();
+  ensureEditorOverlay();
+
+  editorMeetingId = meetingId;
+
+  const overlay      = document.getElementById('editor-overlay');
+  const titleSpan    = document.getElementById('editor-title-span');
+  const pubWarning   = document.getElementById('editor-pub-warning');
+  const saveBtn      = document.getElementById('editor-save-btn');
+  const container    = document.getElementById('editor-quill-container');
+  const versionPanel = document.getElementById('editor-version-panel');
+
+  titleSpan.textContent = '';
+  pubWarning.classList.add('hidden');
+  versionPanel.classList.add('hidden');
+  saveBtn.disabled    = false;
+  saveBtn.textContent = 'Save';
+
+  // Always re-fetch fresh content fields in case they changed since last load
+  const { data: meeting, error } = await supabaseClient
+    .from('meetings')
+    .select('id, title, meeting_date, markdown, edited_html, published, template')
+    .eq('id', meetingId)
+    .single();
+  if (error) { showToast('Could not load meeting for editing.', 'error'); return; }
+
+  editorMeetingMeta = meeting;
+  meetingCache.set(meetingId, { ...(meetingCache.get(meetingId) ?? {}), ...meeting });
+
+  const dateStr = meeting.meeting_date
+    ? new Date(meeting.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', {
+        year: 'numeric', month: 'long', day: 'numeric',
+      })
+    : 'Date not recorded';
+
+  titleSpan.textContent = `${meeting.title ?? 'Meeting'} — ${dateStr}`;
+
+  if (meeting.published) pubWarning.classList.remove('hidden');
+
+  const initialHtml = meeting.edited_html
+    ? meeting.edited_html
+    : meeting.markdown
+      ? marked.parse(meeting.markdown)
+      : '<p>No content available.</p>';
+
+  // Destroy previous Quill instance if any
+  container.innerHTML = '';
+
+  const toolbarOptions = [
+    [{ header: [1, 2, 3, 4, false] }],
+    ['bold', 'italic', 'underline'],
+    [{ list: 'ordered' }, { list: 'bullet' }],
+    ['blockquote'],
+    ['divider'],
+    ['clean'],
+  ];
+
+  quillEditor = new Quill(container, {
+    theme:   'snow',
+    modules: {
+      toolbar: {
+        container: toolbarOptions,
+        handlers: {
+          divider: () => {
+            const range = quillEditor.getSelection(true);
+            quillEditor.insertEmbed(range.index, 'divider', true, Quill.sources.USER);
+            quillEditor.setSelection(range.index + 1, Quill.sources.SILENT);
+          },
+        },
+      },
+    },
+  });
+  editorInitialized = true;
+
+  quillEditor.clipboard.dangerouslyPasteHTML(initialHtml);
+
+  overlay.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeEditor() {
+  const overlay = document.getElementById('editor-overlay');
+  if (overlay) overlay.classList.add('hidden');
+  document.body.style.overflow = '';
+  editorMeetingId   = null;
+  editorMeetingMeta = null;
+  quillEditor       = null;
+  editorInitialized = false;
+}
+
+async function saveEditorVersion() {
+  if (!quillEditor || !editorMeetingId || !editorMeetingMeta) return;
+
+  const saveBtn = document.getElementById('editor-save-btn');
+  saveBtn.disabled    = true;
+  saveBtn.textContent = 'Saving…';
+
+  const cleanHtml    = cleanQuillHtml(quillEditor.root.innerHTML);
+  const wasPublished = editorMeetingMeta.published;
+
+  // 1. Auto-unpublish if currently published
+  if (wasPublished) {
+    const { error: upErr } = await supabaseClient
+      .from('meetings')
+      .update({ published: false, published_at: null })
+      .eq('id', editorMeetingId);
+
+    if (upErr) {
+      showToast(`Save failed: ${upErr.message}`, 'error');
+      saveBtn.disabled    = false;
+      saveBtn.textContent = 'Save';
+      return;
+    }
+
+    await supabaseClient.from('meeting_publish_log').insert({
+      meeting_id:    editorMeetingId,
+      org_id:        userOrg.id,
+      action:        'auto_unpublished',
+      html_snapshot: editorMeetingMeta.edited_html ?? null,
+      actor_id:      currentUser.id,
+    });
+  }
+
+  // 2. Insert version row
+  const { error: vErr } = await supabaseClient
+    .from('meeting_versions')
+    .insert({
+      meeting_id:   editorMeetingId,
+      org_id:       userOrg.id,
+      html_content: cleanHtml,
+      saved_by:     currentUser.id,
+    });
+
+  if (vErr) {
+    showToast(`Could not save version: ${vErr.message}`, 'error');
+    saveBtn.disabled    = false;
+    saveBtn.textContent = 'Save';
+    return;
+  }
+
+  // 3. Update meetings.edited_html
+  const { error: mErr } = await supabaseClient
+    .from('meetings')
+    .update({ edited_html: cleanHtml })
+    .eq('id', editorMeetingId);
+
+  if (mErr) {
+    showToast(`Saved version but could not update meeting: ${mErr.message}`, 'error');
+    saveBtn.disabled    = false;
+    saveBtn.textContent = 'Save';
+    return;
+  }
+
+  // 4. Update in-memory state
+  editorMeetingMeta.edited_html = cleanHtml;
+  editorMeetingMeta.published   = false;
+  const cached = meetingCache.get(editorMeetingId);
+  if (cached) { cached.edited_html = cleanHtml; cached.published = false; cached.published_at = null; }
+  const ml = allMeetingsList.find((m) => m.id === editorMeetingId);
+  if (ml) { ml.published = false; ml.published_at = null; }
+  renderMeetingsList();
+
+  const pubWarning = document.getElementById('editor-pub-warning');
+  if (pubWarning) pubWarning.classList.add('hidden');
+
+  saveBtn.disabled    = false;
+  saveBtn.textContent = 'Saved ✓';
+  setTimeout(() => { if (saveBtn) saveBtn.textContent = 'Save'; }, 2500);
+
+  showToast(wasPublished ? 'Saved and unpublished — republish when ready.' : 'Changes saved.', 'success');
+}
+
+async function toggleVersionPanel() {
+  const panel = document.getElementById('editor-version-panel');
+  if (!panel) return;
+
+  if (!panel.classList.contains('hidden')) {
+    panel.classList.add('hidden');
+    return;
+  }
+
+  panel.classList.remove('hidden');
+  await loadVersionHistory();
+}
+
+async function loadVersionHistory() {
+  const list = document.getElementById('editor-version-list');
+  if (!list) return;
+
+  list.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading…</span></div>';
+
+  const { data, error } = await supabaseClient
+    .from('meeting_versions')
+    .select('id, saved_at')
+    .eq('meeting_id', editorMeetingId)
+    .order('saved_at', { ascending: false });
+
+  if (error) {
+    list.innerHTML = `<p class="error">Could not load versions: ${escHtml(error.message)}</p>`;
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    list.innerHTML = '<p class="field-hint" style="padding:1rem 0">No saved versions yet.</p>';
+    return;
+  }
+
+  list.innerHTML = data.map((v, i) => {
+    const when  = new Date(v.saved_at).toLocaleString('en-CA', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+    const label = i === 0 ? 'Current version' : `Version ${data.length - i}`;
+    return `<div class="version-row">
+      <div class="version-row__info">
+        <span class="version-row__label">${label}</span>
+        <span class="version-row__when">${when}</span>
+      </div>
+      <div class="version-row__actions">
+        ${i === 0 ? '' : `
+          <button class="btn-link version-preview-btn" data-version-id="${escHtml(v.id)}">Preview</button>
+          <button class="btn-link version-revert-btn"  data-version-id="${escHtml(v.id)}">Restore</button>
+        `}
+      </div>
+    </div>`;
+  }).join('');
+
+  list.onclick = (e) => {
+    const previewBtn = e.target.closest('.version-preview-btn');
+    const revertBtn  = e.target.closest('.version-revert-btn');
+    if (previewBtn) previewVersion(previewBtn.dataset.versionId);
+    if (revertBtn)  revertToVersion(revertBtn.dataset.versionId);
+  };
+}
+
+async function previewVersion(versionId) {
+  const { data, error } = await supabaseClient
+    .from('meeting_versions')
+    .select('html_content, saved_at')
+    .eq('id', versionId)
+    .single();
+
+  if (error || !data) { showToast('Could not load version.', 'error'); return; }
+
+  const when = new Date(data.saved_at).toLocaleString('en-CA', {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+
+  quillEditor.clipboard.dangerouslyPasteHTML(data.html_content);
+  showToast(`Previewing version from ${when}. Save to keep, or close to discard.`, 'success');
+}
+
+async function revertToVersion(versionId) {
+  const confirmed = confirm(
+    'This will create a new version from the selected content.\n' +
+    'Your current unsaved edits will be replaced. Continue?'
+  );
+  if (!confirmed) return;
+
+  const { data, error } = await supabaseClient
+    .from('meeting_versions')
+    .select('html_content')
+    .eq('id', versionId)
+    .single();
+
+  if (error || !data) { showToast('Could not load version.', 'error'); return; }
+
+  quillEditor.clipboard.dangerouslyPasteHTML(data.html_content);
+  await saveEditorVersion();
+  await loadVersionHistory();
 }
 
 async function regeneratePortalToken() {
