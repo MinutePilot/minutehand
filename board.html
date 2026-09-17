@@ -802,10 +802,14 @@
           <div class="result-header">
             <h3 class="tools-section__heading" style="margin:0">Meeting Minutes</h3>
             <div class="result-actions">
+              <button id="gen-save-publish" class="btn-primary" disabled>Save &amp; Publish to Portal</button>
               <button id="gen-download" class="btn-secondary">Download .docx</button>
               <button id="gen-reset" class="btn-ghost">Start over</button>
             </div>
           </div>
+          <p id="gen-save-note" class="hidden" style="font-size:0.8rem;color:var(--mh-accent-text,#5c3400);margin:0.5rem 0 0">
+            Minutes not saved to database — download before navigating away.
+          </p>
           <div id="gen-preview" class="minutes-preview" style="margin-top:1rem"></div>
         </div>
         </div><!-- /gen-result-section -->

@@ -108,6 +108,7 @@ let pendingRawTranscript   = '';
 let pendingSpeakers        = [];
 let currentMinutesMarkdown = '';
 let currentMeetingId       = null;
+let appResolveMarkdown     = null;
 let hasBoardPlan           = false;
 let userOrg                = null;
 let rosterMembers          = [];
@@ -764,12 +765,7 @@ async function runGenerateFlow(notes) {
     currentMeetingId       = data.meeting_id ?? null;
     if (currentUser) await refreshCreditBalance();
     showSection(resultSection);
-    renderPreviewWithInputs(
-      currentMinutesMarkdown,
-      minutesPreview,
-      () => currentMinutesMarkdown,
-      (md) => { currentMinutesMarkdown = md; }
-    );
+    appResolveMarkdown = renderPreviewWithInputs(currentMinutesMarkdown, minutesPreview);
   } catch (err) {
     removeStatusRow();
     setLoadingBtn(generateBtn, false);
@@ -789,6 +785,7 @@ async function runGenerateFlow(notes) {
 
 downloadBtn.addEventListener('click', () => {
   if (!currentMinutesMarkdown) return;
+  const mdForDownload = appResolveMarkdown ? appResolveMarkdown() : currentMinutesMarkdown;
   const fullHtml = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>
   body    { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.3; color: #000; margin: 0; }
@@ -807,7 +804,7 @@ downloadBtn.addEventListener('click', () => {
   li      { margin-bottom: 2pt; }
   strong  { font-weight: bold; }
   em      { font-style: italic; }
-</style></head><body>${marked.parse(preprocessMarkdown(currentMinutesMarkdown))}</body></html>`;
+</style></head><body>${marked.parse(preprocessMarkdown(mdForDownload))}</body></html>`;
 
   const blob = htmlDocx.asBlob(fullHtml, { margins: { top: 720, right: 720, bottom: 720, left: 720 } });
   const url  = URL.createObjectURL(blob);
@@ -923,6 +920,7 @@ async function initReviewButton() {
 resetBtn.addEventListener('click', () => {
   currentMinutesMarkdown = '';
   currentMeetingId       = null;
+  appResolveMarkdown     = null;
   pendingRawTranscript   = '';
   pendingSpeakers        = [];
   audioFile              = null;
@@ -1060,52 +1058,62 @@ function preprocessMarkdown(md) {
 // by the AI are rendered as inline <input> fields directly in the preview.
 // The surrounding sentence provides context; fill in and tab away to commit.
 
-function renderPreviewWithInputs(markdown, previewEl, getMarkdown, setMarkdown) {
+function renderPreviewWithInputs(markdown, previewEl) {
   const PLACEHOLDER_RE = /\[[^\]]*(?:please confirm|not stated)[^\]]*\]/gi;
-  let html = marked.parse(preprocessMarkdown(markdown));
-  const total = (html.match(PLACEHOLDER_RE) || []).length;
-  html = html.replace(PLACEHOLDER_RE, (match) => {
+
+  const originals = {};
+  let n = 0;
+  const sentinelMd = markdown.replace(PLACEHOLDER_RE, (match) => {
+    originals[n] = match;
+    return `%%ph:${n++}%%`;
+  });
+  const total = n;
+
+  let html = marked.parse(preprocessMarkdown(sentinelMd));
+  html = html.replace(/%%ph:(\d+)%%/g, (_, id) => {
+    const match = originals[+id];
     const label = match.slice(1, -1);
     const size  = Math.max(15, Math.min(50, label.length + 2));
     return `<input type="text" class="inline-ph-input" size="${size}" ` +
-           `data-original="${escHtml(match)}" ` +
-           `placeholder="${escHtml(label)}" ` +
-           `autocomplete="off">`;
+           `data-ph-id="${id}" data-original="${escHtml(match)}" ` +
+           `placeholder="${escHtml(label)}" autocomplete="off">`;
   });
+
   const banner = total > 0
     ? `<div class="ph-count-banner" id="ph-count-banner">${total} field${total !== 1 ? 's' : ''} to fill in — scroll through and complete each one</div>`
     : '';
   previewEl.innerHTML = banner + html;
+
+  function updateBanner() {
+    const remaining = Array.from(previewEl.querySelectorAll('.inline-ph-input'))
+                           .filter(inp => !inp.value.trim()).length;
+    const b = previewEl.querySelector('#ph-count-banner');
+    if (!b) return;
+    if (remaining === 0) {
+      b.textContent = '✓ All fields complete';
+      b.classList.add('ph-count-banner--done');
+      setTimeout(() => b.remove(), 3000);
+    } else {
+      b.textContent = `${remaining} field${remaining !== 1 ? 's' : ''} to fill in`;
+      b.classList.remove('ph-count-banner--done');
+    }
+  }
+
   previewEl.querySelectorAll('.inline-ph-input').forEach((input) => {
-    input.addEventListener('blur', () => {
-      const val = input.value.trim();
-      if (!val) return;
-      const ph      = input.dataset.original;
-      const escaped = ph.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      let replaced  = false;
-      const updated = getMarkdown().replace(new RegExp(escaped, 'gi'), (m) => {
-        if (!replaced) { replaced = true; return val; }
-        return m;
-      });
-      setMarkdown(updated);
-      const span = document.createElement('span');
-      span.className   = 'inline-ph-filled';
-      span.textContent = val;
-      input.replaceWith(span);
-      const remaining = previewEl.querySelectorAll('.inline-ph-input').length;
-      const b = previewEl.querySelector('#ph-count-banner');
-      if (b) {
-        if (remaining === 0) {
-          b.textContent = '✓ All fields complete';
-          b.classList.add('ph-count-banner--done');
-          setTimeout(() => b.remove(), 3000);
-        } else {
-          b.textContent = `${remaining} field${remaining !== 1 ? 's' : ''} to fill in`;
-        }
-      }
-    });
+    input.addEventListener('input', () => { updateBanner(); });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
     });
   });
+
+  function resolveMarkdown() {
+    let result = sentinelMd;
+    for (let i = 0; i < total; i++) {
+      const inp = previewEl.querySelector(`.inline-ph-input[data-ph-id="${i}"]`);
+      result = result.replace(`%%ph:${i}%%`, inp?.value.trim() || originals[i]);
+    }
+    return result;
+  }
+
+  return resolveMarkdown;
 }

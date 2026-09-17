@@ -61,6 +61,7 @@ let genPendingTranscript = '';
 let genPendingSpeakers   = [];
 let genCurrentMarkdown   = '';
 let genCurrentMeetingId  = null;
+let genResolveMarkdown   = null;
 let genOrgPendingCat     = null;
 let genOrgPendingSub     = null;
 
@@ -822,12 +823,7 @@ async function genRunGenerateFlow(notes) {
         genCurrentMarkdown = confirmed.updatedMarkdown;
       }
     }
-    renderPreviewWithInputs(
-      genCurrentMarkdown,
-      genPreview,
-      () => genCurrentMarkdown,
-      (md) => { genCurrentMarkdown = md; }
-    );
+    genResolveMarkdown = renderPreviewWithInputs(genCurrentMarkdown, genPreview);
   } catch (err) {
     genRemoveStatusRow();
     genSetLoadingBtn(false);
@@ -848,6 +844,7 @@ async function genRunGenerateFlow(notes) {
 
 genDownload?.addEventListener('click', () => {
   if (!genCurrentMarkdown) return;
+  const mdForDownload = genResolveMarkdown ? genResolveMarkdown() : genCurrentMarkdown;
   const fullHtml = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>
   body    { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.3; color: #000; margin: 0; }
@@ -864,7 +861,7 @@ genDownload?.addEventListener('click', () => {
   td      { padding: 4pt 7pt; border: 1pt solid #ccc; vertical-align: top; }
   ul, ol  { margin: 2pt 0 5pt 18pt; }
   li      { margin-bottom: 2pt; }
-</style></head><body>${marked.parse(preprocessMarkdown(genCurrentMarkdown))}</body></html>`;
+</style></head><body>${marked.parse(preprocessMarkdown(mdForDownload))}</body></html>`;
   const blob = htmlDocx.asBlob(fullHtml, { margins: { top: 720, right: 720, bottom: 720, left: 720 } });
   const url  = URL.createObjectURL(blob);
   const a    = Object.assign(document.createElement('a'), { href: url, download: `meeting-minutes-${genToday()}.docx` });
@@ -872,6 +869,124 @@ genDownload?.addEventListener('click', () => {
   URL.revokeObjectURL(url);
   maybeShowReviewModal();
 });
+
+// ── Save & Publish ─────────────────────────────────────────────────────────────
+
+function parseActionItemsFromMarkdown(markdown) {
+  const sectionMatch = markdown.match(/#{1,6}\s+Action Items\s*\n([\s\S]*?)(?=\n#{1,6}\s|\n---|\n\*\*\*|$)/i);
+  if (!sectionMatch) return [];
+  const rows = sectionMatch[1].split('\n').filter(line => line.trim().startsWith('|'));
+  if (rows.length < 3) return [];
+  return rows.slice(2).map((row, index) => {
+    const parts = row.split('|');
+    return {
+      sort_order:        index + 1,
+      description:       (parts[1] ?? '').trim(),
+      responsible_party: (parts[2] ?? '').trim(),
+      due_date_text:     (parts[3] ?? '').trim(),
+    };
+  }).filter(item => item.description.length > 0);
+}
+
+document.getElementById('gen-save-publish')?.addEventListener('click', async () => {
+  await saveAndPublishMinutes();
+});
+
+async function saveAndPublishMinutes() {
+  if (!genCurrentMeetingId || !genResolveMarkdown) return;
+
+  const btn  = document.getElementById('gen-save-publish');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    const finalMarkdown = genResolveMarkdown();
+    const now = new Date().toISOString();
+
+    // 1 ── Update meeting: approve and publish
+    const { data: updated, error: meetingErr } = await supabaseClient
+      .from('meetings')
+      .update({ markdown: finalMarkdown, status: 'approved', published: true, published_at: now })
+      .eq('id', genCurrentMeetingId)
+      .select('id');
+
+    if (meetingErr) throw new Error(`Failed to save minutes: ${meetingErr.message}`);
+    if (!updated?.length) throw new Error('Save failed — meeting record not found. Please reload and try again.');
+
+    // 2 ── Update action items that still hold placeholder text
+    const PLACEHOLDER_TEST = /\[[^\]]*(?:please confirm|not stated)[^\]]*\]/i;
+    const parsedItems = parseActionItemsFromMarkdown(finalMarkdown);
+    const dbItems = allActionItems.filter(a => a.meeting_id === genCurrentMeetingId);
+
+    const updates = [];
+    for (const dbItem of dbItems) {
+      const parsed = parsedItems.find(p => p.sort_order === dbItem.sort_order);
+      if (!parsed) continue;
+
+      const patch = {};
+      if (PLACEHOLDER_TEST.test(dbItem.responsible_party ?? '') &&
+          parsed.responsible_party &&
+          !PLACEHOLDER_TEST.test(parsed.responsible_party)) {
+        patch.responsible_party = parsed.responsible_party;
+      }
+      if (PLACEHOLDER_TEST.test(dbItem.due_date_text ?? '') &&
+          parsed.due_date_text &&
+          !PLACEHOLDER_TEST.test(parsed.due_date_text)) {
+        patch.due_date_text = parsed.due_date_text;
+      }
+      if (Object.keys(patch).length > 0) {
+        updates.push(
+          supabaseClient.from('action_items')
+            .update(patch)
+            .eq('id', dbItem.id)
+        );
+      }
+    }
+
+    if (updates.length > 0) {
+      const results = await Promise.all(updates);
+      const failed  = results.find(r => r.error);
+      if (failed) throw new Error(`Failed to update action items: ${failed.error.message}`);
+    }
+
+    // 3 ── Publish audit log
+    const liveHtml = marked.parse(preprocessMarkdown(finalMarkdown));
+    const { data: latestVer } = await supabaseClient
+      .from('meeting_versions')
+      .select('id')
+      .eq('meeting_id', genCurrentMeetingId)
+      .order('saved_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { error: logErr } = await supabaseClient.from('meeting_publish_log').insert({
+      meeting_id:    genCurrentMeetingId,
+      org_id:        userOrg.id,
+      action:        'published',
+      version_id:    latestVer?.id ?? null,
+      html_snapshot: liveHtml,
+      actor_id:      currentUser.id,
+    });
+    if (logErr) console.error('publish audit log failed:', logErr);
+
+    // 4 ── Update in-memory state
+    genCurrentMarkdown = finalMarkdown;
+    const m = allMeetingsList.find(m => m.id === genCurrentMeetingId);
+    if (m) { m.published = true; m.published_at = now; m.status = 'approved'; }
+    if (updates.length > 0) await loadActionItems();
+
+    // 5 ── Success
+    btn.textContent = '✓ Saved & Published';
+    showToast('Minutes saved and published to owner portal.', 'success');
+    if (userOrg) loadMeetingsList();
+
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = orig;
+    showToast(err.message || 'Save failed. Please try again.', 'error');
+  }
+}
 
 // ── Review modal ───────────────────────────────────────────────────────────────
 //
@@ -996,6 +1111,7 @@ async function initReviewButton() {
 genReset?.addEventListener('click', () => {
   genCurrentMarkdown  = '';
   genCurrentMeetingId = null;
+  genResolveMarkdown  = null;
   genPendingTranscript = '';
   genPendingSpeakers   = [];
   genAudioFile         = null;
@@ -1263,56 +1379,89 @@ function recoverMarkdown(raw) {
 // ── Inline placeholder inputs ──────────────────────────────────────────────
 // After generation, any [... — please confirm / not stated] placeholders left
 // by the AI are rendered as inline <input> fields directly in the preview.
-// The surrounding sentence provides context; fill in and tab away to commit.
+// Each placeholder gets a unique sentinel (%%ph:N%%) so re-editing works —
+// the DOM input is never destroyed. resolveMarkdown() rebuilds final markdown
+// from current input values on demand (download, save & publish).
 
-function renderPreviewWithInputs(markdown, previewEl, getMarkdown, setMarkdown) {
+function renderPreviewWithInputs(markdown, previewEl) {
   const PLACEHOLDER_RE = /\[[^\]]*(?:please confirm|not stated)[^\]]*\]/gi;
-  let html = marked.parse(preprocessMarkdown(markdown));
-  const total = (html.match(PLACEHOLDER_RE) || []).length;
-  html = html.replace(PLACEHOLDER_RE, (match) => {
+
+  const originals = {};
+  let n = 0;
+  const sentinelMd = markdown.replace(PLACEHOLDER_RE, (match) => {
+    originals[n] = match;
+    return `%%ph:${n++}%%`;
+  });
+  const total = n;
+
+  let html = marked.parse(preprocessMarkdown(sentinelMd));
+  html = html.replace(/%%ph:(\d+)%%/g, (_, id) => {
+    const match = originals[+id];
     const label = match.slice(1, -1);
     const size  = Math.max(15, Math.min(50, label.length + 2));
     return `<input type="text" class="inline-ph-input" size="${size}" ` +
-           `data-original="${escHtml(match)}" ` +
-           `placeholder="${escHtml(label)}" ` +
-           `autocomplete="off">`;
+           `data-ph-id="${id}" data-original="${escHtml(match)}" ` +
+           `placeholder="${escHtml(label)}" autocomplete="off">`;
   });
+
   const banner = total > 0
     ? `<div class="ph-count-banner" id="ph-count-banner">${total} field${total !== 1 ? 's' : ''} to fill in — scroll through and complete each one</div>`
     : '';
   previewEl.innerHTML = banner + html;
+
+  function countUnfilled() {
+    return Array.from(previewEl.querySelectorAll('.inline-ph-input'))
+                .filter(inp => !inp.value.trim()).length;
+  }
+
+  function updateBanner() {
+    const remaining = countUnfilled();
+    const b = previewEl.querySelector('#ph-count-banner');
+    if (!b) return;
+    if (remaining === 0) {
+      b.textContent = '✓ All fields complete';
+      b.classList.add('ph-count-banner--done');
+      setTimeout(() => b.remove(), 3000);
+    } else {
+      b.textContent = `${remaining} field${remaining !== 1 ? 's' : ''} to fill in`;
+      b.classList.remove('ph-count-banner--done');
+    }
+  }
+
+  function updateSaveBtn() {
+    const btn = document.getElementById('gen-save-publish');
+    if (!btn) return;
+    const note = document.getElementById('gen-save-note');
+    if (!genCurrentMeetingId) {
+      btn.classList.add('hidden');
+      if (note) note.classList.remove('hidden');
+      return;
+    }
+    btn.classList.remove('hidden');
+    if (note) note.classList.add('hidden');
+    btn.disabled = countUnfilled() > 0;
+  }
+
   previewEl.querySelectorAll('.inline-ph-input').forEach((input) => {
-    input.addEventListener('blur', () => {
-      const val = input.value.trim();
-      if (!val) return;
-      const ph      = input.dataset.original;
-      const escaped = ph.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      let replaced  = false;
-      const updated = getMarkdown().replace(new RegExp(escaped, 'gi'), (m) => {
-        if (!replaced) { replaced = true; return val; }
-        return m;
-      });
-      setMarkdown(updated);
-      const span = document.createElement('span');
-      span.className   = 'inline-ph-filled';
-      span.textContent = val;
-      input.replaceWith(span);
-      const remaining = previewEl.querySelectorAll('.inline-ph-input').length;
-      const b = previewEl.querySelector('#ph-count-banner');
-      if (b) {
-        if (remaining === 0) {
-          b.textContent = '✓ All fields complete';
-          b.classList.add('ph-count-banner--done');
-          setTimeout(() => b.remove(), 3000);
-        } else {
-          b.textContent = `${remaining} field${remaining !== 1 ? 's' : ''} to fill in`;
-        }
-      }
-    });
+    input.addEventListener('input', () => { updateBanner(); updateSaveBtn(); });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
     });
   });
+
+  // Initialize save button state now that inputs are in the DOM
+  updateSaveBtn();
+
+  function resolveMarkdown() {
+    let result = sentinelMd;
+    for (let i = 0; i < total; i++) {
+      const inp = previewEl.querySelector(`.inline-ph-input[data-ph-id="${i}"]`);
+      result = result.replace(`%%ph:${i}%%`, inp?.value.trim() || originals[i]);
+    }
+    return result;
+  }
+
+  return resolveMarkdown;
 }
 
 function genShowError(msg) {
