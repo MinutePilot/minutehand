@@ -765,6 +765,11 @@ async function runGenerateFlow(notes) {
     if (currentUser) await refreshCreditBalance();
     minutesPreview.innerHTML = marked.parse(preprocessMarkdown(data.minutes));
     showSection(resultSection);
+    showPlaceholderStrip(
+      minutesPreview,
+      () => currentMinutesMarkdown,
+      (md) => { currentMinutesMarkdown = md; }
+    );
   } catch (err) {
     removeStatusRow();
     setLoadingBtn(generateBtn, false);
@@ -916,6 +921,7 @@ async function initReviewButton() {
 // ── Reset ─────────────────────────────────────────────────────────────────────
 
 resetBtn.addEventListener('click', () => {
+  document.getElementById('placeholder-strip')?.remove();
   currentMinutesMarkdown = '';
   currentMeetingId       = null;
   pendingRawTranscript   = '';
@@ -1048,4 +1054,63 @@ function preprocessMarkdown(md) {
   // marked collapses consecutive "> " lines into a single run-on <p>.
   // Insert a blank line between each so each field becomes its own element.
   return md.replace(/^(> .+)\n(?=> )/gm, '$1\n\n');
+}
+
+// ── Placeholder strip ─────────────────────────────────────────────────────────
+// After generation, surface any [... — please confirm] placeholders the AI left
+// so the secretary can fill them in without opening the editor.
+
+function showPlaceholderStrip(previewEl, getMarkdown, setMarkdown) {
+  document.getElementById('placeholder-strip')?.remove();
+
+  const md  = getMarkdown();
+  const re  = /\[[^\]]*please confirm[^\]]*\]/gi;
+  const all = [...md.matchAll(re)];
+  if (all.length === 0) return;
+
+  const counts = {};
+  all.forEach((m) => { counts[m[0]] = (counts[m[0]] || 0) + 1; });
+  const unique = Object.keys(counts);
+
+  const strip = document.createElement('div');
+  strip.id        = 'placeholder-strip';
+  strip.className = 'placeholder-strip';
+  strip.innerHTML =
+    `<div class="placeholder-strip__header">` +
+      `<span class="placeholder-strip__title">` +
+        `<strong>${unique.length} item${unique.length !== 1 ? 's' : ''} flagged for your attention</strong>` +
+        ` — fill in below or edit the minutes later.` +
+      `</span>` +
+      `<button class="btn-link placeholder-strip__dismiss" type="button">Dismiss</button>` +
+    `</div>` +
+    `<div class="placeholder-strip__items">` +
+      unique.map((ph, i) =>
+        `<div class="placeholder-strip__row" id="ph-row-${i}">` +
+          `<label class="placeholder-strip__label" for="ph-input-${i}" title="${escHtml(ph)}">` +
+            escHtml(ph) +
+            (counts[ph] > 1 ? `<span class="placeholder-strip__count">(${counts[ph]}×)</span>` : '') +
+          `</label>` +
+          `<input type="text" id="ph-input-${i}" class="placeholder-strip__input"` +
+                 ` data-placeholder="${escHtml(ph)}" placeholder="Enter value…" autocomplete="off">` +
+        `</div>`
+      ).join('') +
+    `</div>`;
+
+  previewEl.insertAdjacentElement('beforebegin', strip);
+
+  strip.querySelector('.placeholder-strip__dismiss').addEventListener('click', () => strip.remove());
+
+  strip.querySelectorAll('.placeholder-strip__input').forEach((input) => {
+    input.addEventListener('blur', () => {
+      const val = input.value.trim();
+      if (!val) return;
+      const ph      = input.dataset.placeholder;
+      const escaped = ph.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const updated = getMarkdown().replace(new RegExp(escaped, 'gi'), val);
+      setMarkdown(updated);
+      previewEl.innerHTML = marked.parse(preprocessMarkdown(updated));
+      input.closest('.placeholder-strip__row').classList.add('placeholder-strip__row--done');
+    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+  });
 }

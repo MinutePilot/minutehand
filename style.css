@@ -4004,6 +4004,82 @@ mark {
   color: var(--text-muted);
   font-style: italic;
 }
+/* ── Placeholder strip ───────────────────────────────────────────────────── */
+
+.placeholder-strip {
+  border: 1px solid var(--mh-border);
+  border-left: 3px solid var(--mh-accent);
+  border-radius: var(--radius);
+  background: #FFFBF0;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1rem;
+  font-size: 0.88rem;
+}
+
+.placeholder-strip__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.65rem;
+  gap: 1rem;
+}
+
+.placeholder-strip__title { color: var(--text); }
+
+.placeholder-strip__items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.placeholder-strip__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  transition: opacity 0.2s;
+}
+
+.placeholder-strip__row--done { opacity: 0.35; }
+
+.placeholder-strip__label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  flex: 0 1 auto;
+  max-width: 52%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.placeholder-strip__count {
+  font-style: normal;
+  color: var(--mh-accent-text, #412402);
+  margin-left: 0.25rem;
+  font-size: 0.72rem;
+}
+
+.placeholder-strip__input {
+  flex: 1;
+  min-width: 150px;
+  font-size: 0.88rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.placeholder-strip__input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+/* ── ── */
+
 .version-preview-modal__body hr {
   border: none;
   border-top: 1px solid var(--border);
