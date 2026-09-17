@@ -4038,6 +4038,24 @@ mark {
   font-weight: 500;
 }
 
+.ph-count-banner {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--mh-accent-text, #5c3400);
+  background: rgba(239, 159, 39, 0.1);
+  border: 1px solid rgba(239, 159, 39, 0.3);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.8rem;
+  margin-bottom: 1rem;
+  transition: background 0.3s, border-color 0.3s, color 0.3s;
+}
+
+.ph-count-banner--done {
+  background: rgba(34, 120, 80, 0.08);
+  border-color: rgba(34, 120, 80, 0.3);
+  color: #1a6b46;
+}
+
 /* ── ── */
 
 .version-preview-modal__body hr {

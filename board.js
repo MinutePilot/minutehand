@@ -1268,6 +1268,7 @@ function recoverMarkdown(raw) {
 function renderPreviewWithInputs(markdown, previewEl, getMarkdown, setMarkdown) {
   const PLACEHOLDER_RE = /\[[^\]]*(?:please confirm|not stated)[^\]]*\]/gi;
   let html = marked.parse(preprocessMarkdown(markdown));
+  const total = (html.match(PLACEHOLDER_RE) || []).length;
   html = html.replace(PLACEHOLDER_RE, (match) => {
     const label = match.slice(1, -1);
     const size  = Math.max(15, Math.min(50, label.length + 2));
@@ -1276,7 +1277,10 @@ function renderPreviewWithInputs(markdown, previewEl, getMarkdown, setMarkdown) 
            `placeholder="${escHtml(label)}" ` +
            `autocomplete="off">`;
   });
-  previewEl.innerHTML = html;
+  const banner = total > 0
+    ? `<div class="ph-count-banner" id="ph-count-banner">${total} field${total !== 1 ? 's' : ''} to fill in — scroll through and complete each one</div>`
+    : '';
+  previewEl.innerHTML = banner + html;
   previewEl.querySelectorAll('.inline-ph-input').forEach((input) => {
     input.addEventListener('blur', () => {
       const val = input.value.trim();
@@ -1293,6 +1297,17 @@ function renderPreviewWithInputs(markdown, previewEl, getMarkdown, setMarkdown) 
       span.className   = 'inline-ph-filled';
       span.textContent = val;
       input.replaceWith(span);
+      const remaining = previewEl.querySelectorAll('.inline-ph-input').length;
+      const b = previewEl.querySelector('#ph-count-banner');
+      if (b) {
+        if (remaining === 0) {
+          b.textContent = '✓ All fields complete';
+          b.classList.add('ph-count-banner--done');
+          setTimeout(() => b.remove(), 3000);
+        } else {
+          b.textContent = `${remaining} field${remaining !== 1 ? 's' : ''} to fill in`;
+        }
+      }
     });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
