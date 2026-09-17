@@ -1064,7 +1064,7 @@ function showPlaceholderStrip(previewEl, getMarkdown, setMarkdown) {
   document.getElementById('placeholder-strip')?.remove();
 
   const md  = getMarkdown();
-  const re  = /\[[^\]]*please confirm[^\]]*\]/gi;
+  const re  = /\[[^\]]*(?:please confirm|not stated)[^\]]*\]/gi;
   const all = [...md.matchAll(re)];
   if (all.length === 0) return;
 
