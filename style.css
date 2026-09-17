@@ -4043,11 +4043,10 @@ mark {
 .placeholder-strip__row--done { opacity: 0.35; }
 
 .placeholder-strip__label {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.82rem;
+  color: var(--text);
   flex: 0 1 auto;
-  max-width: 52%;
+  max-width: 58%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

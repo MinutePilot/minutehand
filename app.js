@@ -1057,20 +1057,32 @@ function preprocessMarkdown(md) {
 }
 
 // ── Placeholder strip ─────────────────────────────────────────────────────────
-// After generation, surface any [... — please confirm] placeholders the AI left
-// so the secretary can fill them in without opening the editor.
+// After generation, surface any [... — please confirm / not stated] placeholders
+// the AI left so the secretary can fill them in without opening the editor.
+// One row per occurrence; label shows surrounding context so identical placeholders
+// can be distinguished. Fill-in replaces only the first remaining instance.
+
+function extractPlaceholderContext(md, matchIndex) {
+  const prefix = md.slice(Math.max(0, matchIndex - 100), matchIndex);
+  const cleaned = prefix
+    .replace(/[#*_`]/g, '')
+    .replace(/\|/g, ' ')
+    .split(/[\n\r]/)
+    .pop()
+    .trim();
+  return cleaned.length > 60 ? '…' + cleaned.slice(-60) : (cleaned || null);
+}
 
 function showPlaceholderStrip(previewEl, getMarkdown, setMarkdown) {
   document.getElementById('placeholder-strip')?.remove();
 
   const md  = getMarkdown();
   const re  = /\[[^\]]*(?:please confirm|not stated)[^\]]*\]/gi;
-  const all = [...md.matchAll(re)];
-  if (all.length === 0) return;
-
-  const counts = {};
-  all.forEach((m) => { counts[m[0]] = (counts[m[0]] || 0) + 1; });
-  const unique = Object.keys(counts);
+  const occurrences = Array.from(md.matchAll(re)).map((m) => ({
+    placeholder: m[0],
+    context:     extractPlaceholderContext(md, m.index),
+  }));
+  if (occurrences.length === 0) return;
 
   const strip = document.createElement('div');
   strip.id        = 'placeholder-strip';
@@ -1078,20 +1090,19 @@ function showPlaceholderStrip(previewEl, getMarkdown, setMarkdown) {
   strip.innerHTML =
     `<div class="placeholder-strip__header">` +
       `<span class="placeholder-strip__title">` +
-        `<strong>${unique.length} item${unique.length !== 1 ? 's' : ''} flagged for your attention</strong>` +
+        `<strong>${occurrences.length} item${occurrences.length !== 1 ? 's' : ''} flagged for your attention</strong>` +
         ` — fill in below or edit the minutes later.` +
       `</span>` +
       `<button class="btn-link placeholder-strip__dismiss" type="button">Dismiss</button>` +
     `</div>` +
     `<div class="placeholder-strip__items">` +
-      unique.map((ph, i) =>
+      occurrences.map((occ, i) =>
         `<div class="placeholder-strip__row" id="ph-row-${i}">` +
-          `<label class="placeholder-strip__label" for="ph-input-${i}" title="${escHtml(ph)}">` +
-            escHtml(ph) +
-            (counts[ph] > 1 ? `<span class="placeholder-strip__count">(${counts[ph]}×)</span>` : '') +
+          `<label class="placeholder-strip__label" for="ph-input-${i}" title="${escHtml(occ.placeholder)}">` +
+            escHtml(occ.context || occ.placeholder) +
           `</label>` +
           `<input type="text" id="ph-input-${i}" class="placeholder-strip__input"` +
-                 ` data-placeholder="${escHtml(ph)}" placeholder="Enter value…" autocomplete="off">` +
+                 ` data-placeholder="${escHtml(occ.placeholder)}" placeholder="Enter value…" autocomplete="off">` +
         `</div>`
       ).join('') +
     `</div>`;
@@ -1106,7 +1117,11 @@ function showPlaceholderStrip(previewEl, getMarkdown, setMarkdown) {
       if (!val) return;
       const ph      = input.dataset.placeholder;
       const escaped = ph.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const updated = getMarkdown().replace(new RegExp(escaped, 'gi'), val);
+      let replaced  = false;
+      const updated = getMarkdown().replace(new RegExp(escaped, 'gi'), (m) => {
+        if (!replaced) { replaced = true; return val; }
+        return m;
+      });
       setMarkdown(updated);
       previewEl.innerHTML = marked.parse(preprocessMarkdown(updated));
       input.closest('.placeholder-strip__row').classList.add('placeholder-strip__row--done');
