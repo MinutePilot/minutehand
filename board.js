@@ -793,7 +793,7 @@ function genApplyConfirmedNames(rawTranscript) {
 
 async function genRunGenerateFlow(notes) {
   genSetLoadingBtn(true, 'Generating…');
-  genAddStatusRow('This usually takes 15–30 seconds…');
+  genAddStatusRow('This usually takes 1–2 minutes…');
   const attendees = getGenSelectedAttendees();
   try {
     const data = await callEdgeFn('generate-minutes', {

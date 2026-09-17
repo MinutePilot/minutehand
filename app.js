@@ -750,7 +750,7 @@ function applyConfirmedNames(rawTranscript) {
 
 async function runGenerateFlow(notes) {
   setLoadingBtn(generateBtn, true, 'Generating…');
-  addStatusRow(generateBtn, 'spinner', 'This usually takes 15–30 seconds…');
+  addStatusRow(generateBtn, 'spinner', 'This usually takes 1–2 minutes…');
 
   const attendees = getSelectedAttendees();
   try {
