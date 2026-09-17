@@ -802,7 +802,7 @@ async function genRunGenerateFlow(notes) {
       ...(attendees ? { attendees } : {}),
     });
     genRemoveStatusRow();
-    genCurrentMarkdown  = data.minutes;
+    genCurrentMarkdown  = recoverMarkdown(data.minutes);
     genCurrentMeetingId = data.meeting_id ?? null;
     await loadCredits();
     generateView.classList.remove('hidden');
@@ -1233,6 +1233,31 @@ function genSetFileStatus(el, msg, type) {
   el.textContent = msg;
   el.className   = `file-status${type ? ' ' + type : ''}`;
   el.classList.remove('hidden');
+}
+
+// ── Markdown recovery ─────────────────────────────────────────────────────
+// When the server-side JSON parse fails, data.minutes contains the raw Claude
+// JSON response string rather than the extracted markdown. Detect and recover.
+
+function recoverMarkdown(raw) {
+  if (!raw || !raw.trimStart().startsWith('{')) return raw;
+  try {
+    return JSON.parse(raw).markdown || raw;
+  } catch {
+    // Claude used literal newlines inside JSON string values — scan manually.
+    const start = raw.indexOf('"markdown": "');
+    const end   = raw.indexOf('"structured":', start);
+    if (start === -1 || end === -1) return raw;
+    let i = end - 1;
+    while (i > start && /[\s,]/.test(raw[i])) i--;
+    if (raw[i] !== '"') return raw;
+    return raw.slice(start + '"markdown": "'.length, i)
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\r/g, '')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\');
+  }
 }
 
 // ── Inline placeholder inputs ──────────────────────────────────────────────

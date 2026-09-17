@@ -209,6 +209,7 @@ function boardPlanJsonSuffix(): string {
 
 OUTPUT FORMAT — REQUIRED FOR THIS REQUEST:
 Return a single valid JSON object. No text before or after it. No markdown code fences.
+CRITICAL: Your response must be parseable by JSON.parse(). Never use literal newline characters inside a JSON string value — always use the two-character escape sequence \n instead. Never use an unescaped double-quote inside a string value — use \" instead. The minutes in the "markdown" field are long; every line break in them must be \n, not an actual newline.
 The object must have exactly two top-level keys:
 
 "markdown": string — the complete meeting minutes formatted exactly per all rules above.
