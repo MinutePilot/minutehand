@@ -810,8 +810,19 @@ async function genRunGenerateFlow(notes) {
     genForm.classList.add('hidden');
     genSpeakerSection.classList.add('hidden');
     genResultSection.classList.remove('hidden');
+    if (data.warning === 'structured_parse_failed') {
+      showToast('Minutes generated but could not be saved — please copy the text or try again.', 'error');
+    } else if (data.warning === 'persist_failed') {
+      showToast('Minutes generated but the meeting record could not be saved — please try again.', 'error');
+    }
+    // Refresh the meetings list so the new meeting appears immediately in Publish & Portal
+    if (genCurrentMeetingId && userOrg) loadMeetingsList();
     if (data.requires_date_confirmation && genCurrentMeetingId) {
-      await showDateConfirmModal(genCurrentMeetingId);
+      const confirmed = await showDateConfirmModal(genCurrentMeetingId);
+      if (confirmed?.updatedMarkdown) {
+        genCurrentMarkdown = confirmed.updatedMarkdown;
+        genPreview.innerHTML = marked.parse(preprocessMarkdown(confirmed.updatedMarkdown));
+      }
     }
   } catch (err) {
     genRemoveStatusRow();
@@ -1084,16 +1095,17 @@ function genRemoveStatusRow() { document.getElementById('gen-status-row')?.remov
 
 // Walk DOM text nodes so the replace works even if Quill wrapped part of the
 // heading text in a formatting span (splitting what was one text node).
-function replacePlaceholderInHtml(html, placeholder, replacement) {
+function replacePlaceholderInHtml(html, placeholderRe, replacement) {
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
   const nodes = [];
   const walker = document.createTreeWalker(tmp, NodeFilter.SHOW_TEXT, null, false);
   let node;
   while ((node = walker.nextNode())) {
-    if (node.nodeValue.includes(placeholder)) nodes.push(node);
+    placeholderRe.lastIndex = 0;
+    if (placeholderRe.test(node.nodeValue)) nodes.push(node);
   }
-  nodes.forEach((n) => { n.nodeValue = n.nodeValue.split(placeholder).join(replacement); });
+  nodes.forEach((n) => { placeholderRe.lastIndex = 0; n.nodeValue = n.nodeValue.replace(placeholderRe, replacement); });
   return tmp.innerHTML;
 }
 
@@ -1172,25 +1184,28 @@ function showDateConfirmModal(meetingId) {
 
       // Fix the ### heading in stored markdown/edited_html — replace the
       // placeholder the AI wrote with the now-confirmed date string.
-      const dateLabel   = new Date(val + 'T12:00:00').toLocaleDateString('en-CA', {
+      const dateLabel    = new Date(val + 'T12:00:00').toLocaleDateString('en-CA', {
         year: 'numeric', month: 'long', day: 'numeric',
       });
-      const PLACEHOLDER = '[Date not stated — please confirm]';
+      // Accept any dash variant the AI might produce (em dash, en dash, hyphen)
+      const PLACEHOLDER_RE = /\[date not stated\s*[—–\-]\s*please confirm\]/gi;
       const { data: mData } = await supabaseClient
         .from('meetings')
         .select('markdown, edited_html')
         .eq('id', meetingId)
         .single();
+      let updatedMarkdown = mData?.markdown ?? null;
       if (mData) {
         const updates = {};
-        // markdown is plain text — simple string replace is safe
-        if (mData.markdown?.includes(PLACEHOLDER)) {
-          updates.markdown = mData.markdown.split(PLACEHOLDER).join(dateLabel);
+        PLACEHOLDER_RE.lastIndex = 0;
+        if (mData.markdown && PLACEHOLDER_RE.test(mData.markdown)) {
+          PLACEHOLDER_RE.lastIndex = 0;
+          updates.markdown = mData.markdown.replace(PLACEHOLDER_RE, dateLabel);
+          updatedMarkdown  = updates.markdown;
         }
-        // edited_html may have Quill-inserted spans around parts of the heading,
-        // so walk actual DOM text nodes rather than string-matching raw HTML.
         if (mData.edited_html) {
-          const fixed = replacePlaceholderInHtml(mData.edited_html, PLACEHOLDER, dateLabel);
+          PLACEHOLDER_RE.lastIndex = 0;
+          const fixed = replacePlaceholderInHtml(mData.edited_html, PLACEHOLDER_RE, dateLabel);
           if (fixed !== mData.edited_html) updates.edited_html = fixed;
         }
         if (Object.keys(updates).length) {
@@ -1204,7 +1219,7 @@ function showDateConfirmModal(meetingId) {
 
       renderMotions();
       renderMeetingsList();
-      resolve(val);
+      resolve({ date: val, updatedMarkdown });
     };
   });
 }
@@ -1423,6 +1438,7 @@ async function activateContent(cat, sub) {
         showGenForm();
       } else if (sub === 'portal') {
         minutesView.classList.remove('hidden');
+        loadMeetingsList();
       } else if (sub === 'agenda') {
         agendaView.classList.remove('hidden');
         renderAgenda();
@@ -3445,6 +3461,8 @@ function renderMeetingsList() {
       ? `<button class="btn-ghost btn-sm mins-unpublish-btn" data-meeting-id="${m.id}">Unpublish</button>`
       : `<button class="btn-primary btn-sm mins-publish-btn" data-meeting-id="${m.id}">Publish to portal</button>`
     }
+    <button class="btn-link danger-link mins-delete-btn" data-meeting-id="${m.id}"
+            data-published="${isPublished}" data-title="${escHtml(title)}">Delete</button>
   </div>
 </div>`;
   }).join('');
@@ -3471,15 +3489,20 @@ async function publishMeeting(id) {
     .maybeSingle();
 
   const now = new Date().toISOString();
-  const { error } = await supabaseClient
+  const { data: updated, error } = await supabaseClient
     .from('meetings')
     .update({ published: true, published_at: now })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) { showToast(`Failed to publish: ${error.message}`, 'error'); return; }
+  if (!updated?.length) {
+    showToast('Publish failed — the meeting record could not be updated. Please reload the page and try again.', 'error');
+    return;
+  }
 
   // Audit log — records exactly what HTML became live and when
-  await supabaseClient.from('meeting_publish_log').insert({
+  const { error: logErr } = await supabaseClient.from('meeting_publish_log').insert({
     meeting_id:    id,
     org_id:        userOrg.id,
     action:        'published',
@@ -3487,6 +3510,7 @@ async function publishMeeting(id) {
     html_snapshot: liveHtml,
     actor_id:      currentUser.id,
   });
+  if (logErr) console.error('publish audit log failed:', logErr);
 
   const m = allMeetingsList.find((m) => m.id === id);
   if (m) { m.published = true; m.published_at = now; }
@@ -3495,19 +3519,25 @@ async function publishMeeting(id) {
 }
 
 async function unpublishMeeting(id) {
-  const { error } = await supabaseClient
+  const { data: updated, error } = await supabaseClient
     .from('meetings')
     .update({ published: false, published_at: null })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) { showToast(`Failed to unpublish: ${error.message}`, 'error'); return; }
+  if (!updated?.length) {
+    showToast('Unpublish failed — the meeting record could not be updated. Please reload the page and try again.', 'error');
+    return;
+  }
 
-  await supabaseClient.from('meeting_publish_log').insert({
+  const { error: logErr } = await supabaseClient.from('meeting_publish_log').insert({
     meeting_id: id,
     org_id:     userOrg.id,
     action:     'unpublished',
     actor_id:   currentUser.id,
   });
+  if (logErr) console.error('unpublish audit log failed:', logErr);
 
   const m = allMeetingsList.find((m) => m.id === id);
   if (m) { m.published = false; m.published_at = null; }
@@ -3694,13 +3724,14 @@ async function saveEditorVersion() {
       return;
     }
 
-    await supabaseClient.from('meeting_publish_log').insert({
+    const { error: auditErr } = await supabaseClient.from('meeting_publish_log').insert({
       meeting_id:    editorMeetingId,
       org_id:        userOrg.id,
       action:        'auto_unpublished',
       html_snapshot: editorMeetingMeta.edited_html ?? null,
       actor_id:      currentUser.id,
     });
+    if (auditErr) console.error('auto_unpublish audit log failed:', auditErr);
   }
 
   // 2. Insert version row
@@ -3727,7 +3758,10 @@ async function saveEditorVersion() {
     .eq('id', editorMeetingId);
 
   if (mErr) {
-    showToast(`Saved version but could not update meeting: ${mErr.message}`, 'error');
+    const msg = wasPublished
+      ? `Edits not saved — your meeting has been unpublished but the new content was not stored: ${mErr.message}. Please reload the page, re-enter your edits, and republish.`
+      : `Edits not saved: ${mErr.message}. Please try again.`;
+    showToast(msg, 'error');
     saveBtn.disabled    = false;
     saveBtn.textContent = 'Save';
     return;
@@ -3749,7 +3783,7 @@ async function saveEditorVersion() {
   saveBtn.textContent = 'Saved ✓';
   setTimeout(() => { if (saveBtn) saveBtn.textContent = 'Save'; }, 2500);
 
-  showToast(wasPublished ? 'Saved and unpublished — republish when ready.' : 'Changes saved.', 'success');
+  showToast(wasPublished ? 'Saved and unpublished — republish when ready.' : 'Changes saved — not yet published to owners.', 'success');
 }
 
 async function toggleVersionPanel() {
@@ -3918,10 +3952,38 @@ minsList.addEventListener('click', (e) => {
   const publishBtn   = e.target.closest('.mins-publish-btn');
   const unpublishBtn = e.target.closest('.mins-unpublish-btn');
   const previewBtn   = e.target.closest('.mins-view-btn');
+  const deleteBtn    = e.target.closest('.mins-delete-btn');
   if (publishBtn)   publishMeeting(publishBtn.dataset.meetingId);
   if (unpublishBtn) unpublishMeeting(unpublishBtn.dataset.meetingId);
   if (previewBtn)   openMeetingModal(previewBtn.dataset.meetingId);
+  if (deleteBtn)    deleteMeeting(deleteBtn.dataset.meetingId, deleteBtn.dataset.published === 'true', deleteBtn.dataset.title);
 });
+
+async function deleteMeeting(id, isPublished, title) {
+  const confirmMsg = isPublished
+    ? `"${title}" is currently published to the owner portal — deleting it will remove it from there immediately and cannot be undone.\n\nDelete this meeting and all its versions, motions, and action items?`
+    : `Delete "${title}"? This will also remove its version history, motions, and action items. This cannot be undone.`;
+
+  if (!confirm(confirmMsg)) return;
+
+  const { error } = await supabaseClient
+    .from('meetings')
+    .delete()
+    .eq('id', id);
+
+  if (error) { showToast(`Delete failed: ${error.message}`, 'error'); return; }
+
+  allMeetingsList = allMeetingsList.filter((m) => m.id !== id);
+  meetingCache.delete(id);
+  // Remove motions and action items that referenced this meeting from in-memory caches
+  allMotions     = allMotions.filter((m) => m.meeting_id !== id);
+  allActionItems = allActionItems.filter((a) => a.meeting_id !== id);
+  renderMeetingsList();
+  renderMotions();
+  renderActionItems();
+  minsCount.textContent = `${allMeetingsList.length} meeting${allMeetingsList.length !== 1 ? 's' : ''}`;
+  showToast('Meeting deleted.', 'success');
+}
 
 // ── Governance document templates ─────────────────────────────────────────────
 //

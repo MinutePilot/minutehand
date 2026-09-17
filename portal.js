@@ -139,11 +139,15 @@ function renderCardMarkdown(card) {
   if (!contentEl || contentEl.dataset.rendered) return;
 
   const m  = meetingsData.get(card.dataset.meetingId);
-  const md = m?.markdown || '';
+  // Use edited_html if the secretary saved edits; fall back to original markdown
+  const content = m?.edited_html || m?.markdown || '';
 
-  // Same blockquote pre-processor as board.js openMeetingModal
-  const processed = md.replace(/^(> .+)\n(?=> )/gm, '$1\n\n');
-  contentEl.innerHTML     = marked.parse(processed);
+  if (m?.edited_html) {
+    contentEl.innerHTML = m.edited_html;
+  } else {
+    const processed = content.replace(/^(> .+)\n(?=> )/gm, '$1\n\n');
+    contentEl.innerHTML = marked.parse(processed);
+  }
   contentEl.dataset.rendered = '1';
 }
 
@@ -158,7 +162,9 @@ function downloadMinutes(meetingId) {
 
   // Ensure rendered so we can lift the HTML
   if (contentEl && !contentEl.dataset.rendered) renderCardMarkdown(card);
-  const bodyHtml = contentEl?.innerHTML || marked.parse(m.markdown || '');
+  const bodyHtml = contentEl?.innerHTML
+    || m?.edited_html
+    || marked.parse((m?.markdown || '').replace(/^(> .+)\n(?=> )/gm, '$1\n\n'));
 
   const orgName = orgNameEl.textContent || 'Strata Corporation';
   const dateStr = m.meeting_date
