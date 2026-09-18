@@ -3119,6 +3119,107 @@ mark {
   .doc-item__actions    { width: 100%; justify-content: flex-end; }
 }
 
+/* ── Document folder browser ─────────────────────────────────────────────── */
+
+.doc-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.doc-folder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 1.2rem 0.75rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  gap: 0.35rem;
+  user-select: none;
+}
+
+.doc-folder:hover,
+.doc-folder:focus {
+  border-color: var(--primary);
+  background: var(--bg);
+  outline: none;
+}
+
+.doc-folder__icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.doc-folder__name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+  line-height: 1.25;
+}
+
+.doc-folder__count {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.doc-folder--empty {
+  opacity: 0.55;
+}
+
+.doc-folder--minutes .doc-folder__icon { filter: hue-rotate(200deg); }
+
+/* Folder content header (breadcrumb back nav) */
+
+.doc-folder-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.doc-back-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 0.88rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: none;
+}
+
+.doc-back-btn:hover { text-decoration: underline; }
+
+.doc-folder-sep {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.doc-folder-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Minutes type badge — warm amber to match minutes UI */
+
+.doc-type-badge--mins {
+  background: rgba(239, 159, 39, 0.15);
+  color: var(--mh-accent-text, #5c3400);
+}
+
+@media (max-width: 480px) {
+  .doc-folder-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+}
+
 /* ── Minutes tab + portal link ───────────────────────────────────────────────*/
 
 .portal-link-row {

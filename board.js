@@ -31,9 +31,12 @@ let membersLoaded   = false;
 let editingMemberId = null;
 const meetingCache  = new Map();
 
-let allDocuments    = [];
-let documentsLoaded = false;
-let docSortField    = 'created_at';
+let allDocuments      = [];
+let documentsLoaded   = false;
+let docSortField      = 'created_at';
+let currentDocFolder  = null;   // null = top-level grid; string = inside a folder
+let publishedMeetings = [];     // meetings.published=true, for the virtual Minutes folder
+let pubMeetingsLoaded = false;
 
 let allAlterationRequests = [];
 let alterationsLoaded     = false;
@@ -977,7 +980,8 @@ async function saveAndPublishMinutes() {
     if (updates.length > 0) await loadActionItems();
 
     // 5 ── Success
-    btn.textContent = '✓ Saved & Published';
+    btn.textContent   = '✓ Saved & Published';
+    pubMeetingsLoaded = false;
     showToast('Minutes saved and published to owner portal.', 'success');
     if (userOrg) loadMeetingsList();
 
@@ -3183,23 +3187,49 @@ const CATEGORY_ORDER = [
   'Other',
 ];
 
+const MEETING_MINUTES_FOLDER = 'Meeting Minutes';
+
 async function loadDocuments() {
-  docList.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading documents…</span></div>';
+  docList.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading library…</span></div>';
 
-  const { data, error } = await supabaseClient
-    .from('documents')
-    .select('id, title, category, effective_date, storage_path, file_name, file_size, mime_type, status, supersedes_id, created_at')
-    .eq('org_id', userOrg.id)
-    .order('created_at', { ascending: false });
+  const [docsRes, minsRes] = await Promise.all([
+    supabaseClient
+      .from('documents')
+      .select('id, title, category, effective_date, storage_path, file_name, file_size, mime_type, status, supersedes_id, created_at')
+      .eq('org_id', userOrg.id)
+      .order('created_at', { ascending: false }),
+    supabaseClient
+      .from('meetings')
+      .select('id, title, meeting_date, template, published_at, updated_at')
+      .eq('org_id', userOrg.id)
+      .eq('published', true)
+      .order('meeting_date', { ascending: false, nullsFirst: false }),
+  ]);
 
-  if (error) {
-    docList.innerHTML = `<p class="error">Failed to load documents: ${escHtml(error.message)}</p>`;
+  if (docsRes.error) {
+    docList.innerHTML = `<p class="error">Failed to load documents: ${escHtml(docsRes.error.message)}</p>`;
     return;
   }
 
-  allDocuments    = data ?? [];
-  documentsLoaded = true;
+  allDocuments    = docsRes.data ?? [];
+  publishedMeetings = minsRes.data ?? [];
+  pubMeetingsLoaded = true;
+  documentsLoaded   = true;
   renderDocuments();
+}
+
+async function loadPublishedMeetings() {
+  const { data, error } = await supabaseClient
+    .from('meetings')
+    .select('id, title, meeting_date, template, published_at, updated_at')
+    .eq('org_id', userOrg.id)
+    .eq('published', true)
+    .order('meeting_date', { ascending: false, nullsFirst: false });
+
+  if (!error) {
+    publishedMeetings = data ?? [];
+    pubMeetingsLoaded = true;
+  }
 }
 
 function sortedDocs(docs) {
@@ -3350,41 +3380,125 @@ function renderDocItems(docs, showRestore) {
 }
 
 function renderDocuments() {
-  const active   = allDocuments.filter((d) => d.status === 'active');
-  const archived = allDocuments.filter((d) => d.status === 'archived');
-  // superseded docs are only surfaced via version chains — not counted here
+  const docsSort  = document.querySelector('.docs-sort');
+  const uploadBtn = document.getElementById('upload-doc-btn');
+
+  if (currentDocFolder === null) {
+    if (docsSort)  docsSort.classList.add('hidden');
+    if (uploadBtn) uploadBtn.classList.remove('hidden');
+    docsArchivedSection.classList.add('hidden');
+    archivedDocsList.classList.add('hidden');
+    renderFolderGrid();
+  } else if (currentDocFolder === MEETING_MINUTES_FOLDER) {
+    if (docsSort)  docsSort.classList.add('hidden');
+    if (uploadBtn) uploadBtn.classList.add('hidden');
+    docsArchivedSection.classList.add('hidden');
+    archivedDocsList.classList.add('hidden');
+    renderMinutesFolder();
+  } else {
+    if (docsSort)  docsSort.classList.remove('hidden');
+    if (uploadBtn) uploadBtn.classList.remove('hidden');
+    renderDocFolderContent(currentDocFolder);
+  }
+}
+
+function renderFolderGrid() {
+  const active = allDocuments.filter((d) => d.status === 'active');
+
+  const byCat = new Map(CATEGORY_ORDER.map((c) => [c, 0]));
+  active.forEach((d) => {
+    const key = byCat.has(d.category) ? d.category : 'Other';
+    byCat.set(key, (byCat.get(key) ?? 0) + 1);
+  });
+
+  const folderCards = [...byCat.entries()].map(([cat, count]) => {
+    const empty = count === 0;
+    const countLabel = empty ? 'Empty' : `${count} doc${count !== 1 ? 's' : ''}`;
+    return `<div class="doc-folder${empty ? ' doc-folder--empty' : ''}" data-folder="${escHtml(cat)}" role="button" tabindex="0">
+  <div class="doc-folder__icon">📁</div>
+  <div class="doc-folder__name">${escHtml(cat)}</div>
+  <div class="doc-folder__count">${countLabel}</div>
+</div>`;
+  }).join('');
+
+  const minsLabel = pubMeetingsLoaded
+    ? (publishedMeetings.length === 0 ? 'None published' : `${publishedMeetings.length} published`)
+    : '…';
+  const minsCard = `<div class="doc-folder doc-folder--minutes" data-folder="${escHtml(MEETING_MINUTES_FOLDER)}" role="button" tabindex="0">
+  <div class="doc-folder__icon">📄</div>
+  <div class="doc-folder__name">Meeting Minutes</div>
+  <div class="doc-folder__count">${minsLabel}</div>
+</div>`;
+
+  docsCount.textContent = `${CATEGORY_ORDER.length + 1} folders`;
+  docList.innerHTML = `<div class="doc-folder-grid">${folderCards}${minsCard}</div>`;
+}
+
+function renderMinutesFolder() {
+  docsCount.textContent = `${publishedMeetings.length} published`;
+
+  const header = `<div class="doc-folder-header">
+  <button class="doc-back-btn">← Library</button>
+  <span class="doc-folder-sep">/</span>
+  <span class="doc-folder-title">Meeting Minutes</span>
+</div>`;
+
+  if (publishedMeetings.length === 0) {
+    docList.innerHTML = header + `<div class="registry-empty">
+  <p>No published minutes yet.</p>
+  <p class="field-hint">Generate minutes and publish them via the Meetings tab to see them here.</p>
+</div>`;
+    return;
+  }
+
+  const rows = publishedMeetings.map((m) => {
+    const dateLabel = m.meeting_date
+      ? new Date(m.meeting_date + 'T12:00:00').toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' })
+      : 'Date unknown';
+    const displayTitle = m.title || dateLabel;
+    const templateStr = m.template
+      ? m.template.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+      : 'AGM';
+    const pubStr = m.published_at
+      ? 'Published ' + new Date(m.published_at).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' })
+      : '';
+    const meta = [displayTitle !== dateLabel ? dateLabel : '', templateStr, pubStr].filter(Boolean).join(' · ');
+
+    return `<div class="doc-item" data-meeting-id="${escHtml(m.id)}">
+  <span class="doc-type-badge doc-type-badge--mins">MIN</span>
+  <div class="doc-item__info">
+    <div class="doc-item__title">${escHtml(displayTitle)}</div>
+    <div class="doc-item__meta">${escHtml(meta)}</div>
+  </div>
+  <div class="doc-item__actions">
+    <button class="btn-link mins-download-btn"
+            data-meeting-id="${escHtml(m.id)}"
+            data-title="${escHtml(displayTitle)}">Download ↓</button>
+  </div>
+</div>`;
+  }).join('');
+
+  docList.innerHTML = header + `<div class="doc-category-list">${rows}</div>`;
+}
+
+function renderDocFolderContent(category) {
+  const active = sortedDocs(allDocuments.filter((d) => d.status === 'active' && d.category === category));
 
   docsCount.textContent = `${active.length} document${active.length !== 1 ? 's' : ''}`;
 
-  // Group active docs by category in fixed display order
-  const byCategory = new Map(CATEGORY_ORDER.map((c) => [c, []]));
-  sortedDocs(active).forEach((d) => {
-    const bucket = byCategory.get(d.category) ?? byCategory.get('Other');
-    bucket.push(d);
-  });
-
-  let anyShown = false;
-  let html = '';
-  for (const [cat, docs] of byCategory) {
-    if (docs.length === 0) continue;
-    anyShown = true;
-    html += `<div class="doc-category-section">
-  <h4 class="doc-category-heading">
-    ${escHtml(cat)}
-    <span class="doc-category-count">${docs.length}</span>
-  </h4>
-  <div class="doc-category-list">${renderActiveDocItems(docs)}</div>
+  const header = `<div class="doc-folder-header">
+  <button class="doc-back-btn">← Library</button>
+  <span class="doc-folder-sep">/</span>
+  <span class="doc-folder-title">${escHtml(category)}</span>
 </div>`;
-  }
 
-  docList.innerHTML = anyShown
-    ? html
-    : `<div class="registry-empty">
-         <p>No documents yet.</p>
-         <p class="field-hint">Upload governance documents to start your library.</p>
-       </div>`;
+  const content = active.length > 0
+    ? `<div class="doc-category-list">${renderActiveDocItems(active)}</div>`
+    : `<div class="registry-empty"><p>No documents in this folder yet.</p><p class="field-hint">Use the Upload button above to add a document.</p></div>`;
 
-  // Archived section — superseded docs are NOT included here
+  docList.innerHTML = header + content;
+
+  const archived = allDocuments.filter((d) => d.status === 'archived' && d.category === category);
   if (archived.length > 0) {
     docsArchivedSection.classList.remove('hidden');
     archivedDocsCount.textContent = String(archived.length);
@@ -3397,18 +3511,83 @@ function renderDocuments() {
   }
 }
 
+async function navigateToFolder(folder) {
+  currentDocFolder = folder;
+  if (folder === MEETING_MINUTES_FOLDER && !pubMeetingsLoaded) {
+    docList.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading minutes…</span></div>';
+    await loadPublishedMeetings();
+  }
+  renderDocuments();
+}
+
+function navigateBack() {
+  currentDocFolder = null;
+  if (!docFormPanel.classList.contains('hidden')) closeDocForm();
+  renderDocuments();
+}
+
+async function downloadMinutesDocx(meetingId, title) {
+  const btn = docList.querySelector(`.mins-download-btn[data-meeting-id="${CSS.escape(meetingId)}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Downloading…'; }
+
+  const { data, error } = await supabaseClient
+    .from('meetings')
+    .select('markdown')
+    .eq('id', meetingId)
+    .single();
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Download ↓'; }
+
+  if (error || !data?.markdown) {
+    showToast('Could not load minutes content — please try again.', 'error');
+    return;
+  }
+
+  const fullHtml = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+  body    { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.3; color: #000; margin: 0; }
+  h1      { font-size: 13pt; font-weight: bold; text-align: center; margin: 0 0 2pt; }
+  h2      { font-size: 11pt; font-weight: bold; color: #111; margin: 0 0 1pt; }
+  h3      { font-size: 11pt; font-weight: bold; color: #111; margin: 0 0 5pt; }
+  h4      { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: .04em; color: #000; border-bottom: 1pt solid #888; padding-bottom: 2pt; margin: 12pt 0 4pt; }
+  h5      { font-size: 11pt; font-weight: bold; color: #222; margin: 6pt 0 2pt; }
+  p       { margin: 0 0 5pt; }
+  blockquote { margin: 1pt 0; padding: 0; border: none; color: #555; font-size: 10pt; }
+  hr      { border: none; border-top: 1pt solid #888; margin: 8pt 0; }
+  table   { width: 100%; border-collapse: collapse; margin: 6pt 0; font-size: 10pt; }
+  th      { background: #e8e8e8; font-weight: bold; text-align: left; padding: 4pt 7pt; border: 1pt solid #999; color: #000; }
+  td      { padding: 4pt 7pt; border: 1pt solid #ccc; vertical-align: top; }
+  ul, ol  { margin: 2pt 0 5pt 18pt; }
+  li      { margin-bottom: 2pt; }
+</style></head><body>${marked.parse(preprocessMarkdown(data.markdown))}</body></html>`;
+
+  const blob     = htmlDocx.asBlob(fullHtml, { margins: { top: 720, right: 720, bottom: 720, left: 720 } });
+  const url      = URL.createObjectURL(blob);
+  const fileName = title
+    ? `minutes-${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-|-$/g, '')}.docx`
+    : `meeting-minutes.docx`;
+  const a = Object.assign(document.createElement('a'), { href: url, download: fileName });
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Upload ────────────────────────────────────────────────────────────────────
 
-function openDocForm() {
+function openDocForm(category) {
+  // category may be a string (from folder context) or null/undefined/Event (top-level)
+  const cat = (typeof category === 'string') ? category : null;
   docFormPanel.classList.remove('hidden');
   docFormError.classList.add('hidden');
-  docTitleInput.value        = '';
-  docFileInput.value         = '';
-  docCategorySelect.value    = 'Bylaws';
-  docEffectiveDate.value     = '';
-  docUploadBtn.disabled      = false;
-  docUploadBtn.textContent   = 'Upload';
-  updateSupersedesDropdown('Bylaws');
+  docTitleInput.value      = '';
+  docFileInput.value       = '';
+  docCategorySelect.value  = cat ?? 'Bylaws';
+  docEffectiveDate.value   = '';
+  docUploadBtn.disabled    = false;
+  docUploadBtn.textContent = 'Upload';
+  // Lock the category picker when opening from inside a folder
+  const catGroup = document.getElementById('doc-category-group');
+  if (catGroup) catGroup.classList.toggle('hidden', !!cat);
+  updateSupersedesDropdown(docCategorySelect.value);
   docTitleInput.focus();
   docFormPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -3435,6 +3614,8 @@ function updateSupersedesDropdown(category) {
 
 function closeDocForm() {
   docFormPanel.classList.add('hidden');
+  // Always restore category group visibility for next open
+  document.getElementById('doc-category-group')?.classList.remove('hidden');
 }
 
 async function uploadDocument() {
@@ -3561,7 +3742,7 @@ async function downloadDocument(storagePath, fileName) {
 
 // ── Document event listeners ──────────────────────────────────────────────────
 
-uploadDocBtn.addEventListener('click', openDocForm);
+uploadDocBtn.addEventListener('click', () => openDocForm(currentDocFolder !== MEETING_MINUTES_FOLDER ? currentDocFolder : null));
 docCancelBtn.addEventListener('click', closeDocForm);
 docUploadBtn.addEventListener('click', uploadDocument);
 
@@ -3570,6 +3751,12 @@ docCategorySelect.addEventListener('change', () => {
 });
 
 docList.addEventListener('click', (e) => {
+  const folder = e.target.closest('.doc-folder');
+  if (folder) { navigateToFolder(folder.dataset.folder); return; }
+  const back = e.target.closest('.doc-back-btn');
+  if (back) { navigateBack(); return; }
+  const mins = e.target.closest('.mins-download-btn');
+  if (mins) { downloadMinutesDocx(mins.dataset.meetingId, mins.dataset.title); return; }
   const dl  = e.target.closest('.doc-download-btn');
   if (dl)  { downloadDocument(dl.dataset.path, dl.dataset.name); return; }
   const arc = e.target.closest('.doc-archive-btn');
@@ -3580,6 +3767,13 @@ docList.addEventListener('click', (e) => {
     if (!chainEl) return;
     const nowHidden = chainEl.classList.toggle('hidden');
     tog.textContent = nowHidden ? tog.dataset.labelClosed : tog.dataset.labelOpen;
+  }
+});
+
+docList.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    const folder = e.target.closest('.doc-folder');
+    if (folder) { e.preventDefault(); navigateToFolder(folder.dataset.folder); }
   }
 });
 
@@ -3598,7 +3792,9 @@ toggleArchivedBtn.addEventListener('click', () => {
     ? `Show archived documents (${archivedDocsCount.textContent})`
     : `Hide archived documents`;
   if (!hidden) {
-    const archived = allDocuments.filter((d) => d.status === 'archived');
+    const archived = allDocuments.filter((d) =>
+      d.status === 'archived' && (currentDocFolder ? d.category === currentDocFolder : true)
+    );
     archivedDocsList.innerHTML = renderDocItems(sortedDocs(archived), true);
   }
 });
@@ -3747,6 +3943,7 @@ async function publishMeeting(id) {
 
   const m = allMeetingsList.find((m) => m.id === id);
   if (m) { m.published = true; m.published_at = now; }
+  pubMeetingsLoaded = false;
   renderMeetingsList();
   showToast('Published to owner portal.', 'success');
 }
@@ -3774,6 +3971,7 @@ async function unpublishMeeting(id) {
 
   const m = allMeetingsList.find((m) => m.id === id);
   if (m) { m.published = false; m.published_at = null; }
+  pubMeetingsLoaded = false;
   renderMeetingsList();
   showToast('Unpublished from owner portal.', 'success');
 }
