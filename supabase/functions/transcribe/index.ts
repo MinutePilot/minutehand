@@ -1,5 +1,8 @@
 // Transcription vendor: Deepgram nova-2 with speaker diarization.
 // To swap vendors, replace the callDeeepgram function and adjust the word shape.
+// R2 cleanup: if the caller passes a `key`, the R2 object is deleted after transcription.
+
+import { S3Client, DeleteObjectCommand } from "npm:@aws-sdk/client-s3";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -106,9 +109,11 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   let audioUrl: string;
+  let r2Key: string | undefined;
   try {
     const body = await req.json();
     audioUrl = (body.audioUrl ?? "").trim();
+    r2Key = body.key ?? undefined;
   } catch {
     return json({ error: "Invalid JSON body" }, 400);
   }
@@ -121,6 +126,11 @@ Deno.serve(async (req: Request) => {
   try {
     const words = await callDeeepgram(audioUrl, apiKey);
     const { rawTranscript, speakers } = buildTranscriptAndSpeakers(words);
+    if (r2Key) {
+      deleteR2Object(r2Key).catch((err) =>
+        console.warn("R2 cleanup failed (non-fatal):", err)
+      );
+    }
     return json({ rawTranscript, speakers });
   } catch (err) {
     console.error("Transcription error:", err);
@@ -133,4 +143,18 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...CORS, "Content-Type": "application/json" },
   });
+}
+
+async function deleteR2Object(key: string): Promise<void> {
+  const accountId       = Deno.env.get("CLOUDFLARE_R2_ACCOUNT_ID");
+  const accessKeyId     = Deno.env.get("CLOUDFLARE_R2_ACCESS_KEY_ID");
+  const secretAccessKey = Deno.env.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY");
+  const bucket          = Deno.env.get("CLOUDFLARE_R2_BUCKET") ?? "minutehand-audio-temp";
+  if (!accountId || !accessKeyId || !secretAccessKey) return;
+  const s3 = new S3Client({
+    region: "auto",
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: { accessKeyId, secretAccessKey },
+  });
+  await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }

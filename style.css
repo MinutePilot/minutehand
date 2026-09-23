@@ -442,6 +442,16 @@ input[type="email"]:focus {
   color: #16a34a;
 }
 
+.welcome-banner {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: var(--mh-heading);
+}
+
 .account-bar {
   display: flex;
   align-items: center;
@@ -1067,6 +1077,56 @@ body.landing {
   font-size: 0.875rem;
   color: var(--text);
   margin: 0;
+}
+
+/* ── Sample output (landing) ── */
+
+.lp-sample {
+  padding: 5rem 0;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+
+.lp-sample h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+  color: var(--mh-heading);
+}
+
+.sample-minutes {
+  margin: 2rem 0 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.sample-minutes__label {
+  padding: 0.6rem 1.25rem;
+  background: var(--mh-heading);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.sample-minutes__text {
+  padding: 1.5rem 1.75rem;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  color: var(--mh-text);
+  white-space: pre;
+  overflow-x: auto;
+  border: none;
+  background: transparent;
+}
+
+.sample-minutes__cta {
+  text-align: center;
+  margin-top: 0.5rem;
 }
 
 /* ── Review (landing) ── */

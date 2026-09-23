@@ -687,7 +687,7 @@ async function loadGenDocxFiles(files) {
 
 // ── Generate Minutes: audio upload ────────────────────────────────────────────
 
-const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 500 * 1024 * 1024;
 
 genAudioBrowse?.addEventListener('click', () => genAudioInput?.click());
 genAudioDrop?.addEventListener('click', (e) => { if (e.target !== genAudioBrowse) genAudioInput?.click(); });
@@ -708,7 +708,7 @@ function genSelectAudioFile(file) {
   }
   if (file.size > MAX_AUDIO_BYTES) {
     const mb = (file.size / 1024 / 1024).toFixed(0);
-    genSetFileStatus(genAudioStatus, `File is ${mb} MB — max is 50 MB. Re-export at a lower bitrate.`, 'error'); return;
+    genSetFileStatus(genAudioStatus, `File is ${mb} MB — maximum is 500 MB. If your recording is larger, re-export as MP3 at 64 kbps or lower (Audacity or GarageBand can do this in one step).`, 'error'); return;
   }
   genAudioFile = file;
   const mb = (file.size / 1024 / 1024).toFixed(1);
@@ -734,11 +734,25 @@ genBtn?.addEventListener('click', async () => {
 });
 
 async function genRunAudioFlow(supplementaryNotes) {
-  let filename;
+  let uploadUrl, audioUrl, key;
+
+  try {
+    genSetLoadingBtn(true, 'Preparing upload…');
+    const ext = genAudioFile.name.split('.').pop()?.toLowerCase() || 'mp3';
+    ({ uploadUrl, audioUrl, key } = await callEdgeFn('audio-upload-url', {
+      ext,
+      contentType: genAudioFile.type || 'audio/mpeg',
+    }));
+  } catch (err) {
+    genSetLoadingBtn(false);
+    genShowError(err.message || 'Could not prepare upload. Please try again.');
+    return;
+  }
+
   try {
     genSetLoadingBtn(true, 'Uploading…');
     genUploadProgressWrap?.classList.remove('hidden');
-    filename = await genUploadAudioToStorage(genAudioFile);
+    await genUploadToPresignedUrl(genAudioFile, uploadUrl);
     genUploadProgressWrap?.classList.add('hidden');
   } catch (err) {
     genUploadProgressWrap?.classList.add('hidden');
@@ -746,11 +760,11 @@ async function genRunAudioFlow(supplementaryNotes) {
     genShowError(err.message || 'Upload failed. Please try again.');
     return;
   }
+
   try {
     genSetLoadingBtn(true, 'Transcribing…');
     genAddStatusRow('This may take a minute or two for longer recordings…');
-    const audioUrl = `${CONFIG.supabaseUrl}/storage/v1/object/public/audio/${filename}`;
-    const data = await callEdgeFn('transcribe', { audioUrl });
+    const data = await callEdgeFn('transcribe', { audioUrl, key });
     genRemoveStatusRow();
     genPendingTranscript = data.rawTranscript;
     genPendingSpeakers   = data.speakers;
@@ -1145,33 +1159,23 @@ genReset?.addEventListener('click', () => {
 
 // ── Audio storage upload ──────────────────────────────────────────────────────
 
-function genUploadAudioToStorage(file) {
+function genUploadToPresignedUrl(file, presignedPutUrl) {
   return new Promise((resolve, reject) => {
-    const ext      = file.name.split('.').pop() || 'mp3';
-    const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const url      = `${CONFIG.supabaseUrl}/storage/v1/object/audio/${filename}`;
-    const xhr      = new XMLHttpRequest();
+    const xhr = new XMLHttpRequest();
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable) {
         const pct = Math.round(e.loaded / e.total * 100);
-        if (genUploadBar)   genUploadBar.style.width    = `${pct}%`;
-        if (genUploadLabel) genUploadLabel.textContent  = `Uploading… ${pct}%`;
+        if (genUploadBar)   genUploadBar.style.width   = `${pct}%`;
+        if (genUploadLabel) genUploadLabel.textContent = `Uploading… ${pct}%`;
       }
     });
     xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) { resolve(filename); }
-      else {
-        let msg = `Upload failed (${xhr.status})`;
-        try { msg = JSON.parse(xhr.responseText).message || msg; } catch { /* ignore */ }
-        reject(new Error(msg));
-      }
+      if (xhr.status >= 200 && xhr.status < 300) { resolve(); }
+      else { reject(new Error(`Upload failed (${xhr.status})`)); }
     });
     xhr.addEventListener('error', () => reject(new Error('Upload failed — check your connection.')));
     xhr.addEventListener('abort', () => reject(new Error('Upload cancelled.')));
-    xhr.open('POST', url);
-    xhr.setRequestHeader('Authorization', `Bearer ${CONFIG.supabaseAnonKey}`);
-    xhr.setRequestHeader('apikey', CONFIG.supabaseAnonKey);
-    xhr.setRequestHeader('x-upsert', 'false');
+    xhr.open('PUT', presignedPutUrl);
     if (file.type) xhr.setRequestHeader('Content-Type', file.type);
     xhr.send(file);
   });

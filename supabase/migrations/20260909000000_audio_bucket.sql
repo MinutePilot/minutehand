@@ -1,4 +1,5 @@
--- Create public audio uploads bucket (200 MB per file)
+-- Create public audio uploads bucket (50 MB per file — Supabase Free tier limit)
+-- To increase: upgrade to Pro and update file_size_limit here + MAX_AUDIO_BYTES in app.js and board.js
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
   'audio',

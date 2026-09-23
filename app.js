@@ -90,6 +90,11 @@ const backToFormBtn      = document.getElementById('back-to-form-btn');
 // Org setup
 const orgSetupSection   = document.getElementById('org-setup-section');
 const suspendedSection  = document.getElementById('suspended-section');
+
+// Welcome banner
+const welcomeBanner     = document.getElementById('welcome-banner');
+document.getElementById('welcome-buy-btn')?.addEventListener('click', () => showSection(buyCreditsSection));
+document.getElementById('welcome-board-plan-btn')?.addEventListener('click', () => showSection(buyBoardPlanSection));
 const orgNameInput    = document.getElementById('org-name');
 const orgTypeSelect   = document.getElementById('org-type');
 const orgSaveBtn      = document.getElementById('org-save-btn');
@@ -275,6 +280,7 @@ function renderCreditsDisplay() {
   if (creditBalance === null) return;
   creditsDisplay.textContent = creditBalance === 1 ? '1 credit' : `${creditBalance} credits`;
   creditsDisplay.className = 'credits-badge' + (creditBalance === 0 ? ' empty' : '');
+  welcomeBanner?.classList.toggle('hidden', creditBalance !== 0 || hasBoardPlan);
 }
 
 function showPaymentSuccessToast() {
@@ -617,7 +623,7 @@ async function loadDocxFiles(files) {
 
 // ── Audio upload ──────────────────────────────────────────────────────────────
 
-const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 500 * 1024 * 1024;
 
 audioBrowseBtn.addEventListener('click', () => audioInput.click());
 audioDropZone.addEventListener('click', (e) => { if (e.target !== audioBrowseBtn) audioInput.click(); });
@@ -639,7 +645,7 @@ function selectAudioFile(file) {
   }
   if (file.size > MAX_AUDIO_BYTES) {
     const mb = (file.size / 1024 / 1024).toFixed(0);
-    setFileStatus(audioStatus, `File is ${mb} MB — maximum is 50 MB. Re-export at a lower bitrate (64 kbps MP3 fits ~90 min).`, 'error');
+    setFileStatus(audioStatus, `File is ${mb} MB — maximum is 500 MB. If your recording is larger, re-export as MP3 at 64 kbps or lower (Audacity or GarageBand can do this in one step).`, 'error');
     return;
   }
   audioFile = file;
@@ -675,12 +681,25 @@ generateBtn.addEventListener('click', async () => {
 });
 
 async function runAudioFlow(supplementaryNotes) {
-  let filename;
+  let uploadUrl, audioUrl, key;
+
+  try {
+    setLoadingBtn(generateBtn, true, 'Preparing upload…');
+    const ext = audioFile.name.split('.').pop()?.toLowerCase() || 'mp3';
+    ({ uploadUrl, audioUrl, key } = await callEdgeFunction('audio-upload-url', {
+      ext,
+      contentType: audioFile.type || 'audio/mpeg',
+    }));
+  } catch (err) {
+    setLoadingBtn(generateBtn, false);
+    showError(err.message || 'Could not prepare upload. Please try again.');
+    return;
+  }
 
   try {
     setLoadingBtn(generateBtn, true, 'Uploading…');
     uploadProgressWrap.classList.remove('hidden');
-    filename = await uploadAudioToStorage(audioFile);
+    await uploadToPresignedUrl(audioFile, uploadUrl);
     uploadProgressWrap.classList.add('hidden');
   } catch (err) {
     uploadProgressWrap.classList.add('hidden');
@@ -692,8 +711,7 @@ async function runAudioFlow(supplementaryNotes) {
   try {
     setLoadingBtn(generateBtn, true, 'Transcribing…');
     addStatusRow(generateBtn, 'spinner', 'This may take a minute or two for longer recordings…');
-    const audioUrl = `${CONFIG.supabaseUrl}/storage/v1/object/public/audio/${filename}`;
-    const data = await callEdgeFunction('transcribe', { audioUrl });
+    const data = await callEdgeFunction('transcribe', { audioUrl, key });
     removeStatusRow();
     pendingRawTranscript = data.rawTranscript;
     pendingSpeakers = data.speakers;
@@ -945,38 +963,28 @@ resetBtn.addEventListener('click', () => {
   showSection(formSection);
 });
 
-// ── Storage upload ────────────────────────────────────────────────────────────
+// ── R2 presigned upload ───────────────────────────────────────────────────────
 
-function uploadAudioToStorage(file) {
+function uploadToPresignedUrl(file, presignedPutUrl) {
   return new Promise((resolve, reject) => {
-    const ext      = file.name.split('.').pop() || 'mp3';
-    const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const url      = `${CONFIG.supabaseUrl}/storage/v1/object/audio/${filename}`;
-    const xhr      = new XMLHttpRequest();
-
+    const xhr = new XMLHttpRequest();
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable) {
         const pct = Math.round(e.loaded / e.total * 100);
-        uploadBar.style.width  = `${pct}%`;
+        uploadBar.style.width   = `${pct}%`;
         uploadLabel.textContent = `Uploading… ${pct}%`;
       }
     });
     xhr.addEventListener('load', () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(filename);
+        resolve();
       } else {
-        let msg = `Upload failed (${xhr.status})`;
-        try { msg = JSON.parse(xhr.responseText).message || msg; } catch { /* ignore */ }
-        reject(new Error(msg));
+        reject(new Error(`Upload failed (${xhr.status})`));
       }
     });
     xhr.addEventListener('error', () => reject(new Error('Upload failed — check your connection.')));
     xhr.addEventListener('abort', () => reject(new Error('Upload cancelled.')));
-
-    xhr.open('POST', url);
-    xhr.setRequestHeader('Authorization', `Bearer ${CONFIG.supabaseAnonKey}`);
-    xhr.setRequestHeader('apikey', CONFIG.supabaseAnonKey);
-    xhr.setRequestHeader('x-upsert', 'false');
+    xhr.open('PUT', presignedPutUrl);
     if (file.type) xhr.setRequestHeader('Content-Type', file.type);
     xhr.send(file);
   });
