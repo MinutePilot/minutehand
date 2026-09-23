@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MinuteHand Admin</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+  <style>
+    /* ── Admin layout ── */
+    .adm-header {
+      background: var(--mh-heading);
+      color: #fff;
+      padding: 0.75rem 0;
+      margin-bottom: 0;
+      border-bottom: none;
+    }
+    .adm-header .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .adm-header .logo-img { height: 28px; filter: brightness(0) invert(1); }
+    .adm-badge {
+      background: var(--mh-accent);
+      color: var(--mh-accent-text);
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      margin-left: 0.5rem;
+      vertical-align: middle;
+    }
+    .adm-user-bar {
+      font-size: 0.8rem;
+      color: rgba(255,255,255,.7);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .adm-user-bar strong { color: #fff; font-weight: 500; }
+    .adm-user-bar button {
+      background: none; border: none; cursor: pointer;
+      color: rgba(255,255,255,.7); font-size: 0.8rem; padding: 0;
+    }
+    .adm-user-bar button:hover { color: #fff; }
+
+    /* ── Tab nav ── */
+    .adm-nav {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex;
+      gap: 0;
+    }
+    .adm-tab {
+      background: none; border: none; border-bottom: 3px solid transparent;
+      padding: 0.85rem 1.25rem;
+      font-size: 0.9rem; font-weight: 500; cursor: pointer;
+      color: var(--text-muted);
+      transition: color .15s, border-color .15s;
+    }
+    .adm-tab:hover { color: var(--text); }
+    .adm-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* ── Main content ── */
+    .adm-body { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
+
+    /* ── Table ── */
+    .adm-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+    .adm-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .adm-table th {
+      text-align: left; padding: 0.6rem 1rem;
+      font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+      color: var(--text-muted); background: var(--mh-bg-alt);
+      border-bottom: 1px solid var(--border);
+    }
+    .adm-table td { padding: 0.7rem 1rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .adm-table tr:last-child td { border-bottom: none; }
+    .adm-table tbody tr { cursor: pointer; transition: background .1s; }
+    .adm-table tbody tr:hover { background: rgba(15,110,86,.04); }
+    .adm-table tbody tr.selected { background: rgba(15,110,86,.08); }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-block; font-size: 0.7rem; font-weight: 600; letter-spacing: .03em;
+      padding: 0.15rem 0.5rem; border-radius: 999px;
+    }
+    .badge--open       { background: #fef9c3; color: #854d0e; }
+    .badge--in_progress { background: #dbeafe; color: #1e40af; }
+    .badge--resolved   { background: #dcfce7; color: #166534; }
+    .badge--suspended  { background: #fee2e2; color: #991b1b; }
+    .badge--active     { background: #dcfce7; color: #166534; }
+
+    /* ── Search bar ── */
+    .adm-toolbar {
+      display: flex; align-items: center; gap: 0.75rem;
+      margin-bottom: 1rem; flex-wrap: wrap;
+    }
+    .adm-search {
+      flex: 1; min-width: 200px; max-width: 340px;
+      padding: 0.5rem 0.75rem; border: 1px solid var(--border);
+      border-radius: var(--radius); font-size: 0.875rem; font-family: inherit;
+      background: var(--card); color: var(--text);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .adm-search:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+
+    /* ── Detail panel ── */
+    .adm-detail {
+      margin-top: 1.25rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+    }
+    .adm-detail h2 { font-size: 1.05rem; margin-bottom: 1rem; }
+    .adm-detail-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 0.75rem; margin-bottom: 1.25rem;
+    }
+    .adm-stat { background: var(--mh-bg-alt); border-radius: var(--radius); padding: 0.75rem 1rem; }
+    .adm-stat__label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing:.04em; color: var(--text-muted); margin-bottom: 0.2rem; }
+    .adm-stat__value { font-size: 1.15rem; font-weight: 700; color: var(--mh-heading); }
+
+    .adm-actions-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin-top: 1rem; }
+
+    .adm-credit-form {
+      display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-end;
+      padding: 1rem; background: var(--mh-bg-alt); border-radius: var(--radius);
+    }
+    .adm-credit-form label { font-size: 0.8rem; font-weight: 500; display: block; margin-bottom: 0.25rem; }
+    .adm-credit-form input[type=number], .adm-credit-form input[type=text] {
+      padding: 0.45rem 0.6rem; border: 1px solid var(--border);
+      border-radius: var(--radius); font-size: 0.875rem; font-family: inherit;
+      background: var(--card); color: var(--text);
+    }
+    .adm-credit-form input[type=number] { width: 80px; }
+    .adm-credit-form input[type=text]   { width: 220px; }
+
+    /* ── Ticket thread ── */
+    .adm-thread-back { background: none; border: none; cursor: pointer; color: var(--primary); font-size: 0.875rem; margin-bottom: 1rem; padding: 0; }
+    .adm-thread-back:hover { text-decoration: underline; }
+    .adm-thread-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+    .adm-thread-header h2 { font-size: 1.05rem; margin: 0; }
+    .adm-thread-meta { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem; }
+
+    .adm-messages { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem; }
+    .adm-msg {
+      max-width: 75%; padding: 0.75rem 1rem;
+      border-radius: var(--radius); font-size: 0.875rem; line-height: 1.55;
+    }
+    .adm-msg--user  { background: var(--mh-bg-alt); align-self: flex-start; }
+    .adm-msg--admin { background: rgba(15,110,86,.1); align-self: flex-end; }
+    .adm-msg__meta  { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.3rem; }
+    .adm-msg__body  { white-space: pre-wrap; }
+
+    .adm-reply-form { border-top: 1px solid var(--border); padding-top: 1rem; }
+    .adm-reply-form textarea {
+      width: 100%; min-height: 80px; padding: 0.6rem 0.75rem;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      font-size: 0.875rem; font-family: inherit; resize: vertical;
+      background: var(--card); color: var(--text);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .adm-reply-form textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+    .adm-reply-controls { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap; }
+    .adm-status-select {
+      padding: 0.45rem 0.6rem; border: 1px solid var(--border);
+      border-radius: var(--radius); font-size: 0.875rem; font-family: inherit;
+      background: var(--card); color: var(--text); cursor: pointer;
+    }
+
+    /* ── Empty / loading states ── */
+    .adm-empty { text-align: center; padding: 3rem 1rem; color: var(--text-muted); font-size: 0.9rem; }
+    .adm-loading { display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted); font-size: 0.875rem; padding: 2rem 0; }
+
+    /* ── Forbidden / init views ── */
+    #init-view  { display: flex; align-items: center; justify-content: center; min-height: 60vh; }
+    #init-view .card { max-width: 400px; width: 100%; text-align: center; }
+
+    /* ── Ticket filter pills ── */
+    .adm-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .adm-pill {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 999px; padding: 0.3rem 0.85rem;
+      font-size: 0.8rem; cursor: pointer; transition: background .1s, border-color .1s;
+    }
+    .adm-pill.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      .adm-body { padding: 1rem; }
+      .adm-table th, .adm-table td { padding: 0.5rem 0.6rem; }
+      .adm-msg { max-width: 90%; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Loading / forbidden gate — shown until auth is verified -->
+  <div id="init-view">
+    <div class="card">
+      <div class="adm-loading" style="justify-content:center">
+        <div class="spinner"></div><span>Verifying access…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forbidden screen -->
+  <div id="forbidden-view" class="hidden">
+    <div style="display:flex;align-items:center;justify-content:center;min-height:100vh">
+      <div class="card" style="max-width:400px;width:100%;text-align:center">
+        <h1 style="font-size:1.1rem;margin-bottom:0.75rem">Access denied</h1>
+        <p class="field-hint" style="margin-bottom:1.25rem">This page is restricted to MinuteHand platform administrators.</p>
+        <a href="/" class="btn-ghost">← Home</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin shell — shown after auth passes -->
+  <div id="admin-view" class="hidden">
+
+    <header class="adm-header">
+      <div class="container">
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <a href="/" aria-label="MinuteHand home">
+            <img src="/images/logo-light.png" alt="MinuteHand" class="logo-img">
+          </a>
+          <span class="adm-badge">Admin</span>
+        </div>
+        <div class="adm-user-bar">
+          <strong id="adm-email"></strong>
+          <span id="adm-role-label"></span>
+          <span>·</span>
+          <button id="adm-signout-btn">Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <nav class="adm-nav" role="tablist">
+      <button class="adm-tab active" data-tab="orgs"    role="tab">Orgs</button>
+      <button class="adm-tab"        data-tab="users"   role="tab">Users</button>
+      <button class="adm-tab"        data-tab="tickets" role="tab">Tickets</button>
+    </nav>
+
+    <div class="adm-body">
+
+      <!-- ── Orgs tab ── -->
+      <div id="tab-orgs" role="tabpanel">
+
+        <div class="adm-toolbar">
+          <input type="search" id="orgs-search" class="adm-search" placeholder="Search orgs…" autocomplete="off">
+          <button id="orgs-refresh-btn" class="btn-secondary" style="white-space:nowrap">Refresh</button>
+        </div>
+
+        <div id="orgs-loading" class="adm-loading"><div class="spinner"></div><span>Loading orgs…</span></div>
+        <div id="orgs-error"   class="error hidden"></div>
+
+        <div id="orgs-table-wrap" class="adm-table-wrap hidden">
+          <table class="adm-table" id="orgs-table">
+            <thead>
+              <tr>
+                <th>Org name</th>
+                <th>Type</th>
+                <th>Owner</th>
+                <th>Members</th>
+                <th>Credits</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="orgs-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Org detail panel -->
+        <div id="org-detail" class="adm-detail hidden">
+          <h2 id="org-detail-name"></h2>
+          <div class="adm-detail-grid">
+            <div class="adm-stat"><div class="adm-stat__label">Type</div><div class="adm-stat__value" id="od-type"></div></div>
+            <div class="adm-stat"><div class="adm-stat__label">Owner</div><div class="adm-stat__value" id="od-owner" style="font-size:0.85rem;word-break:break-all"></div></div>
+            <div class="adm-stat"><div class="adm-stat__label">Members</div><div class="adm-stat__value" id="od-members"></div></div>
+            <div class="adm-stat"><div class="adm-stat__label">Credits</div><div class="adm-stat__value" id="od-credits"></div></div>
+            <div class="adm-stat"><div class="adm-stat__label">Joined</div><div class="adm-stat__value" id="od-joined" style="font-size:0.85rem"></div></div>
+            <div class="adm-stat"><div class="adm-stat__label">Status</div><div class="adm-stat__value" id="od-status"></div></div>
+          </div>
+
+          <!-- Credit adjustment — super_admin only -->
+          <div id="od-credit-section" class="hidden">
+            <p style="font-size:0.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);margin-bottom:0.5rem">Adjust Credits</p>
+            <div class="adm-credit-form">
+              <div>
+                <label for="od-credit-amount">Amount <span style="font-weight:400;color:var(--text-muted)">(use − to deduct)</span></label>
+                <input type="number" id="od-credit-amount" placeholder="e.g. 3 or −2" step="1">
+              </div>
+              <div style="flex:1">
+                <label for="od-credit-reason">Reason</label>
+                <input type="text" id="od-credit-reason" placeholder="e.g. Comp for transcription error">
+              </div>
+              <button id="od-credit-btn" class="btn-primary" style="padding:0.45rem 1rem;font-size:0.875rem">Apply</button>
+            </div>
+            <p id="od-credit-msg" class="hidden" style="font-size:0.8rem;margin-top:0.4rem"></p>
+          </div>
+
+          <div class="adm-actions-row">
+            <button id="od-suspend-btn" class="btn-secondary hidden"></button>
+            <button id="od-view-tickets-btn" class="btn-ghost">View tickets →</button>
+            <button id="od-close-btn" class="btn-ghost" style="margin-left:auto">Close ✕</button>
+          </div>
+          <p id="od-suspend-msg" class="hidden" style="font-size:0.8rem;margin-top:0.4rem"></p>
+        </div>
+
+      </div>
+
+      <!-- ── Users tab ── -->
+      <div id="tab-users" role="tabpanel" class="hidden">
+
+        <div class="adm-toolbar">
+          <input type="search" id="users-search" class="adm-search" placeholder="Search users…" autocomplete="off">
+          <button id="users-refresh-btn" class="btn-secondary" style="white-space:nowrap">Refresh</button>
+        </div>
+
+        <div id="users-loading" class="adm-loading"><div class="spinner"></div><span>Loading users…</span></div>
+        <div id="users-error"   class="error hidden"></div>
+
+        <div id="users-table-wrap" class="adm-table-wrap hidden">
+          <table class="adm-table">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Joined</th>
+                <th>Last sign-in</th>
+                <th>Orgs</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <!-- ── Tickets tab ── -->
+      <div id="tab-tickets" role="tabpanel" class="hidden">
+
+        <!-- Ticket list view -->
+        <div id="tickets-list-view">
+          <div class="adm-toolbar">
+            <div class="adm-pills">
+              <button class="adm-pill active" data-filter="all">All</button>
+              <button class="adm-pill" data-filter="open">Open</button>
+              <button class="adm-pill" data-filter="in_progress">In Progress</button>
+              <button class="adm-pill" data-filter="resolved">Resolved</button>
+            </div>
+            <button id="tickets-refresh-btn" class="btn-secondary" style="white-space:nowrap;margin-left:auto">Refresh</button>
+          </div>
+
+          <div id="tickets-loading" class="adm-loading"><div class="spinner"></div><span>Loading tickets…</span></div>
+          <div id="tickets-error"   class="error hidden"></div>
+
+          <div id="tickets-table-wrap" class="adm-table-wrap hidden">
+            <table class="adm-table">
+              <thead>
+                <tr>
+                  <th>Subject</th>
+                  <th>Org</th>
+                  <th>Submitted by</th>
+                  <th>Status</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody id="tickets-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Ticket thread view (replaces list) -->
+        <div id="tickets-thread-view" class="hidden">
+          <button class="adm-thread-back" id="thread-back-btn">← Back to tickets</button>
+
+          <div class="adm-thread-header">
+            <div>
+              <h2 id="thread-subject"></h2>
+              <p class="adm-thread-meta" id="thread-meta"></p>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.75rem">
+              <span id="thread-status-badge" class="badge"></span>
+              <select id="thread-status-select" class="adm-status-select">
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="thread-messages" class="adm-messages"></div>
+
+          <div class="adm-reply-form">
+            <textarea id="thread-reply-input" placeholder="Type a reply…"></textarea>
+            <div class="adm-reply-controls">
+              <button id="thread-reply-btn" class="btn-primary" style="padding:0.5rem 1.25rem;font-size:0.875rem">Send reply</button>
+              <p id="thread-reply-msg" class="hidden" style="font-size:0.8rem"></p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div><!-- /adm-body -->
+  </div><!-- /admin-view -->
+
+<script>
+if (typeof CONFIG === 'undefined') { document.body.innerHTML = '<p style="padding:2rem;color:red">config.js not loaded.</p>'; }
+
+const sb = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
+  auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
+});
+
+// ── State ──────────────────────────────────────────────────────────────────────
+let adminRole    = null;
+let orgsData     = [];
+let usersData    = [];
+let ticketsData  = [];
+let selectedOrg  = null;
+let currentTicketId = null;
+let ticketFilter = 'all';
+
+// ── DOM refs ───────────────────────────────────────────────────────────────────
+const initView      = document.getElementById('init-view');
+const forbiddenView = document.getElementById('forbidden-view');
+const adminView     = document.getElementById('admin-view');
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function show(el)  { el.classList.remove('hidden'); }
+function hide(el)  { el.classList.add('hidden'); }
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-CA', { year:'numeric', month:'short', day:'numeric' });
+}
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-CA', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+async function init() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { showForbidden(); return; }
+
+  const { data, error } = await sb.from('platform_admins')
+    .select('role').eq('user_id', session.user.id).maybeSingle();
+
+  if (error || !data) { showForbidden(); return; }
+
+  adminRole = data.role;
+  hide(initView);
+  show(adminView);
+
+  document.getElementById('adm-email').textContent = session.user.email;
+  document.getElementById('adm-role-label').textContent =
+    adminRole === 'super_admin' ? 'Super Admin' : 'Support';
+
+  loadOrgs();
+}
+
+function showForbidden() {
+  hide(initView);
+  show(forbiddenView);
+}
+
+// ── Sign out ───────────────────────────────────────────────────────────────────
+document.getElementById('adm-signout-btn').addEventListener('click', async () => {
+  await sb.auth.signOut();
+  window.location.href = '/';
+});
+
+// ── Tab switching ──────────────────────────────────────────────────────────────
+document.querySelectorAll('.adm-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.adm-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+
+    const tab = btn.dataset.tab;
+    ['orgs', 'users', 'tickets'].forEach(t => {
+      document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
+    });
+
+    if (tab === 'users'   && usersData.length   === 0) loadUsers();
+    if (tab === 'tickets' && ticketsData.length  === 0) loadTickets();
+  });
+});
+
+// ── ORGS ───────────────────────────────────────────────────────────────────────
+async function loadOrgs() {
+  hide(document.getElementById('orgs-table-wrap'));
+  hide(document.getElementById('orgs-error'));
+  show(document.getElementById('orgs-loading'));
+
+  const { data, error } = await sb.rpc('admin_list_orgs');
+  hide(document.getElementById('orgs-loading'));
+
+  if (error || data?.error) {
+    document.getElementById('orgs-error').textContent = error?.message || data.error;
+    show(document.getElementById('orgs-error'));
+    return;
+  }
+
+  orgsData = data || [];
+  renderOrgsTable(orgsData);
+  show(document.getElementById('orgs-table-wrap'));
+}
+
+function renderOrgsTable(rows) {
+  const tbody = document.getElementById('orgs-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="adm-empty">No organizations yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(o => `
+    <tr data-id="${o.id}" class="${selectedOrg?.id === o.id ? 'selected' : ''}">
+      <td><strong>${esc(o.name)}</strong></td>
+      <td>${esc(o.org_type || '—')}</td>
+      <td style="font-size:0.8rem">${esc(o.owner_email || '—')}</td>
+      <td>${o.member_count}</td>
+      <td>${o.credit_balance}</td>
+      <td>${o.suspended_at
+        ? '<span class="badge badge--suspended">Suspended</span>'
+        : '<span class="badge badge--active">Active</span>'}</td>
+    </tr>
+  `).join('');
+
+  tbody.querySelectorAll('tr').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const org = orgsData.find(o => o.id === tr.dataset.id);
+      if (org) openOrgDetail(org, tr);
+    });
+  });
+}
+
+function openOrgDetail(org, tr) {
+  selectedOrg = org;
+  tbody.querySelectorAll && document.getElementById('orgs-tbody').querySelectorAll('tr')
+    .forEach(r => r.classList.toggle('selected', r.dataset.id === org.id));
+
+  document.getElementById('org-detail-name').textContent = org.name;
+  document.getElementById('od-type').textContent    = org.org_type || '—';
+  document.getElementById('od-owner').textContent   = org.owner_email || '—';
+  document.getElementById('od-members').textContent = org.member_count;
+  document.getElementById('od-credits').textContent = org.credit_balance;
+  document.getElementById('od-joined').textContent  = fmtDate(org.created_at);
+  document.getElementById('od-status').innerHTML    = org.suspended_at
+    ? '<span class="badge badge--suspended">Suspended</span>'
+    : '<span class="badge badge--active">Active</span>';
+
+  // Credit section: super_admin only
+  const creditSection = document.getElementById('od-credit-section');
+  if (adminRole === 'super_admin') { show(creditSection); } else { hide(creditSection); }
+  document.getElementById('od-credit-amount').value = '';
+  document.getElementById('od-credit-reason').value = '';
+  hide(document.getElementById('od-credit-msg'));
+
+  // Suspend button: super_admin only
+  const suspendBtn = document.getElementById('od-suspend-btn');
+  if (adminRole === 'super_admin') {
+    show(suspendBtn);
+    suspendBtn.textContent = org.suspended_at ? 'Unsuspend Org' : 'Suspend Org';
+    suspendBtn.style.borderColor = org.suspended_at ? 'var(--success)' : 'var(--error)';
+    suspendBtn.style.color       = org.suspended_at ? 'var(--success)' : 'var(--error)';
+  } else {
+    hide(suspendBtn);
+  }
+  hide(document.getElementById('od-suspend-msg'));
+
+  show(document.getElementById('org-detail'));
+  document.getElementById('org-detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+document.getElementById('od-close-btn').addEventListener('click', () => {
+  selectedOrg = null;
+  hide(document.getElementById('org-detail'));
+  document.getElementById('orgs-tbody').querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+});
+
+document.getElementById('od-credit-btn').addEventListener('click', async () => {
+  if (!selectedOrg) return;
+  const amount = parseInt(document.getElementById('od-credit-amount').value, 10);
+  const reason = document.getElementById('od-credit-reason').value.trim();
+  const msg    = document.getElementById('od-credit-msg');
+
+  if (isNaN(amount) || amount === 0) { showMsg(msg, 'Enter a non-zero amount.', 'error'); return; }
+  if (!reason) { showMsg(msg, 'Reason is required.', 'error'); return; }
+
+  const btn = document.getElementById('od-credit-btn');
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('admin_adjust_credits', {
+    p_org_id: selectedOrg.id, p_amount: amount, p_reason: reason,
+  });
+  btn.disabled = false;
+
+  if (error || data?.error) {
+    showMsg(msg, error?.message || data.error, 'error');
+    return;
+  }
+  showMsg(msg, `Done. New balance: ${data.new_balance}`, 'success');
+  document.getElementById('od-credits').textContent = data.new_balance;
+  selectedOrg.credit_balance = data.new_balance;
+  // Refresh table row
+  renderOrgsTable(orgsData.map(o => o.id === selectedOrg.id ? { ...o, credit_balance: data.new_balance } : o));
+  orgsData = orgsData.map(o => o.id === selectedOrg.id ? { ...o, credit_balance: data.new_balance } : o);
+});
+
+document.getElementById('od-suspend-btn').addEventListener('click', async () => {
+  if (!selectedOrg) return;
+  const suspend = !selectedOrg.suspended_at;
+  const msg     = document.getElementById('od-suspend-msg');
+  const btn     = document.getElementById('od-suspend-btn');
+  btn.disabled  = true;
+
+  const { data, error } = await sb.rpc('admin_suspend_org', {
+    p_org_id: selectedOrg.id, p_suspend: suspend,
+  });
+  btn.disabled = false;
+
+  if (error || data?.error) { showMsg(msg, error?.message || data.error, 'error'); return; }
+
+  selectedOrg.suspended_at = suspend ? new Date().toISOString() : null;
+  orgsData = orgsData.map(o => o.id === selectedOrg.id ? { ...o, suspended_at: selectedOrg.suspended_at } : o);
+  renderOrgsTable(orgsData);
+  openOrgDetail(selectedOrg, null);
+  showMsg(msg, suspend ? 'Org suspended.' : 'Org unsuspended.', 'success');
+});
+
+document.getElementById('od-view-tickets-btn').addEventListener('click', () => {
+  if (!selectedOrg) return;
+  // Switch to tickets tab and filter by org
+  document.querySelector('[data-tab="tickets"]').click();
+  // After load, we'll filter visually — for now just open tickets tab
+});
+
+document.getElementById('orgs-search').addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  const filtered = orgsData.filter(o =>
+    o.name.toLowerCase().includes(q) ||
+    (o.owner_email || '').toLowerCase().includes(q) ||
+    (o.org_type    || '').toLowerCase().includes(q)
+  );
+  renderOrgsTable(filtered);
+});
+
+document.getElementById('orgs-refresh-btn').addEventListener('click', loadOrgs);
+
+// ── USERS ──────────────────────────────────────────────────────────────────────
+async function loadUsers() {
+  hide(document.getElementById('users-table-wrap'));
+  hide(document.getElementById('users-error'));
+  show(document.getElementById('users-loading'));
+
+  const { data, error } = await sb.rpc('admin_list_users');
+  hide(document.getElementById('users-loading'));
+
+  if (error || data?.error) {
+    document.getElementById('users-error').textContent = error?.message || data.error;
+    show(document.getElementById('users-error'));
+    return;
+  }
+
+  usersData = data || [];
+  renderUsersTable(usersData);
+  show(document.getElementById('users-table-wrap'));
+}
+
+function renderUsersTable(rows) {
+  const tbody = document.getElementById('users-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="adm-empty">No users found.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(u => {
+    const orgList = (u.orgs || []).map(o =>
+      `<span style="font-size:0.75rem;background:var(--mh-bg-alt);padding:0.1rem 0.4rem;border-radius:4px;margin-right:0.25rem">${esc(o.org_name)} <span style="color:var(--text-muted)">${esc(o.role)}</span></span>`
+    ).join('');
+    return `<tr>
+      <td>${esc(u.email)}</td>
+      <td style="font-size:0.8rem;white-space:nowrap">${fmtDate(u.created_at)}</td>
+      <td style="font-size:0.8rem;white-space:nowrap">${fmtDate(u.last_sign_in_at)}</td>
+      <td style="font-size:0.8rem">${orgList || '<span style="color:var(--text-muted)">—</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('users-search').addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  const filtered = usersData.filter(u => u.email.toLowerCase().includes(q));
+  renderUsersTable(filtered);
+});
+
+document.getElementById('users-refresh-btn').addEventListener('click', () => {
+  usersData = [];
+  loadUsers();
+});
+
+// ── TICKETS ────────────────────────────────────────────────────────────────────
+async function loadTickets() {
+  hide(document.getElementById('tickets-table-wrap'));
+  hide(document.getElementById('tickets-error'));
+  show(document.getElementById('tickets-loading'));
+
+  const { data, error } = await sb.rpc('admin_get_tickets');
+  hide(document.getElementById('tickets-loading'));
+
+  if (error || data?.error) {
+    document.getElementById('tickets-error').textContent = error?.message || data.error;
+    show(document.getElementById('tickets-error'));
+    return;
+  }
+
+  ticketsData = data || [];
+  renderTicketsTable();
+  show(document.getElementById('tickets-table-wrap'));
+}
+
+function renderTicketsTable() {
+  const tbody = document.getElementById('tickets-tbody');
+  const rows  = ticketFilter === 'all'
+    ? ticketsData
+    : ticketsData.filter(t => t.status === ticketFilter);
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="adm-empty">No tickets.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(t => `
+    <tr data-id="${t.id}">
+      <td><strong>${esc(t.subject)}</strong></td>
+      <td style="font-size:0.8rem">${esc(t.org_name)}</td>
+      <td style="font-size:0.8rem">${esc(t.submitted_by_email)}</td>
+      <td><span class="badge badge--${t.status}">${statusLabel(t.status)}</span></td>
+      <td style="font-size:0.8rem;white-space:nowrap">${fmtDateTime(t.updated_at)}</td>
+    </tr>
+  `).join('');
+
+  tbody.querySelectorAll('tr[data-id]').forEach(tr => {
+    tr.addEventListener('click', () => openThread(tr.dataset.id));
+  });
+}
+
+document.querySelectorAll('.adm-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.adm-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    ticketFilter = pill.dataset.filter;
+    renderTicketsTable();
+  });
+});
+
+document.getElementById('tickets-refresh-btn').addEventListener('click', () => {
+  ticketsData = [];
+  loadTickets();
+});
+
+async function openThread(ticketId) {
+  currentTicketId = ticketId;
+  hide(document.getElementById('tickets-list-view'));
+  const threadView = document.getElementById('tickets-thread-view');
+  show(threadView);
+
+  document.getElementById('thread-messages').innerHTML =
+    '<div class="adm-loading"><div class="spinner"></div><span>Loading thread…</span></div>';
+  document.getElementById('thread-reply-input').value = '';
+  hide(document.getElementById('thread-reply-msg'));
+
+  const { data, error } = await sb.rpc('admin_get_ticket_thread', { p_ticket_id: ticketId });
+  if (error || data?.error) {
+    document.getElementById('thread-messages').innerHTML =
+      `<p class="error">${error?.message || data.error}</p>`;
+    return;
+  }
+
+  const { ticket, messages } = data;
+  document.getElementById('thread-subject').textContent = ticket.subject;
+  document.getElementById('thread-meta').textContent =
+    `${ticket.org_name} · submitted by ${ticket.submitted_by_email} · ${fmtDateTime(ticket.created_at)}`;
+  document.getElementById('thread-status-badge').textContent  = statusLabel(ticket.status);
+  document.getElementById('thread-status-badge').className    = `badge badge--${ticket.status}`;
+  document.getElementById('thread-status-select').value       = ticket.status;
+
+  const msgsEl = document.getElementById('thread-messages');
+  if (!messages.length) {
+    msgsEl.innerHTML = '<p style="font-size:0.85rem;color:var(--text-muted)">No messages yet.</p>';
+  } else {
+    msgsEl.innerHTML = messages.map(m => `
+      <div class="adm-msg adm-msg--${m.sender_type}">
+        <div class="adm-msg__meta">${esc(m.sender_email)} · ${fmtDateTime(m.created_at)}</div>
+        <div class="adm-msg__body">${esc(m.body)}</div>
+      </div>
+    `).join('');
+  }
+}
+
+document.getElementById('thread-back-btn').addEventListener('click', () => {
+  currentTicketId = null;
+  hide(document.getElementById('tickets-thread-view'));
+  show(document.getElementById('tickets-list-view'));
+});
+
+document.getElementById('thread-reply-btn').addEventListener('click', async () => {
+  const body = document.getElementById('thread-reply-input').value.trim();
+  const msg  = document.getElementById('thread-reply-msg');
+  if (!body) { showMsg(msg, 'Reply cannot be empty.', 'error'); return; }
+
+  const btn = document.getElementById('thread-reply-btn');
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('admin_reply_ticket', {
+    p_ticket_id: currentTicketId, p_body: body,
+  });
+  btn.disabled = false;
+
+  if (error || data?.error) { showMsg(msg, error?.message || data.error, 'error'); return; }
+
+  // Reload thread
+  await openThread(currentTicketId);
+  // Update status badge locally
+  const updatedStatus = document.getElementById('thread-status-select').value;
+  ticketsData = ticketsData.map(t => t.id === currentTicketId
+    ? { ...t, status: t.status === 'open' ? 'in_progress' : t.status, updated_at: new Date().toISOString() }
+    : t
+  );
+});
+
+document.getElementById('thread-status-select').addEventListener('change', async function() {
+  const newStatus = this.value;
+  const msg       = document.getElementById('thread-reply-msg');
+
+  const { data, error } = await sb.rpc('admin_update_ticket_status', {
+    p_ticket_id: currentTicketId, p_status: newStatus,
+  });
+  if (error || data?.error) { showMsg(msg, error?.message || data.error, 'error'); return; }
+
+  document.getElementById('thread-status-badge').textContent = statusLabel(newStatus);
+  document.getElementById('thread-status-badge').className   = `badge badge--${newStatus}`;
+  ticketsData = ticketsData.map(t =>
+    t.id === currentTicketId ? { ...t, status: newStatus, updated_at: new Date().toISOString() } : t
+  );
+  showMsg(msg, 'Status updated.', 'success');
+});
+
+// ── Utilities ──────────────────────────────────────────────────────────────────
+function statusLabel(s) {
+  return { open: 'Open', in_progress: 'In Progress', resolved: 'Resolved' }[s] || s;
+}
+
+function showMsg(el, text, type) {
+  el.textContent = text;
+  el.style.color = type === 'error' ? 'var(--error)' : 'var(--success)';
+  show(el);
+  setTimeout(() => hide(el), 4000);
+}
+
+function esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
