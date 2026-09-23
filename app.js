@@ -88,7 +88,8 @@ const confirmSpeakersBtn = document.getElementById('confirm-speakers-btn');
 const backToFormBtn      = document.getElementById('back-to-form-btn');
 
 // Org setup
-const orgSetupSection = document.getElementById('org-setup-section');
+const orgSetupSection   = document.getElementById('org-setup-section');
+const suspendedSection  = document.getElementById('suspended-section');
 const orgNameInput    = document.getElementById('org-name');
 const orgTypeSelect   = document.getElementById('org-type');
 const orgSaveBtn      = document.getElementById('org-save-btn');
@@ -218,10 +219,15 @@ async function loadBoardPlanState() {
 
   const { data: org } = await supabaseClient
     .from('organizations')
-    .select('id, name, org_type')
+    .select('id, name, org_type, suspended_at')
     .eq('owner_id', currentUser.id)
     .maybeSingle();
   userOrg = org ?? null;
+
+  if (userOrg?.suspended_at) {
+    showSection(suspendedSection);
+    return;
+  }
   boardPlanLinkWrap?.classList.toggle('hidden', !userOrg);
 
   if (userOrg) {
@@ -769,7 +775,9 @@ async function runGenerateFlow(notes) {
   } catch (err) {
     removeStatusRow();
     setLoadingBtn(generateBtn, false);
-    if (err.status === 402 && err.code === 'NO_ORG') {
+    if (err.code === 'SUSPENDED' || err.status === 403) {
+      showSection(suspendedSection);
+    } else if (err.status === 402 && err.code === 'NO_ORG') {
       showSection(orgSetupSection);
     } else if (err.status === 402) {
       showSection(buyCreditsSection);

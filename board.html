@@ -33,6 +33,15 @@
     .support-msg--admin { background: rgba(15,110,86,.1); align-self: flex-end; }
     .support-msg__meta  { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.3rem; }
     .support-msg__body  { white-space: pre-wrap; }
+
+    .suspended-notice {
+      background: #fee2e2; border: 1px solid #fca5a5;
+      border-radius: var(--radius); padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .suspended-notice h3 { color: #991b1b; margin-bottom: 0.5rem; font-size: 1rem; }
+    .suspended-notice p  { color: #7f1d1d; font-size: 0.9rem; margin-bottom: 0.5rem; }
+    .suspended-notice p:last-of-type { margin-bottom: 1rem; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://unpkg.com/html-docx-js@0.3.1/dist/html-docx.js"></script>
@@ -99,6 +108,16 @@
             <span class="account-sep">·</span>
             <button id="board-signout-btn" class="btn-link">Sign out</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Suspended view — replaces all tab content when org is suspended -->
+      <div id="suspended-view" class="hidden" role="tabpanel">
+        <div class="suspended-notice">
+          <h3>Your account has been suspended</h3>
+          <p>Access to MinuteHand has been disabled for your organization. You cannot generate minutes or access governance records until the suspension is lifted.</p>
+          <p>Open a support ticket to ask why or request reinstatement.</p>
+          <button id="suspended-goto-support-btn" class="btn-secondary">Open a support ticket →</button>
         </div>
       </div>
 

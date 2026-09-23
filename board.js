@@ -267,7 +267,7 @@ async function init() {
   // Load org membership (works for owners and invited members alike)
   const { data: membership } = await supabaseClient
     .from('org_members')
-    .select('role, organizations(id, name, org_type, portal_token, owner_id)')
+    .select('role, organizations(id, name, org_type, portal_token, owner_id, suspended_at)')
     .eq('user_id', currentUser.id)
     .maybeSingle();
 
@@ -335,9 +335,17 @@ async function init() {
   // would reset navigation position every time the user switches browser tabs.
   if (!boardInitialized) {
     boardInitialized = true;
-    await switchToCategory('meetings', 'generate');
+    if (userOrg?.suspended_at) {
+      await switchToCategory('support');
+    } else {
+      await switchToCategory('meetings', 'generate');
+    }
   }
 }
+
+document.getElementById('suspended-goto-support-btn')?.addEventListener('click', () => {
+  switchToCategory('support');
+});
 
 function showAccess(type) {
   loadingView.classList.add('hidden');
@@ -1628,14 +1636,15 @@ let activeCat    = 'overview';
 let activeSubTab = null;
 const catLastSub = {};  // remembers last active sub per category
 
-const supportView = document.getElementById('support-view');
+const supportView   = document.getElementById('support-view');
+const suspendedView = document.getElementById('suspended-view');
 
 const allContentViews = [
   overviewView, motionsView, actionsView, agendaView,
   minutesView, toolsView, membersView, documentsView,
   templatesView, alterationsView,
   generateView, planGateView, orgSetupView, appAccessView,
-  bylawsView, supportView,
+  bylawsView, supportView, suspendedView,
 ];
 
 function hideAllContent() {
@@ -1654,6 +1663,12 @@ async function activateContent(cat, sub) {
 
   // Generate, Overview, and Support are open to all authenticated users
   const isUngated = cat === 'overview' || (cat === 'meetings' && sub === 'generate') || cat === 'support';
+
+  // Suspended orgs can only access support
+  if (userOrg?.suspended_at && cat !== 'support') {
+    suspendedView.classList.remove('hidden');
+    return;
+  }
 
   if (!isUngated && !hasBoardPlan) {
     planGateMsg.textContent = getPlanGateMessage(cat);
@@ -6273,7 +6288,7 @@ async function openSupportThread(ticketId) {
   supportReplyInput.value = '';
   supportReplyError.classList.add('hidden');
 
-  const { data, error } = await supabaseClient.rpc('admin_get_ticket_thread', { p_ticket_id: ticketId });
+  const { data, error } = await supabaseClient.rpc('org_get_ticket_thread', { p_ticket_id: ticketId });
 
   if (error || data?.error) {
     supportThreadMessages.innerHTML = `<p class="error">${escHtml(error?.message || data?.error)}</p>`;
