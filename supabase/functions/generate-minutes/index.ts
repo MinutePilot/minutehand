@@ -318,6 +318,22 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Failed to resolve billing account" }, 500);
   }
 
+  // ── Suspension check ─────────────────────────────────────────────────────
+  // check_and_deduct_credit also enforces this at the DB layer, but we check
+  // here too so we can return a distinct error code the client can act on.
+  const { data: orgRow } = await supabaseAdmin
+    .from("organizations")
+    .select("suspended_at")
+    .eq("owner_id", billingUserId ?? user.id)
+    .maybeSingle();
+
+  if (orgRow?.suspended_at) {
+    return json(
+      { error: "Your account has been suspended. Contact support.", code: "SUSPENDED" },
+      403
+    );
+  }
+
   const { data: hasCredit, error: creditError } = await supabaseAdmin.rpc(
     "check_and_deduct_credit",
     { p_user_id: billingUserId ?? user.id }
