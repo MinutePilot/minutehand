@@ -1,20 +1,25 @@
 -- ── Support ticket notifications ──────────────────────────────────────────────
 --
 -- Triggers a webhook on two events:
---   1. New support_tickets row — notifies the platform admin (you) by email
+--   1. New support_tickets row — notifies the platform admin by email
 --   2. New support_messages row with sender_type = 'admin' — notifies the
---      org that a reply has arrived
+--      org owner that a reply has arrived
 --
--- Implementation: pg_net HTTP POST from a trigger to the notify-ticket
--- Supabase Edge Function. pg_net fires async so it doesn't add latency to
--- the INSERT path.
+-- Implementation: net.http_post() from pg_net (ships with Supabase) fires
+-- async from a trigger, so no latency is added to the INSERT path.
 --
--- The Edge Function uses Resend (resend.com) to send transactional email.
--- Add RESEND_API_KEY to your Supabase project secrets before deploying.
--- The ADMIN_EMAIL secret sets the destination for new-ticket notifications.
+-- The project URL is hardcoded (it is not a secret — it is already in
+-- config.js). The service role key must NOT be committed. After running
+-- this migration, execute once in the Supabase SQL editor:
+--
+--   ALTER DATABASE postgres
+--     SET "app.settings.service_role_key" = '<your-service-role-key>';
+--
+-- Find the key: Supabase dashboard → Settings → API → service_role key.
+-- Until this is set the triggers will log a warning and skip the HTTP call
+-- rather than blocking the INSERT.
 
--- ── Enable pg_net if not already enabled ──────────────────────────────────────
--- pg_net ships with Supabase; this is a no-op if already enabled.
+-- ── Enable pg_net ─────────────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS pg_net SCHEMA extensions;
 
 -- ── Trigger function: new ticket created ─────────────────────────────────────
@@ -25,10 +30,18 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_org_name   TEXT;
+  v_org_name    TEXT;
   v_owner_email TEXT;
-  v_payload    JSONB;
+  v_payload     JSONB;
+  v_service_key TEXT;
 BEGIN
+  v_service_key := current_setting('app.settings.service_role_key', true);
+
+  IF v_service_key IS NULL OR v_service_key = '' THEN
+    RAISE WARNING 'fn_notify_new_ticket: app.settings.service_role_key not set — skipping notification';
+    RETURN NEW;
+  END IF;
+
   SELECT o.name, u.email
     INTO v_org_name, v_owner_email
     FROM organizations o
@@ -44,12 +57,12 @@ BEGIN
     'from_email', v_owner_email
   );
 
-  PERFORM extensions.http_post(
-    url     := current_setting('app.supabase_url') || '/functions/v1/notify-ticket',
-    body    := v_payload::text,
+  PERFORM net.http_post(
+    url     := 'https://phzmhvslrzmrufzcjqei.supabase.co/functions/v1/notify-ticket',
+    body    := v_payload,
     headers := jsonb_build_object(
       'Content-Type',  'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.supabase_service_role_key')
+      'Authorization', 'Bearer ' || v_service_key
     )
   );
 
@@ -74,9 +87,16 @@ DECLARE
   v_owner_email TEXT;
   v_subject     TEXT;
   v_payload     JSONB;
+  v_service_key TEXT;
 BEGIN
-  -- Only fire for admin-side messages
   IF NEW.sender_type != 'admin' THEN
+    RETURN NEW;
+  END IF;
+
+  v_service_key := current_setting('app.settings.service_role_key', true);
+
+  IF v_service_key IS NULL OR v_service_key = '' THEN
+    RAISE WARNING 'fn_notify_admin_reply: app.settings.service_role_key not set — skipping notification';
     RETURN NEW;
   END IF;
 
@@ -88,19 +108,19 @@ BEGIN
    WHERE st.id = NEW.ticket_id;
 
   v_payload := jsonb_build_object(
-    'event',       'admin_reply',
-    'ticket_id',   NEW.ticket_id,
-    'subject',     v_subject,
-    'org_name',    v_org_name,
-    'to_email',    v_owner_email
+    'event',     'admin_reply',
+    'ticket_id', NEW.ticket_id,
+    'subject',   v_subject,
+    'org_name',  v_org_name,
+    'to_email',  v_owner_email
   );
 
-  PERFORM extensions.http_post(
-    url     := current_setting('app.supabase_url') || '/functions/v1/notify-ticket',
-    body    := v_payload::text,
+  PERFORM net.http_post(
+    url     := 'https://phzmhvslrzmrufzcjqei.supabase.co/functions/v1/notify-ticket',
+    body    := v_payload,
     headers := jsonb_build_object(
       'Content-Type',  'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.supabase_service_role_key')
+      'Authorization', 'Bearer ' || v_service_key
     )
   );
 
