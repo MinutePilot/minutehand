@@ -7,6 +7,33 @@
   <title>Governance Records — MinuteHand</title>
   <link rel="stylesheet" href="style.css">
   <link href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css" rel="stylesheet">
+  <style>
+    .support-status-badge {
+      display: inline-block; font-size: 0.72rem; font-weight: 600; letter-spacing: .03em;
+      padding: 0.2rem 0.6rem; border-radius: 999px; white-space: nowrap;
+    }
+    .support-status-badge--open        { background: #fef9c3; color: #854d0e; }
+    .support-status-badge--in_progress { background: #dbeafe; color: #1e40af; }
+    .support-status-badge--resolved    { background: #dcfce7; color: #166534; }
+    .support-ticket-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem; padding: 0.85rem 0;
+      border-bottom: 1px solid var(--border); cursor: pointer;
+      transition: background .1s;
+    }
+    .support-ticket-row:last-child { border-bottom: none; }
+    .support-ticket-row:hover { background: rgba(15,110,86,.04); margin: 0 -0.25rem; padding-left: 0.25rem; padding-right: 0.25rem; }
+    .support-ticket-row__subject { font-weight: 500; font-size: 0.9rem; }
+    .support-ticket-row__meta    { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem; }
+    .support-msg {
+      padding: 0.75rem 1rem; border-radius: var(--radius);
+      font-size: 0.875rem; line-height: 1.55; max-width: 80%;
+    }
+    .support-msg--user  { background: var(--mh-bg-alt); align-self: flex-start; }
+    .support-msg--admin { background: rgba(15,110,86,.1); align-self: flex-end; }
+    .support-msg__meta  { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.3rem; }
+    .support-msg__body  { white-space: pre-wrap; }
+  </style>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://unpkg.com/html-docx-js@0.3.1/dist/html-docx.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
@@ -83,6 +110,7 @@
           <button class="board-cat" data-cat="documents" role="tab" aria-selected="false">Documents</button>
           <button class="board-cat" data-cat="tools" role="tab" aria-selected="false">Tools</button>
           <button class="board-cat" data-cat="members" role="tab" aria-selected="false">Members</button>
+          <button class="board-cat" data-cat="support" role="tab" aria-selected="false">Support</button>
         </div>
         <div class="board-nav__sub hidden" id="board-subnav" role="tablist"></div>
       </nav>
@@ -1024,6 +1052,70 @@
 
         </div>
       </div><!-- /bylaws-view -->
+
+      <!-- Support view ─────────────────────────────────────────────────────────── -->
+      <div id="support-view" class="hidden" role="tabpanel">
+
+        <!-- Ticket list -->
+        <div id="support-list-view">
+          <div class="tools-section">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+              <h3 class="tools-section__heading" style="margin:0">Help &amp; Support</h3>
+              <button id="support-new-ticket-btn" class="btn-secondary hidden">New ticket</button>
+            </div>
+
+            <!-- New ticket form -->
+            <div id="support-new-ticket-form" class="hidden" style="margin-bottom:1.5rem;padding:1.25rem;background:var(--mh-bg-alt);border-radius:var(--radius)">
+              <h4 style="font-size:0.95rem;margin-bottom:1rem">Open a support ticket</h4>
+              <div class="form-group">
+                <label for="support-ticket-subject">Subject</label>
+                <input type="text" id="support-ticket-subject" placeholder="Brief description of the issue" autocomplete="off" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:0.9rem;font-family:inherit;background:var(--card);color:var(--text)">
+              </div>
+              <div class="form-group">
+                <label for="support-ticket-body">Details</label>
+                <textarea id="support-ticket-body" rows="4" placeholder="Describe the problem, what you expected, and what happened instead…" style="font-family:inherit;font-size:0.875rem;resize:vertical"></textarea>
+              </div>
+              <div class="form-footer" style="display:flex;gap:0.75rem">
+                <button id="support-ticket-submit-btn" class="btn-primary">Submit ticket</button>
+                <button id="support-ticket-cancel-btn" class="btn-ghost">Cancel</button>
+              </div>
+              <p id="support-ticket-error" class="error hidden" style="margin-top:0.5rem"></p>
+            </div>
+
+            <!-- Ticket list -->
+            <div id="support-ticket-list">
+              <div class="loading-row"><div class="spinner"></div><span>Loading…</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Thread view (replaces list) -->
+        <div id="support-thread-view" class="hidden">
+          <div class="tools-section">
+            <button id="support-thread-back-btn" class="btn-ghost" style="padding-left:0;margin-bottom:1rem">← Back to tickets</button>
+
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1.25rem;flex-wrap:wrap">
+              <div>
+                <h3 id="support-thread-subject" class="tools-section__heading" style="margin:0"></h3>
+                <p class="field-hint" id="support-thread-meta" style="margin-top:0.25rem"></p>
+              </div>
+              <span id="support-thread-status" class="support-status-badge"></span>
+            </div>
+
+            <div id="support-thread-messages" style="display:flex;flex-direction:column;gap:0.75rem;margin-bottom:1.25rem"></div>
+
+            <!-- Reply — only owner/admin -->
+            <div id="support-reply-wrap">
+              <div class="form-group" style="margin-bottom:0.5rem">
+                <textarea id="support-reply-input" rows="3" placeholder="Write a reply…" style="font-family:inherit;font-size:0.875rem;resize:vertical"></textarea>
+              </div>
+              <button id="support-reply-btn" class="btn-secondary">Send reply</button>
+              <p id="support-reply-error" class="error hidden" style="margin-top:0.5rem"></p>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /support-view -->
 
     </div><!-- /board-view -->
 

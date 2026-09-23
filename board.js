@@ -1605,6 +1605,7 @@ const CAT_SUBS = {
     { id: 'roster',     label: 'Council Roster' },
     { id: 'app-access', label: 'App Access'      },
   ],
+  support: [],
 };
 
 // Map old tab-link names to new category + sub
@@ -1627,12 +1628,14 @@ let activeCat    = 'overview';
 let activeSubTab = null;
 const catLastSub = {};  // remembers last active sub per category
 
+const supportView = document.getElementById('support-view');
+
 const allContentViews = [
   overviewView, motionsView, actionsView, agendaView,
   minutesView, toolsView, membersView, documentsView,
   templatesView, alterationsView,
   generateView, planGateView, orgSetupView, appAccessView,
-  bylawsView,
+  bylawsView, supportView,
 ];
 
 function hideAllContent() {
@@ -1649,8 +1652,8 @@ async function activateContent(cat, sub) {
   toolsExportSection.classList.remove('hidden');
   toolsVoteSection.classList.remove('hidden');
 
-  // Generate and Overview are open to all authenticated users
-  const isUngated = cat === 'overview' || (cat === 'meetings' && sub === 'generate');
+  // Generate, Overview, and Support are open to all authenticated users
+  const isUngated = cat === 'overview' || (cat === 'meetings' && sub === 'generate') || cat === 'support';
 
   if (!isUngated && !hasBoardPlan) {
     planGateMsg.textContent = getPlanGateMessage(cat);
@@ -1731,6 +1734,11 @@ async function activateContent(cat, sub) {
         membersView.classList.remove('hidden');
         if (!membersLoaded) loadMembers();
       }
+      break;
+
+    case 'support':
+      supportView.classList.remove('hidden');
+      loadSupport();
       break;
   }
 }
@@ -6169,4 +6177,214 @@ wireBylawsDropZone(
 
 bylawsReplaceBtn?.addEventListener('click', () => {
   bylawsReplaceForm?.classList.toggle('hidden');
+});
+
+// ── Support ───────────────────────────────────────────────────────────────────
+
+let supportTickets       = [];
+let supportCurrentTicket = null;
+let supportLoaded        = false;
+
+const supportListView      = document.getElementById('support-list-view');
+const supportThreadView    = document.getElementById('support-thread-view');
+const supportTicketList    = document.getElementById('support-ticket-list');
+const supportNewTicketBtn  = document.getElementById('support-new-ticket-btn');
+const supportNewTicketForm = document.getElementById('support-new-ticket-form');
+const supportTicketSubject = document.getElementById('support-ticket-subject');
+const supportTicketBody    = document.getElementById('support-ticket-body');
+const supportTicketSubmit  = document.getElementById('support-ticket-submit-btn');
+const supportTicketCancel  = document.getElementById('support-ticket-cancel-btn');
+const supportTicketError   = document.getElementById('support-ticket-error');
+const supportThreadBack    = document.getElementById('support-thread-back-btn');
+const supportThreadSubject = document.getElementById('support-thread-subject');
+const supportThreadMeta    = document.getElementById('support-thread-meta');
+const supportThreadStatus  = document.getElementById('support-thread-status');
+const supportThreadMessages= document.getElementById('support-thread-messages');
+const supportReplyWrap     = document.getElementById('support-reply-wrap');
+const supportReplyInput    = document.getElementById('support-reply-input');
+const supportReplyBtn      = document.getElementById('support-reply-btn');
+const supportReplyError    = document.getElementById('support-reply-error');
+
+function supportStatusLabel(s) {
+  return { open: 'Open', in_progress: 'In Progress', resolved: 'Resolved' }[s] || s;
+}
+
+async function loadSupport() {
+  // Show new-ticket button only to owner/admin
+  if (userRole === 'owner' || userRole === 'admin') {
+    supportNewTicketBtn.classList.remove('hidden');
+  }
+
+  if (supportLoaded) return;
+
+  if (!userOrg) {
+    supportTicketList.innerHTML = '<p class="field-hint">No organization found. Support tickets require an active organization.</p>';
+    return;
+  }
+
+  supportTicketList.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading tickets…</span></div>';
+
+  const { data, error } = await supabaseClient
+    .from('support_tickets')
+    .select('id, subject, status, created_at, updated_at')
+    .eq('org_id', userOrg.id)
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    supportTicketList.innerHTML = `<p class="error">Failed to load tickets: ${escHtml(error.message)}</p>`;
+    return;
+  }
+
+  supportLoaded  = true;
+  supportTickets = data ?? [];
+  renderSupportTicketList();
+}
+
+function renderSupportTicketList() {
+  if (!supportTickets.length) {
+    supportTicketList.innerHTML = '<p class="field-hint">No support tickets yet. Use "New ticket" to open one.</p>';
+    return;
+  }
+  supportTicketList.innerHTML = supportTickets.map((t) => `
+    <div class="support-ticket-row" data-id="${escHtml(t.id)}">
+      <div>
+        <div class="support-ticket-row__subject">${escHtml(t.subject)}</div>
+        <div class="support-ticket-row__meta">Opened ${fmtSupportDate(t.created_at)} · Updated ${fmtSupportDate(t.updated_at)}</div>
+      </div>
+      <span class="support-status-badge support-status-badge--${escHtml(t.status)}">${supportStatusLabel(t.status)}</span>
+    </div>
+  `).join('');
+
+  supportTicketList.querySelectorAll('.support-ticket-row').forEach((row) => {
+    row.addEventListener('click', () => openSupportThread(row.dataset.id));
+  });
+}
+
+function fmtSupportDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+async function openSupportThread(ticketId) {
+  supportCurrentTicket = ticketId;
+  supportListView.classList.add('hidden');
+  supportThreadView.classList.remove('hidden');
+  supportThreadMessages.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading…</span></div>';
+  supportReplyInput.value = '';
+  supportReplyError.classList.add('hidden');
+
+  const { data, error } = await supabaseClient.rpc('admin_get_ticket_thread', { p_ticket_id: ticketId });
+
+  if (error || data?.error) {
+    supportThreadMessages.innerHTML = `<p class="error">${escHtml(error?.message || data?.error)}</p>`;
+    return;
+  }
+
+  const { ticket, messages } = data;
+  supportThreadSubject.textContent = ticket.subject;
+  supportThreadMeta.textContent    = `Opened ${fmtSupportDate(ticket.created_at)}`;
+  supportThreadStatus.textContent  = supportStatusLabel(ticket.status);
+  supportThreadStatus.className    = `support-status-badge support-status-badge--${ticket.status}`;
+
+  // Hide reply for resolved tickets or members
+  const canReply = (userRole === 'owner' || userRole === 'admin') && ticket.status !== 'resolved';
+  supportReplyWrap.classList.toggle('hidden', !canReply);
+
+  if (!messages.length) {
+    supportThreadMessages.innerHTML = '<p class="field-hint">No messages yet.</p>';
+  } else {
+    supportThreadMessages.style.display = 'flex';
+    supportThreadMessages.style.flexDirection = 'column';
+    supportThreadMessages.innerHTML = messages.map((m) => `
+      <div class="support-msg support-msg--${escHtml(m.sender_type)}" style="max-width:80%">
+        <div class="support-msg__meta">${m.sender_type === 'admin' ? 'MinuteHand Support' : 'You'} · ${fmtSupportDate(m.created_at)}</div>
+        <div class="support-msg__body">${escHtml(m.body)}</div>
+      </div>
+    `).join('');
+  }
+}
+
+supportThreadBack?.addEventListener('click', () => {
+  supportCurrentTicket = null;
+  supportThreadView.classList.add('hidden');
+  supportListView.classList.remove('hidden');
+});
+
+supportNewTicketBtn?.addEventListener('click', () => {
+  supportNewTicketForm.classList.toggle('hidden');
+  if (!supportNewTicketForm.classList.contains('hidden')) supportTicketSubject.focus();
+});
+
+supportTicketCancel?.addEventListener('click', () => {
+  supportNewTicketForm.classList.add('hidden');
+  supportTicketSubject.value = '';
+  supportTicketBody.value    = '';
+  supportTicketError.classList.add('hidden');
+});
+
+supportTicketSubmit?.addEventListener('click', async () => {
+  const subject = supportTicketSubject.value.trim();
+  const body    = supportTicketBody.value.trim();
+
+  if (!subject) { supportTicketError.textContent = 'Subject is required.'; supportTicketError.classList.remove('hidden'); return; }
+  if (!body)    { supportTicketError.textContent = 'Please describe the issue.'; supportTicketError.classList.remove('hidden'); return; }
+  if (!userOrg) { supportTicketError.textContent = 'No organization found.'; supportTicketError.classList.remove('hidden'); return; }
+
+  supportTicketSubmit.disabled = true;
+  supportTicketError.classList.add('hidden');
+
+  // Insert ticket
+  const { data: ticket, error: ticketErr } = await supabaseClient
+    .from('support_tickets')
+    .insert({ org_id: userOrg.id, submitted_by: currentUser.id, subject })
+    .select('id')
+    .single();
+
+  if (ticketErr) {
+    supportTicketError.textContent = ticketErr.message;
+    supportTicketError.classList.remove('hidden');
+    supportTicketSubmit.disabled = false;
+    return;
+  }
+
+  // Insert opening message
+  const { error: msgErr } = await supabaseClient
+    .from('support_messages')
+    .insert({ ticket_id: ticket.id, sender_id: currentUser.id, sender_type: 'user', body });
+
+  if (msgErr) {
+    supportTicketError.textContent = msgErr.message;
+    supportTicketError.classList.remove('hidden');
+    supportTicketSubmit.disabled = false;
+    return;
+  }
+
+  supportTicketSubmit.disabled = false;
+  supportTicketSubject.value   = '';
+  supportTicketBody.value      = '';
+  supportNewTicketForm.classList.add('hidden');
+  supportLoaded = false; // force reload
+  await loadSupport();
+  showToast('Support ticket submitted.');
+});
+
+supportReplyBtn?.addEventListener('click', async () => {
+  const body = supportReplyInput.value.trim();
+  if (!body) { supportReplyError.textContent = 'Reply cannot be empty.'; supportReplyError.classList.remove('hidden'); return; }
+
+  supportReplyBtn.disabled = true;
+  supportReplyError.classList.add('hidden');
+
+  const { error } = await supabaseClient
+    .from('support_messages')
+    .insert({ ticket_id: supportCurrentTicket, sender_id: currentUser.id, sender_type: 'user', body });
+
+  supportReplyBtn.disabled = false;
+
+  if (error) { supportReplyError.textContent = error.message; supportReplyError.classList.remove('hidden'); return; }
+
+  // Refresh thread
+  await openSupportThread(supportCurrentTicket);
+  // Update local ticket's updated_at
+  supportLoaded = false;
 });
