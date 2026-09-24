@@ -3321,6 +3321,43 @@ mark {
 }
 .doc-move-dropdown__item:hover { background: var(--bg); }
 
+/* Inline document edit form */
+
+.doc-item__edit-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.doc-item__edit-row {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.doc-item__edit-row .doc-edit-title { flex: 1; min-width: 180px; }
+
+.doc-item__edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.doc-edit-error { font-size: 0.82rem; }
+
+.input-sm {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.88rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+.input-sm:focus { outline: none; border-color: var(--primary); }
+
+.btn-sm { padding: 0.3rem 0.75rem; font-size: 0.82rem; }
+
 /* Folder content header (breadcrumb back nav) */
 
 .doc-folder-header {

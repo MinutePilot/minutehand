@@ -3344,6 +3344,10 @@ function renderActiveDocItems(docs) {
             data-name="${escHtml(d.file_name)}">Download ↓</button>
     ${toggleBtn}
     ${moveDropdown}
+    <button class="btn-link doc-edit-btn"
+            data-id="${escHtml(d.id)}"
+            data-title="${escHtml(d.title)}"
+            data-effective-date="${escHtml(d.effective_date ?? '')}">Edit</button>
     ${userIsAdmin() ? `<button class="btn-link doc-archive-btn" data-id="${escHtml(d.id)}">Archive</button>` : ''}
   </div>
 </div>`;
@@ -3523,6 +3527,8 @@ function renderMinutesFolder() {
     <button class="btn-link mins-download-btn"
             data-meeting-id="${escHtml(m.id)}"
             data-title="${escHtml(displayTitle)}">Download ↓</button>
+    <button class="btn-link mins-edit-btn"
+            data-meeting-id="${escHtml(m.id)}">Edit</button>
   </div>
 </div>`;
   }).join('');
@@ -3816,6 +3822,82 @@ function showDocFormError(msg) {
   docFormError.classList.remove('hidden');
 }
 
+// ── Inline document edit (title + effective date) ────────────────────────────
+
+function openDocEditForm(btn) {
+  const itemEl = btn.closest('.doc-item');
+  if (!itemEl) return;
+  const id            = btn.dataset.id;
+  const currentTitle  = btn.dataset.title;
+  const currentDate   = btn.dataset.effectiveDate;
+
+  // Replace the item's content with an inline edit form.
+  itemEl.innerHTML = `
+    <div class="doc-item__edit-form">
+      <div class="doc-item__edit-row">
+        <input class="doc-edit-title input-sm" type="text"
+               value="${escHtml(currentTitle)}" placeholder="Title" autocomplete="off">
+        <input class="doc-edit-date input-sm" type="date"
+               value="${escHtml(currentDate)}" title="Effective date (optional)">
+      </div>
+      <div class="doc-item__edit-actions">
+        <button class="btn-primary btn-sm doc-edit-save-btn" data-id="${escHtml(id)}">Save</button>
+        <button class="btn-ghost   btn-sm doc-edit-cancel-btn">Cancel</button>
+        <span class="doc-edit-error error hidden"></span>
+      </div>
+    </div>`;
+  itemEl.querySelector('.doc-edit-title').focus();
+}
+
+async function saveDocEdit(docId) {
+  const itemEl = docList.querySelector(`.doc-item[data-id="${CSS.escape(docId)}"]`);
+  if (!itemEl) return;
+
+  const titleInput = itemEl.querySelector('.doc-edit-title');
+  const dateInput  = itemEl.querySelector('.doc-edit-date');
+  const errorEl    = itemEl.querySelector('.doc-edit-error');
+  const saveBtn    = itemEl.querySelector('.doc-edit-save-btn');
+
+  const newTitle = titleInput.value.trim();
+  if (!newTitle) {
+    errorEl.textContent = 'Title is required.';
+    errorEl.classList.remove('hidden');
+    titleInput.focus();
+    return;
+  }
+
+  saveBtn.disabled    = true;
+  saveBtn.textContent = 'Saving…';
+
+  const { error } = await supabaseClient
+    .from('documents')
+    .update({
+      title:          newTitle,
+      effective_date: dateInput.value || null,
+      updated_at:     new Date().toISOString(),
+    })
+    .eq('id', docId);
+
+  if (error) {
+    saveBtn.disabled    = false;
+    saveBtn.textContent = 'Save';
+    errorEl.textContent = 'Save failed: ' + error.message;
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  // Update local cache so re-render reflects the change without a full reload.
+  const doc = allDocuments.find((d) => d.id === docId);
+  if (doc) {
+    doc.title          = newTitle;
+    doc.effective_date = dateInput.value || null;
+  }
+
+  renderDocuments();
+  if (currentDocFolder) navigateToFolder(currentDocFolder);
+  showToast('Document updated.');
+}
+
 // ── Archive / restore ─────────────────────────────────────────────────────────
 
 async function archiveDocument(id) {
@@ -3911,8 +3993,20 @@ docList.addEventListener('click', (e) => {
   const mins = e.target.closest('.mins-download-btn');
   if (mins) { downloadMinutesDocx(mins.dataset.meetingId, mins.dataset.title); return; }
 
+  const minsEdit = e.target.closest('.mins-edit-btn');
+  if (minsEdit) { openEditor(minsEdit.dataset.meetingId); return; }
+
   const dl = e.target.closest('.doc-download-btn');
   if (dl)  { downloadDocument(dl.dataset.path, dl.dataset.name); return; }
+
+  const docEdit = e.target.closest('.doc-edit-btn');
+  if (docEdit) { openDocEditForm(docEdit); return; }
+
+  const docEditSave = e.target.closest('.doc-edit-save-btn');
+  if (docEditSave) { saveDocEdit(docEditSave.dataset.id); return; }
+
+  const docEditCancel = e.target.closest('.doc-edit-cancel-btn');
+  if (docEditCancel) { renderDocuments(); return; }
 
   const arc = e.target.closest('.doc-archive-btn');
   if (arc) { archiveDocument(arc.dataset.id); return; }
