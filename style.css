@@ -4118,15 +4118,35 @@ mark {
   overflow: hidden;
 }
 
-.editor-quill-container {
+.editor-easymde-container {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   overflow: hidden;
 }
 
-/* Quill snow theme overrides — fill available height */
-.editor-quill-container .ql-toolbar {
+/* Make EasyMDE fill the overlay body */
+.editor-easymde-container .EasyMDEContainer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.editor-easymde-container .CodeMirror {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  font-family: inherit;
+  font-size: 0.9rem;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  border-color: var(--border);
+}
+
+.editor-easymde-container .editor-toolbar {
   border-top: none;
   border-left: none;
   border-right: none;
@@ -4134,38 +4154,24 @@ mark {
   flex-shrink: 0;
 }
 
-.editor-quill-container .ql-container {
-  flex: 1;
-  overflow-y: auto;
+/* Preview pane — rendered content styles */
+.editor-easymde-container .editor-preview,
+.editor-easymde-container .editor-preview-side {
   font-family: inherit;
   font-size: 0.9rem;
-  border: none;
+  padding: 1.5rem 2rem;
 }
 
-.editor-quill-container .ql-editor {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem 1.5rem;
-  min-height: 100%;
-}
-
-/* Heading levels in Quill editor */
-.editor-quill-container .ql-editor h1 { font-size: 1.6rem; margin: 1.2rem 0 0.5rem; }
-.editor-quill-container .ql-editor h2 { font-size: 1.3rem; margin: 1rem 0 0.4rem; }
-.editor-quill-container .ql-editor h3 { font-size: 1.1rem; margin: 0.8rem 0 0.3rem; }
-.editor-quill-container .ql-editor h4 { font-size: 1rem;   margin: 0.6rem 0 0.2rem; font-weight: 600; }
-.editor-quill-container .ql-editor blockquote {
-  border-left: 3px solid var(--border);
-  margin: 0.5rem 0;
-  padding: 0.25rem 0.75rem;
-  color: var(--text-muted);
-  font-style: italic;
-}
-.editor-quill-container .ql-editor hr {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 1rem 0;
-}
+.editor-easymde-container .editor-preview h1 { font-size: 1.5rem; margin: 1.2rem 0 0.5rem; }
+.editor-easymde-container .editor-preview h2 { font-size: 1.25rem; margin: 1rem 0 0.4rem; }
+.editor-easymde-container .editor-preview h3 { font-size: 1.05rem; margin: 0.8rem 0 0.3rem; }
+.editor-easymde-container .editor-preview h4 { font-size: 0.95rem; margin: 0.6rem 0 0.2rem; font-weight: 600; }
+.editor-easymde-container .editor-preview table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 0.88rem; }
+.editor-easymde-container .editor-preview th,
+.editor-easymde-container .editor-preview td { border: 1px solid var(--border); padding: 0.35rem 0.65rem; text-align: left; }
+.editor-easymde-container .editor-preview th { background: var(--surface); font-weight: 600; }
+.editor-easymde-container .editor-preview blockquote { border-left: 3px solid var(--border); margin: 0.5rem 0; padding: 0.25rem 0.75rem; color: var(--text-muted); font-style: italic; }
+.editor-easymde-container .editor-preview hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
 
 /* Version history panel — slides in at the bottom */
 .editor-version-panel {

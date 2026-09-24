@@ -54,8 +54,7 @@ let activeTemplate = 'agm';
 
 let editorMeetingId    = null;
 let editorMeetingMeta  = null;
-let quillEditor        = null;
-let editorInitialized  = false;
+let easymdeEditor      = null;
 
 let hasBoardPlan        = false;
 let creditBalance       = null;
@@ -1231,7 +1230,7 @@ function genRemoveStatusRow() { document.getElementById('gen-status-row')?.remov
 // Shown after generation when Claude could not determine the meeting date.
 // Blocking: the user must enter a date before continuing — no dismiss path.
 
-// Walk DOM text nodes so the replace works even if Quill wrapped part of the
+// Walk DOM text nodes so the replace works even if the editor wrapped part of the
 // heading text in a formatting span (splitting what was one text node).
 function replacePlaceholderInHtml(html, placeholderRe, replacement) {
   const tmp = document.createElement('div');
@@ -4275,28 +4274,6 @@ async function unpublishMeeting(id) {
 
 // ── Minutes editor ────────────────────────────────────────────────────────────
 
-function registerQuillExtensions() {
-  if (window.__quillExtensionsRegistered) return;
-  window.__quillExtensionsRegistered = true;
-
-  const BlockEmbed = Quill.import('blots/block/embed');
-  class DividerBlot extends BlockEmbed {
-    static create() { return document.createElement('hr'); }
-    static value()  { return true; }
-  }
-  DividerBlot.blotName = 'divider';
-  DividerBlot.tagName  = 'HR';
-  Quill.register(DividerBlot);
-}
-
-function cleanQuillHtml(html) {
-  const tmp = document.createElement('div');
-  tmp.innerHTML = html;
-  tmp.querySelectorAll('.ql-ui').forEach((el) => el.remove());
-  tmp.querySelectorAll('[data-list]').forEach((el) => el.removeAttribute('data-list'));
-  tmp.querySelectorAll('.ql-cursor').forEach((el) => el.remove());
-  return tmp.innerHTML;
-}
 
 function ensureEditorOverlay() {
   if (document.getElementById('editor-overlay')) return;
@@ -4320,7 +4297,9 @@ function ensureEditorOverlay() {
       Every save creates a new version. Nothing is ever deleted — you can view or restore any prior version.
     </div>
     <div class="editor-body">
-      <div id="editor-quill-container" class="editor-quill-container"></div>
+      <div class="editor-easymde-container">
+        <textarea id="editor-textarea"></textarea>
+      </div>
     </div>
     <div id="editor-version-panel" class="editor-version-panel hidden">
       <div class="editor-version-panel__header">
@@ -4335,10 +4314,25 @@ function ensureEditorOverlay() {
   document.getElementById('editor-save-btn').addEventListener('click', saveEditorVersion);
   document.getElementById('editor-history-btn').addEventListener('click', toggleVersionPanel);
   document.getElementById('editor-history-close-btn').addEventListener('click', toggleVersionPanel);
+
+  // Initialise EasyMDE once — it persists across open/close cycles.
+  easymdeEditor = new EasyMDE({
+    element:       document.getElementById('editor-textarea'),
+    spellChecker:  false,
+    autosave:      { enabled: false },
+    status:        false,
+    previewRender: (plainText) => marked.parse(preprocessMarkdown(plainText)),
+    toolbar: [
+      'bold', 'italic', '|',
+      'heading-2', 'heading-3', '|',
+      'unordered-list', 'ordered-list', 'table', '|',
+      'preview', 'side-by-side', '|',
+      'undo', 'redo',
+    ],
+  });
 }
 
 async function openEditor(meetingId) {
-  registerQuillExtensions();
   ensureEditorOverlay();
 
   editorMeetingId = meetingId;
@@ -4347,7 +4341,6 @@ async function openEditor(meetingId) {
   const titleSpan    = document.getElementById('editor-title-span');
   const pubWarning   = document.getElementById('editor-pub-warning');
   const saveBtn      = document.getElementById('editor-save-btn');
-  const container    = document.getElementById('editor-quill-container');
   const versionPanel = document.getElementById('editor-version-panel');
 
   titleSpan.textContent = '';
@@ -4356,7 +4349,6 @@ async function openEditor(meetingId) {
   saveBtn.disabled    = false;
   saveBtn.textContent = 'Save';
 
-  // Always re-fetch fresh content fields in case they changed since last load
   const { data: meeting, error } = await supabaseClient
     .from('meetings')
     .select('id, title, meeting_date, markdown, edited_html, published, template')
@@ -4374,48 +4366,14 @@ async function openEditor(meetingId) {
     : 'Date not recorded';
 
   titleSpan.textContent = `${meeting.title ?? 'Meeting'} — ${dateStr}`;
-
   if (meeting.published) pubWarning.classList.remove('hidden');
 
-  const initialHtml = meeting.edited_html
-    ? meeting.edited_html
-    : meeting.markdown
-      ? marked.parse(meeting.markdown)
-      : '<p>No content available.</p>';
-
-  // Destroy previous Quill instance if any
-  container.innerHTML = '';
-
-  const toolbarOptions = [
-    [{ header: [1, 2, 3, 4, false] }],
-    ['bold', 'italic', 'underline'],
-    [{ list: 'ordered' }, { list: 'bullet' }],
-    ['blockquote'],
-    ['divider'],
-    ['clean'],
-  ];
-
-  quillEditor = new Quill(container, {
-    theme:   'snow',
-    modules: {
-      toolbar: {
-        container: toolbarOptions,
-        handlers: {
-          divider: () => {
-            const range = quillEditor.getSelection(true);
-            quillEditor.insertEmbed(range.index, 'divider', true, Quill.sources.USER);
-            quillEditor.setSelection(range.index + 1, Quill.sources.SILENT);
-          },
-        },
-      },
-    },
-  });
-  editorInitialized = true;
-
-  quillEditor.clipboard.dangerouslyPasteHTML(initialHtml);
+  // Always edit from markdown — the clean source of truth.
+  easymdeEditor.value(meeting.markdown ?? '');
 
   overlay.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
+  easymdeEditor.codemirror.refresh();
 }
 
 function closeEditor() {
@@ -4424,18 +4382,17 @@ function closeEditor() {
   document.body.style.overflow = '';
   editorMeetingId   = null;
   editorMeetingMeta = null;
-  quillEditor       = null;
-  editorInitialized = false;
 }
 
 async function saveEditorVersion() {
-  if (!quillEditor || !editorMeetingId || !editorMeetingMeta) return;
+  if (!easymdeEditor || !editorMeetingId || !editorMeetingMeta) return;
 
   const saveBtn = document.getElementById('editor-save-btn');
   saveBtn.disabled    = true;
   saveBtn.textContent = 'Saving…';
 
-  const cleanHtml    = cleanQuillHtml(quillEditor.root.innerHTML);
+  const newMarkdown  = easymdeEditor.value();
+  const renderedHtml = marked.parse(preprocessMarkdown(newMarkdown));
   const wasPublished = editorMeetingMeta.published;
 
   // 1. Auto-unpublish if currently published
@@ -4462,14 +4419,15 @@ async function saveEditorVersion() {
     if (auditErr) console.error('auto_unpublish audit log failed:', auditErr);
   }
 
-  // 2. Insert version row
+  // 2. Insert version snapshot (HTML for display, markdown for revert)
   const { error: vErr } = await supabaseClient
     .from('meeting_versions')
     .insert({
-      meeting_id:   editorMeetingId,
-      org_id:       userOrg.id,
-      html_content: cleanHtml,
-      saved_by:     currentUser.id,
+      meeting_id:      editorMeetingId,
+      org_id:          userOrg.id,
+      html_content:    renderedHtml,
+      markdown_content: newMarkdown,
+      saved_by:        currentUser.id,
     });
 
   if (vErr) {
@@ -4479,10 +4437,10 @@ async function saveEditorVersion() {
     return;
   }
 
-  // 3. Update meetings.edited_html
+  // 3. Write markdown back as the source of truth; clear edited_html override
   const { error: mErr } = await supabaseClient
     .from('meetings')
-    .update({ edited_html: cleanHtml })
+    .update({ markdown: newMarkdown, edited_html: null })
     .eq('id', editorMeetingId);
 
   if (mErr) {
@@ -4496,10 +4454,11 @@ async function saveEditorVersion() {
   }
 
   // 4. Update in-memory state
-  editorMeetingMeta.edited_html = cleanHtml;
+  editorMeetingMeta.markdown    = newMarkdown;
+  editorMeetingMeta.edited_html = null;
   editorMeetingMeta.published   = false;
   const cached = meetingCache.get(editorMeetingId);
-  if (cached) { cached.edited_html = cleanHtml; cached.published = false; cached.published_at = null; }
+  if (cached) { cached.markdown = newMarkdown; cached.edited_html = null; cached.published = false; cached.published_at = null; }
   const ml = allMeetingsList.find((m) => m.id === editorMeetingId);
   if (ml) { ml.published = false; ml.published_at = null; }
   renderMeetingsList();
@@ -4630,13 +4589,18 @@ async function revertToVersion(versionId) {
 
   const { data, error } = await supabaseClient
     .from('meeting_versions')
-    .select('html_content')
+    .select('html_content, markdown_content')
     .eq('id', versionId)
     .single();
 
   if (error || !data) { showToast('Could not load version.', 'error'); return; }
 
-  quillEditor.clipboard.dangerouslyPasteHTML(data.html_content);
+  if (!data.markdown_content) {
+    showToast('This version was saved with the old editor. Open the preview below to copy the content manually.', 'error');
+    return;
+  }
+
+  easymdeEditor.value(data.markdown_content);
   await saveEditorVersion();
   await loadVersionHistory();
 }
