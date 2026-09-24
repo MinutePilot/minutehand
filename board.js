@@ -32,9 +32,11 @@ let editingMemberId = null;
 const meetingCache  = new Map();
 
 let allDocuments      = [];
+let allFolders        = [];     // document_folders rows for this org, ordered by sort_order
 let documentsLoaded   = false;
 let docSortField      = 'created_at';
-let currentDocFolder  = null;   // null = top-level grid; string = inside a folder
+let currentDocFolder  = null;   // null = top-level grid; MEETING_MINUTES_FOLDER | folder name
+let currentDocFolderId = null;  // UUID of the current real folder, null otherwise
 let publishedMeetings = [];     // meetings.published=true, for the virtual Minutes folder
 let pubMeetingsLoaded = false;
 
@@ -3203,23 +3205,14 @@ function preprocessMarkdown(md) {
 
 // ── Document library ──────────────────────────────────────────────────────────
 
-const CATEGORY_ORDER = [
-  'Bylaws',
-  'Rules & Regulations',
-  'AGM Records',
-  'Insurance',
-  'Depreciation Report',
-  'Financial Statements',
-  'Alteration Requests',
-  'Other',
-];
+// CATEGORY_ORDER removed — folder list is now loaded from document_folders table.
 
 const MEETING_MINUTES_FOLDER = 'Meeting Minutes';
 
 async function loadDocuments() {
   docList.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading library…</span></div>';
 
-  const [docsRes, minsRes] = await Promise.all([
+  const [docsRes, minsRes, foldersRes] = await Promise.all([
     supabaseClient
       .from('documents')
       .select('id, title, category, effective_date, storage_path, file_name, file_size, mime_type, status, supersedes_id, created_at')
@@ -3231,6 +3224,12 @@ async function loadDocuments() {
       .eq('org_id', userOrg.id)
       .eq('published', true)
       .order('meeting_date', { ascending: false, nullsFirst: false }),
+    supabaseClient
+      .from('document_folders')
+      .select('id, name, sort_order')
+      .eq('org_id', userOrg.id)
+      .order('sort_order', { ascending: true })
+      .order('name',       { ascending: true }),
   ]);
 
   if (docsRes.error) {
@@ -3238,11 +3237,19 @@ async function loadDocuments() {
     return;
   }
 
-  allDocuments    = docsRes.data ?? [];
-  publishedMeetings = minsRes.data ?? [];
+  allDocuments      = docsRes.data    ?? [];
+  publishedMeetings = minsRes.data    ?? [];
+  allFolders        = foldersRes.data ?? [];
   pubMeetingsLoaded = true;
   documentsLoaded   = true;
+  populateCategorySelect();
   renderDocuments();
+}
+
+function populateCategorySelect() {
+  docCategorySelect.innerHTML = allFolders
+    .map((f) => `<option value="${escHtml(f.name)}">${escHtml(f.name)}</option>`)
+    .join('');
 }
 
 async function loadPublishedMeetings() {
@@ -3315,6 +3322,16 @@ function renderActiveDocItems(docs) {
                  data-label-open="${escHtml(openLabel)}">${closedLabel}</button>`
       : '';
 
+    const otherFolders = allFolders.filter((f) => f.id !== currentDocFolderId);
+    const moveDropdown = otherFolders.length > 0
+      ? `<div class="doc-move-wrap">
+  <button class="btn-link doc-move-btn" data-doc-id="${escHtml(d.id)}">Move ▾</button>
+  <div class="doc-move-dropdown" id="doc-move-${escHtml(d.id)}">
+    ${otherFolders.map((f) => `<button class="doc-move-dropdown__item" data-doc-id="${escHtml(d.id)}" data-folder-id="${escHtml(f.id)}" data-folder-name="${escHtml(f.name)}">${escHtml(f.name)}</button>`).join('')}
+  </div>
+</div>`
+      : '';
+
     const itemHtml = `<div class="doc-item" data-id="${escHtml(d.id)}">
   <span class="doc-type-badge">${fileTypeBadge(d.mime_type)}</span>
   <div class="doc-item__info">
@@ -3326,6 +3343,7 @@ function renderActiveDocItems(docs) {
             data-path="${escHtml(d.storage_path)}"
             data-name="${escHtml(d.file_name)}">Download ↓</button>
     ${toggleBtn}
+    ${moveDropdown}
     ${userIsAdmin() ? `<button class="btn-link doc-archive-btn" data-id="${escHtml(d.id)}">Archive</button>` : ''}
   </div>
 </div>`;
@@ -3432,18 +3450,22 @@ function renderDocuments() {
 function renderFolderGrid() {
   const active = allDocuments.filter((d) => d.status === 'active');
 
-  const byCat = new Map(CATEGORY_ORDER.map((c) => [c, 0]));
-  active.forEach((d) => {
-    const key = byCat.has(d.category) ? d.category : 'Other';
-    byCat.set(key, (byCat.get(key) ?? 0) + 1);
-  });
+  // Count active docs per folder by matching category name (kept in sync on move/upload).
+  const countByName = new Map();
+  active.forEach((d) => countByName.set(d.category, (countByName.get(d.category) ?? 0) + 1));
 
-  const folderCards = [...byCat.entries()].map(([cat, count]) => {
+  const folderCards = allFolders.map((folder) => {
+    const count = countByName.get(folder.name) ?? 0;
     const empty = count === 0;
     const countLabel = empty ? 'Empty' : `${count} doc${count !== 1 ? 's' : ''}`;
-    return `<div class="doc-folder${empty ? ' doc-folder--empty' : ''}" data-folder="${escHtml(cat)}" role="button" tabindex="0">
+    return `<div class="doc-folder${empty ? ' doc-folder--empty' : ''}" data-folder="${escHtml(folder.name)}" data-folder-id="${escHtml(folder.id)}" role="button" tabindex="0">
+  <button class="doc-folder__menu-btn" data-folder-id="${escHtml(folder.id)}" data-folder-name="${escHtml(folder.name)}" aria-label="Folder options" aria-expanded="false">⋯</button>
+  <div class="doc-folder-dropdown" id="folder-menu-${escHtml(folder.id)}">
+    <button class="doc-folder-dropdown__item folder-action-rename" data-folder-id="${escHtml(folder.id)}" data-folder-name="${escHtml(folder.name)}">Rename</button>
+    <button class="doc-folder-dropdown__item folder-action-delete doc-folder-dropdown__item--danger" data-folder-id="${escHtml(folder.id)}" data-folder-name="${escHtml(folder.name)}" data-folder-count="${count}">Delete folder</button>
+  </div>
   <div class="doc-folder__icon">📁</div>
-  <div class="doc-folder__name">${escHtml(cat)}</div>
+  <div class="doc-folder__name">${escHtml(folder.name)}</div>
   <div class="doc-folder__count">${countLabel}</div>
 </div>`;
   }).join('');
@@ -3457,7 +3479,7 @@ function renderFolderGrid() {
   <div class="doc-folder__count">${minsLabel}</div>
 </div>`;
 
-  docsCount.textContent = `${CATEGORY_ORDER.length + 1} folders`;
+  docsCount.textContent = `${allFolders.length + 1} folders`;
   docList.innerHTML = `<div class="doc-folder-grid">${folderCards}${minsCard}</div>`;
 }
 
@@ -3539,7 +3561,8 @@ function renderDocFolderContent(category) {
 }
 
 async function navigateToFolder(folder) {
-  currentDocFolder = folder;
+  currentDocFolder   = folder;
+  currentDocFolderId = allFolders.find((f) => f.name === folder)?.id ?? null;
   if (folder === MEETING_MINUTES_FOLDER && !pubMeetingsLoaded) {
     docList.innerHTML = '<div class="loading-row"><div class="spinner"></div><span>Loading minutes…</span></div>';
     await loadPublishedMeetings();
@@ -3548,7 +3571,8 @@ async function navigateToFolder(folder) {
 }
 
 function navigateBack() {
-  currentDocFolder = null;
+  currentDocFolder   = null;
+  currentDocFolderId = null;
   if (!docFormPanel.classList.contains('hidden')) closeDocForm();
   renderDocuments();
 }
@@ -3598,6 +3622,82 @@ async function downloadMinutesDocx(meetingId, title) {
   URL.revokeObjectURL(url);
 }
 
+// ── Folder operations ─────────────────────────────────────────────────────────
+
+async function createFolder() {
+  const name = prompt('Folder name:')?.trim();
+  if (!name) return;
+  if (allFolders.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
+    showToast('A folder with that name already exists.', 'error');
+    return;
+  }
+  const nextOrder = allFolders.length > 0 ? Math.max(...allFolders.map((f) => f.sort_order)) + 1 : 0;
+  const { error } = await supabaseClient
+    .from('document_folders')
+    .insert({ org_id: userOrg.id, name, sort_order: nextOrder });
+  if (error) { showToast('Failed to create folder: ' + error.message, 'error'); return; }
+  documentsLoaded = false;
+  await loadDocuments();
+  showToast(`Folder "${name}" created.`);
+}
+
+async function renameFolder(folderId, oldName) {
+  const newName = prompt('Rename folder to:', oldName)?.trim();
+  if (!newName || newName === oldName) return;
+  if (allFolders.some((f) => f.name.toLowerCase() === newName.toLowerCase() && f.id !== folderId)) {
+    showToast('A folder with that name already exists.', 'error');
+    return;
+  }
+  const { error: folderErr } = await supabaseClient
+    .from('document_folders')
+    .update({ name: newName })
+    .eq('id', folderId);
+  if (folderErr) { showToast('Failed to rename folder: ' + folderErr.message, 'error'); return; }
+
+  // Keep documents.category in sync with the folder name.
+  const { error: docsErr } = await supabaseClient
+    .from('documents')
+    .update({ category: newName, updated_at: new Date().toISOString() })
+    .eq('org_id', userOrg.id)
+    .eq('category', oldName);
+  if (docsErr) { showToast('Folder renamed but document sync failed: ' + docsErr.message, 'error'); }
+
+  if (currentDocFolder === oldName) currentDocFolder = newName;
+  documentsLoaded = false;
+  await loadDocuments();
+  showToast(`Renamed to "${newName}".`);
+}
+
+async function deleteFolder(folderId, folderName, docCount) {
+  if (docCount > 0) {
+    showToast(`Move all ${docCount} document${docCount !== 1 ? 's' : ''} out of "${folderName}" before deleting it.`, 'error');
+    return;
+  }
+  if (!confirm(`Delete the folder "${folderName}"? This cannot be undone.`)) return;
+  const { error } = await supabaseClient
+    .from('document_folders')
+    .delete()
+    .eq('id', folderId);
+  if (error) { showToast('Failed to delete folder: ' + error.message, 'error'); return; }
+  documentsLoaded = false;
+  await loadDocuments();
+  showToast(`Folder "${folderName}" deleted.`);
+}
+
+async function moveDocument(docId, targetFolderId, targetFolderName) {
+  const { error } = await supabaseClient
+    .from('documents')
+    .update({ category: targetFolderName, folder_id: targetFolderId, updated_at: new Date().toISOString() })
+    .eq('id', docId);
+  if (error) { showToast('Failed to move document: ' + error.message, 'error'); return; }
+
+  const prevFolder = currentDocFolder;
+  documentsLoaded = false;
+  await loadDocuments();
+  if (prevFolder) await navigateToFolder(prevFolder);
+  showToast(`Moved to "${targetFolderName}".`);
+}
+
 // ── Upload ────────────────────────────────────────────────────────────────────
 
 function openDocForm(category) {
@@ -3607,7 +3707,7 @@ function openDocForm(category) {
   docFormError.classList.add('hidden');
   docTitleInput.value      = '';
   docFileInput.value       = '';
-  docCategorySelect.value  = cat ?? 'Bylaws';
+  docCategorySelect.value  = cat ?? (allFolders[0]?.name ?? '');
   docEffectiveDate.value   = '';
   docUploadBtn.disabled    = false;
   docUploadBtn.textContent = 'Upload';
@@ -3778,30 +3878,85 @@ docCategorySelect.addEventListener('change', () => {
 });
 
 docList.addEventListener('click', (e) => {
+  // Folder ⋯ menu button — toggle dropdown, do not navigate into folder.
+  const menuBtn = e.target.closest('.doc-folder__menu-btn');
+  if (menuBtn) {
+    e.stopPropagation();
+    const dropdown = document.getElementById(`folder-menu-${menuBtn.dataset.folderId}`);
+    const isOpen   = dropdown?.classList.contains('open');
+    closeAllDropdowns();
+    if (!isOpen && dropdown) {
+      dropdown.classList.add('open');
+      menuBtn.setAttribute('aria-expanded', 'true');
+    }
+    return;
+  }
+
+  // Folder rename / delete actions.
+  const renameBtn = e.target.closest('.folder-action-rename');
+  if (renameBtn) { e.stopPropagation(); closeAllDropdowns(); renameFolder(renameBtn.dataset.folderId, renameBtn.dataset.folderName); return; }
+  const deleteBtn = e.target.closest('.folder-action-delete');
+  if (deleteBtn) { e.stopPropagation(); closeAllDropdowns(); deleteFolder(deleteBtn.dataset.folderId, deleteBtn.dataset.folderName, Number(deleteBtn.dataset.folderCount)); return; }
+
+  // Clicking anywhere inside a dropdown item should not navigate.
+  if (e.target.closest('.doc-folder-dropdown')) { e.stopPropagation(); return; }
+
+  // Folder card navigation (click must not originate from menu area).
   const folder = e.target.closest('.doc-folder');
-  if (folder) { navigateToFolder(folder.dataset.folder); return; }
+  if (folder) { closeAllDropdowns(); navigateToFolder(folder.dataset.folder); return; }
+
   const back = e.target.closest('.doc-back-btn');
   if (back) { navigateBack(); return; }
+
   const mins = e.target.closest('.mins-download-btn');
   if (mins) { downloadMinutesDocx(mins.dataset.meetingId, mins.dataset.title); return; }
-  const dl  = e.target.closest('.doc-download-btn');
+
+  const dl = e.target.closest('.doc-download-btn');
   if (dl)  { downloadDocument(dl.dataset.path, dl.dataset.name); return; }
+
   const arc = e.target.closest('.doc-archive-btn');
   if (arc) { archiveDocument(arc.dataset.id); return; }
+
   const tog = e.target.closest('.doc-version-toggle');
   if (tog) {
     const chainEl = document.getElementById(`doc-chain-${tog.dataset.docId}`);
     if (!chainEl) return;
     const nowHidden = chainEl.classList.toggle('hidden');
     tog.textContent = nowHidden ? tog.dataset.labelClosed : tog.dataset.labelOpen;
+    return;
   }
+
+  // Move ▾ button — toggle the move dropdown.
+  const moveBtn = e.target.closest('.doc-move-btn');
+  if (moveBtn) {
+    const dropdown = document.getElementById(`doc-move-${moveBtn.dataset.docId}`);
+    const isOpen   = dropdown?.classList.contains('open');
+    closeAllDropdowns();
+    if (!isOpen && dropdown) dropdown.classList.add('open');
+    return;
+  }
+
+  // Move dropdown item — execute the move.
+  const moveItem = e.target.closest('.doc-move-dropdown__item');
+  if (moveItem) {
+    closeAllDropdowns();
+    moveDocument(moveItem.dataset.docId, moveItem.dataset.folderId, moveItem.dataset.folderName);
+    return;
+  }
+
+  // Close any open dropdowns when clicking elsewhere in the list.
+  closeAllDropdowns();
 });
 
 docList.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') {
     const folder = e.target.closest('.doc-folder');
-    if (folder) { e.preventDefault(); navigateToFolder(folder.dataset.folder); }
+    if (folder && !e.target.closest('.doc-folder__menu-btn')) {
+      e.preventDefault();
+      navigateToFolder(folder.dataset.folder);
+    }
   }
+  if (e.key === 'Escape') closeAllDropdowns();
 });
 
 archivedDocsList.addEventListener('click', (e) => {
@@ -3833,6 +3988,27 @@ document.querySelectorAll('.docs-sort-btn').forEach((btn) => {
     docSortField = btn.dataset.sort;
     renderDocuments();
   });
+});
+
+document.getElementById('new-folder-btn').addEventListener('click', createFolder);
+
+// Close any open folder/move dropdowns when clicking outside them.
+function closeAllDropdowns() {
+  document.querySelectorAll('.doc-folder-dropdown.open, .doc-move-dropdown.open').forEach((el) => {
+    el.classList.remove('open');
+    const menuBtn = el.previousElementSibling;
+    if (menuBtn?.classList.contains('doc-folder__menu-btn')) {
+      menuBtn.setAttribute('aria-expanded', 'false');
+    }
+  });
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.doc-folder__menu-btn') &&
+      !e.target.closest('.doc-folder-dropdown') &&
+      !e.target.closest('.doc-move-btn') &&
+      !e.target.closest('.doc-move-dropdown')) {
+    closeAllDropdowns();
+  }
 });
 
 // ── Document helpers ──────────────────────────────────────────────────────────
