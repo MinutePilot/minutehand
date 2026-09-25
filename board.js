@@ -3565,9 +3565,13 @@ function renderMinutesFolder() {
   <div class="doc-item__actions">
     <button class="btn-link mins-download-btn"
             data-meeting-id="${escHtml(m.id)}"
-            data-title="${escHtml(displayTitle)}">Download ↓</button>
+            data-title="${escHtml(displayTitle)}">Download for editing</button>
+    <label class="btn-link mins-upload-label" title="Upload the .docx you edited in Word to update the portal">
+      Upload edited .docx
+      <input type="file" accept=".docx" class="mins-upload-input" data-meeting-id="${escHtml(m.id)}" style="display:none">
+    </label>
     <button class="btn-link mins-edit-btn"
-            data-meeting-id="${escHtml(m.id)}">Edit</button>
+            data-meeting-id="${escHtml(m.id)}">Edit in app</button>
   </div>
 </div>`;
   }).join('');
@@ -3628,17 +3632,18 @@ async function downloadMinutesDocx(meetingId, title) {
 
   const { data, error } = await supabaseClient
     .from('meetings')
-    .select('markdown')
+    .select('markdown, edited_html')
     .eq('id', meetingId)
     .single();
 
-  if (btn) { btn.disabled = false; btn.textContent = 'Download ↓'; }
+  if (btn) { btn.disabled = false; btn.textContent = 'Download for editing'; }
 
-  if (error || !data?.markdown) {
+  if (error || (!data?.markdown && !data?.edited_html)) {
     showToast('Could not load minutes content — please try again.', 'error');
     return;
   }
 
+  const bodyHtml = data.edited_html ?? marked.parse(preprocessMarkdown(data.markdown ?? ''));
   const fullHtml = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>
   body    { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.3; color: #000; margin: 0; }
@@ -3655,7 +3660,7 @@ async function downloadMinutesDocx(meetingId, title) {
   td      { padding: 4pt 7pt; border: 1pt solid #ccc; vertical-align: top; }
   ul, ol  { margin: 2pt 0 5pt 18pt; }
   li      { margin-bottom: 2pt; }
-</style></head><body>${marked.parse(preprocessMarkdown(data.markdown))}</body></html>`;
+</style></head><body>${bodyHtml}</body></html>`;
 
   const blob     = htmlDocx.asBlob(fullHtml, { margins: { top: 720, right: 720, bottom: 720, left: 720 } });
   const url      = URL.createObjectURL(blob);
@@ -3665,6 +3670,35 @@ async function downloadMinutesDocx(meetingId, title) {
   const a = Object.assign(document.createElement('a'), { href: url, download: fileName });
   a.click();
   URL.revokeObjectURL(url);
+}
+
+async function uploadEditedMinutesDocx(meetingId, file) {
+  const label = docList.querySelector(`.mins-upload-label[for], .mins-upload-input[data-meeting-id="${CSS.escape(meetingId)}"]`)
+    ?.closest('.mins-upload-label');
+  if (label) { label.dataset.busy = '1'; label.style.opacity = '0.5'; label.style.pointerEvents = 'none'; }
+
+  try {
+    const buffer = await file.arrayBuffer();
+    const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
+    const html   = result.value;
+    if (!html.trim()) throw new Error('The file appears to be empty.');
+
+    const { error } = await supabaseClient
+      .from('meetings')
+      .update({ edited_html: html })
+      .eq('id', meetingId);
+    if (error) throw error;
+
+    // Update cache so the modal preview reflects the upload immediately.
+    const cached = meetingCache.get(meetingId);
+    if (cached) cached.edited_html = html;
+
+    showToast('Portal updated ✓ — residents will see the edited version.', 'success');
+  } catch (err) {
+    showToast(err.message || 'Could not read the file. Make sure it is a valid .docx file.', 'error');
+  } finally {
+    if (label) { delete label.dataset.busy; label.style.opacity = ''; label.style.pointerEvents = ''; }
+  }
 }
 
 // ── Folder operations ─────────────────────────────────────────────────────────
@@ -4079,6 +4113,14 @@ docList.addEventListener('click', (e) => {
 
   // Close any open dropdowns when clicking elsewhere in the list.
   closeAllDropdowns();
+});
+
+docList.addEventListener('change', (e) => {
+  const input = e.target.closest('.mins-upload-input');
+  if (!input || !input.files?.length) return;
+  const file = input.files[0];
+  input.value = '';  // reset so the same file can be re-uploaded if needed
+  uploadEditedMinutesDocx(input.dataset.meetingId, file);
 });
 
 docList.addEventListener('keydown', (e) => {
