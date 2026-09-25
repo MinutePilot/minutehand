@@ -249,6 +249,44 @@ const toggleArchivedAltBtn  = document.getElementById('toggle-archived-alt-btn')
 const archivedAltCount      = document.getElementById('archived-alt-count');
 const archivedAltList       = document.getElementById('archived-alt-list');
 
+// ── Pending generate stash ────────────────────────────────────────────────────
+// The 0-credit wall and an expired session both navigate away to app.html.
+// Without this, whatever the user pasted into the notes box is lost the
+// moment that navigation happens. Shares its sessionStorage key with app.js
+// so notes survive hops in either direction between the two pages.
+const PENDING_GENERATE_KEY = 'mh_pending_generate';
+
+function stashPendingGenerate() {
+  const notes = genNotesEl?.value.trim() ?? '';
+  if (!notes && !genAudioFile) return;
+  try {
+    sessionStorage.setItem(PENDING_GENERATE_KEY, JSON.stringify({
+      notes,
+      template: genTemplate?.value,
+      hadAudio: !!genAudioFile,
+    }));
+  } catch (e) { /* storage unavailable — nothing more we can do */ }
+}
+
+function restorePendingGenerate() {
+  let pending;
+  try {
+    const raw = sessionStorage.getItem(PENDING_GENERATE_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(PENDING_GENERATE_KEY);
+    pending = JSON.parse(raw);
+  } catch (e) { return; }
+  if (pending.notes && genNotesEl) genNotesEl.value = pending.notes;
+  if (pending.template && genTemplate) genTemplate.value = pending.template;
+  if (pending.notes) {
+    showToast('We saved the notes you were working on — pick up where you left off.', 'info');
+  } else if (pending.hadAudio) {
+    showToast('Your progress was saved — please re-attach your audio recording to continue.', 'info');
+  }
+}
+
+restorePendingGenerate();
+
 // ── Auth + init ───────────────────────────────────────────────────────────────
 
 supabaseClient.auth.onAuthStateChange(async (_event, session) => {
@@ -855,12 +893,14 @@ async function genRunGenerateFlow(notes) {
     genSetLoadingBtn(false);
     if (err.status === 402) {
       if (userRole === 'owner' || !userOrg) {
+        stashPendingGenerate();
         window.location.href = '/app.html?buy=credits';
       } else {
         genSetLoadingBtn(false);
         genShowError('Your organization is out of credits. Ask your administrator to add more.');
       }
     } else if (err.status === 401) {
+      stashPendingGenerate();
       window.location.href = '/app.html';
     } else {
       genShowError(err.message || 'Something went wrong. Please try again.');
