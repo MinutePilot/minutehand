@@ -120,6 +120,43 @@ let userOrg                = null;
 let rosterMembers          = [];
 let selectedGuests         = [];
 
+// ── Pending generate stash ────────────────────────────────────────────────────
+// Sign-up, credit purchase, and board-plan checkout all navigate to a different
+// page. Without this, whatever the user pasted into the notes box is lost the
+// moment that navigation happens.
+const PENDING_GENERATE_KEY = 'mh_pending_generate';
+
+function stashPendingGenerate() {
+  const notes = notesInput.value.trim();
+  if (!notes && !audioFile) return;
+  try {
+    sessionStorage.setItem(PENDING_GENERATE_KEY, JSON.stringify({
+      notes,
+      template: templateSelect.value,
+      hadAudio: !!audioFile,
+    }));
+  } catch (e) { /* storage unavailable — nothing more we can do */ }
+}
+
+function restorePendingGenerate() {
+  let pending;
+  try {
+    const raw = sessionStorage.getItem(PENDING_GENERATE_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(PENDING_GENERATE_KEY);
+    pending = JSON.parse(raw);
+  } catch (e) { return; }
+  if (pending.notes) notesInput.value = pending.notes;
+  if (pending.template) templateSelect.value = pending.template;
+  if (pending.notes) {
+    showToast('We saved the notes you were working on — pick up where you left off.', 'info');
+  } else if (pending.hadAudio) {
+    showToast('Your progress was saved — please re-attach your audio recording to continue.', 'info');
+  }
+}
+
+restorePendingGenerate();
+
 // ── Auth state management ─────────────────────────────────────────────────────
 
 supabaseClient.auth.onAuthStateChange(async (event, session) => {
@@ -145,6 +182,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     } else if (hasBoardPlan && !userOrg) {
       showSection(orgSetupSection);
     } else if (comingFromSignin) {
+      stashPendingGenerate();
       window.location.href = '/board.html';
     }
   } else {
@@ -173,9 +211,11 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
         if (hasBoardPlan && !userOrg) {
           showSection(orgSetupSection);
         } else {
+          stashPendingGenerate();
           window.location.href = '/board.html';
         }
       } else {
+        stashPendingGenerate();
         window.location.href = '/board.html';
       }
     } catch (err) {
@@ -184,6 +224,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     }
   } else if (payment === 'cancelled') {
     window.history.replaceState({}, '', window.location.pathname);
+    stashPendingGenerate();
     window.location.href = '/board.html';
   } else if (plan === 'board_plan') {
     window.history.replaceState({}, '', window.location.pathname);
@@ -336,9 +377,11 @@ authSubmitBtn.addEventListener('click', async () => {
 
   try {
     if (authMode === 'signup') {
-      const { error } = await supabaseClient.auth.signUp({ email, password });
+      const { data, error } = await supabaseClient.auth.signUp({ email, password });
       if (error) throw error;
-      signinMessage.textContent = 'Account created — you\'re signed in!';
+      signinMessage.textContent = data.session
+        ? 'Account created — you\'re signed in!'
+        : 'Almost there — check your email to confirm your account, then sign in.';
       signinMessage.classList.remove('hidden');
     } else {
       const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
@@ -539,11 +582,12 @@ orgSaveBtn.addEventListener('click', async () => {
   }
 
   userOrg = data;
+  stashPendingGenerate();
   window.location.href = '/board.html';
 });
 
-backFromCreditsBtn.addEventListener('click', () => { window.location.href = '/board.html'; });
-backFromBoardPlanBtn?.addEventListener('click', () => { window.location.href = '/board.html'; });
+backFromCreditsBtn.addEventListener('click', () => { stashPendingGenerate(); window.location.href = '/board.html'; });
+backFromBoardPlanBtn?.addEventListener('click', () => { stashPendingGenerate(); window.location.href = '/board.html'; });
 
 boardPlanCheckoutBtn?.addEventListener('click', async () => {
   boardPlanCheckoutError.classList.add('hidden');
@@ -551,6 +595,7 @@ boardPlanCheckoutBtn?.addEventListener('click', async () => {
   boardPlanCheckoutBtn.textContent = 'Redirecting to PayPal…';
   try {
     const data = await callEdgeFunction('create-checkout', { pack: 'board_plan', origin: pageOrigin() });
+    stashPendingGenerate();
     window.location.href = data.url;
   } catch (err) {
     boardPlanCheckoutError.textContent = err.message || 'Failed to start checkout. Please try again.';
@@ -573,6 +618,7 @@ buyCreditsSection.addEventListener('click', async (e) => {
 
   try {
     const data = await callEdgeFunction('create-checkout', { pack, origin: pageOrigin() });
+    stashPendingGenerate();
     window.location.href = data.url;
   } catch (err) {
     showCheckoutError(err.message || 'Failed to start checkout. Please try again.');
