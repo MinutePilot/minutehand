@@ -1003,6 +1003,7 @@ resetBtn.addEventListener('click', () => {
   uploadProgressWrap.classList.add('hidden');
   notesLabel.textContent = 'Meeting notes or transcript';
   notesHint.textContent  = 'Include date, location, attendees, and any motions made if you have them.';
+  notesInput.value       = '';
   notesInput.placeholder = 'Paste your meeting notes, rough transcript, or any combination of both here…';
   selectedGuests = [];
   renderAttendeeSection();
