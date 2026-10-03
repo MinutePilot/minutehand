@@ -59,14 +59,14 @@
       <nav id="pane-menu" class="pane pane-menu" aria-label="Menu">
         <h2>Meetings</h2>
         <ul>
-          <li><button type="button" class="menu-item is-current" aria-current="page">All meetings</button></li>
+          <li><button type="button" class="menu-item is-current" data-view="minutes" aria-current="page">All meetings</button></li>
           <li><button type="button" class="menu-item" disabled>Agenda <span class="soon">soon</span></button></li>
         </ul>
         <h2>Records</h2>
         <ul>
           <li><button type="button" class="menu-item" disabled>Motions <span class="soon">soon</span></button></li>
           <li><button type="button" class="menu-item" disabled>Action items <span class="soon">soon</span></button></li>
-          <li><button type="button" class="menu-item" disabled>Roster <span class="soon">soon</span></button></li>
+          <li><button type="button" class="menu-item" data-view="roster">Roster</button></li>
           <li><button type="button" class="menu-item" disabled>Documents <span class="soon">soon</span></button></li>
         </ul>
       </nav>
@@ -84,9 +84,77 @@
         </form>
       </section>
 
-      <section id="pane-doc" class="pane pane-doc" aria-label="Minutes">
-        <h2 class="pane-title">Minutes</h2>
-        <div id="editor" class="editor"></div>
+      <section id="pane-doc" class="pane pane-doc" aria-label="Main">
+        <div id="view-minutes" class="view">
+          <h2 class="pane-title">Minutes</h2>
+          <div id="editor" class="editor"></div>
+        </div>
+
+        <div id="view-roster" class="view hidden">
+          <h2 class="pane-title">Roster</h2>
+          <div class="roster">
+            <div class="roster-head">
+              <p id="roster-count" class="roster-count"></p>
+              <button id="roster-add" type="button" class="btn-primary">Add a member</button>
+            </div>
+            <p id="roster-readonly" class="hint hidden">Only admins can change the roster. Ask your organization owner if something needs fixing.</p>
+
+            <form id="roster-form" class="roster-form hidden" novalidate>
+              <h3 id="roster-form-title">Add a member</h3>
+              <div class="form-grid">
+                <div>
+                  <label for="rf-name">Name <span class="required">(required)</span></label>
+                  <input id="rf-name" type="text" maxlength="120" autocomplete="off" placeholder="e.g. Dana Whitfield">
+                </div>
+                <div>
+                  <label for="rf-role">Role or title</label>
+                  <input id="rf-role" type="text" maxlength="60" list="rf-role-list" placeholder="e.g. President">
+                  <datalist id="rf-role-list">
+                    <option value="President"></option>
+                    <option value="Vice President"></option>
+                    <option value="Chair"></option>
+                    <option value="Vice Chair"></option>
+                    <option value="Secretary"></option>
+                    <option value="Treasurer"></option>
+                    <option value="Director"></option>
+                    <option value="Board Member"></option>
+                  </datalist>
+                </div>
+                <div>
+                  <label for="rf-lot">Lot or unit <span class="optional">(optional)</span></label>
+                  <input id="rf-lot" type="text" maxlength="40" autocomplete="off" placeholder="e.g. SL 205">
+                </div>
+                <div>
+                  <label for="rf-email">Email <span class="optional">(optional)</span></label>
+                  <input id="rf-email" type="email" maxlength="200" autocomplete="off" placeholder="name@example.com">
+                </div>
+                <div>
+                  <label for="rf-term-start">Term start <span class="optional">(optional)</span></label>
+                  <input id="rf-term-start" type="date">
+                </div>
+                <div>
+                  <label for="rf-term-end">Term end <span class="optional">(optional)</span></label>
+                  <input id="rf-term-end" type="date">
+                </div>
+              </div>
+              <p id="roster-form-error" class="error hidden" role="alert"></p>
+              <div class="form-actions">
+                <button id="roster-save" type="submit" class="btn-primary">Save</button>
+                <button id="roster-cancel" type="button" class="btn-ghost">Cancel</button>
+              </div>
+            </form>
+
+            <div id="roster-status" class="roster-status hidden" role="status"></div>
+            <p id="roster-empty" class="roster-empty hidden">Add the people who attend your meetings. They will appear in the lists for who moved, who seconded and who attended.</p>
+            <ul id="roster-list" class="roster-list"></ul>
+
+            <details id="roster-former" class="roster-former hidden">
+              <summary>Former members (<span id="roster-former-count">0</span>)</summary>
+              <p class="hint">Former members stay in past minutes. Bring someone back if they rejoin.</p>
+              <ul id="roster-former-list" class="roster-list"></ul>
+            </details>
+          </div>
+        </div>
       </section>
     </div>
   </div>
@@ -94,6 +162,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="config.js"></script>
   <script src="vendor/tiptap.bundle.js"></script>
+  <script src="workspace-roster.js"></script>
   <script src="workspace.js"></script>
 </body>
 </html>

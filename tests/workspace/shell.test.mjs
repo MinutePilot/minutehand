@@ -1,111 +1,7 @@
 // Browser tests for workspace.html (step 1, the shell).
 // Run with: cd tests/workspace && npm install && npm test
-//
-// A real browser opens the real page, served from this repository. The only fakes
-// are the network: the Supabase library is served from node_modules instead of the
-// CDN, and every request to the Supabase project is answered by this file.
-// Set CHROMIUM_PATH to a Chrome or Chromium binary if Playwright has none installed.
-
-import { chromium } from 'playwright-core';
-import http from 'node:http';
-import fs from 'node:fs';
-import path from 'node:path';
 import assert from 'node:assert/strict';
-
-const root = path.resolve(import.meta.dirname, '../..');
-const umd = path.resolve(import.meta.dirname, 'node_modules/@supabase/supabase-js/dist/umd/supabase.js');
-const SUPABASE_URL = fs.readFileSync(path.join(root, 'config.js'), 'utf8').match(/supabaseUrl:\s*'([^']+)'/)[1];
-const SUPABASE_HOST = new URL(SUPABASE_URL).host;
-const STORAGE_KEY = `sb-${SUPABASE_HOST.split('.')[0]}-auth-token`;
-
-// ── a tiny static server for the repository ──────────────────────────────────
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png' };
-const server = http.createServer((req, res) => {
-  const file = path.join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname));
-  if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); return res.end(); }
-  res.writeHead(200, { 'content-type': types[path.extname(file)] ?? 'application/octet-stream' });
-  fs.createReadStream(file).pipe(res);
-});
-await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const BASE = `http://127.0.0.1:${server.address().port}`;
-
-// ── a pretend Supabase ───────────────────────────────────────────────────────
-const cors = {
-  'access-control-allow-origin': '*',
-  'access-control-allow-headers': '*',
-  'access-control-allow-methods': '*',
-};
-const json = (route, body, status = 200) =>
-  route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
-
-const user = (email = 'secretary@example.test') => ({
-  id: 'user-1', email, aud: 'authenticated', role: 'authenticated',
-  app_metadata: {}, user_metadata: {}, created_at: '2026-01-01T00:00:00Z',
-});
-const session = (email) => {
-  const now = Math.floor(Date.now() / 1000);
-  return { access_token: 'fake.access.token', refresh_token: 'fake-refresh', token_type: 'bearer',
-           expires_in: 3600, expires_at: now + 3600, user: user(email) };
-};
-
-async function open(browser, scenario = {}, { viewport = { width: 1280, height: 800 }, signedIn = true } = {}) {
-  const s = { org: { id: 'org-1', name: 'Parkview Terrace Strata' }, role: 'owner', beta: true,
-              password: 'correct-horse', ...scenario };
-  const ctx = await browser.newContext({ viewport });
-  const page = await ctx.newPage();
-  const seen = { tokenPosts: 0, orgCalls: 0, errors: [], pageErrors: [] };
-  page.on('console', (m) => { if (m.type() === 'error') seen.errors.push(m.text()); });
-  page.on('pageerror', (e) => seen.pageErrors.push(String(e)));
-
-  await page.route('https://cdn.jsdelivr.net/**', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/javascript', body: fs.readFileSync(umd) }));
-
-  await page.route(`https://${SUPABASE_HOST}/**`, async (route) => {
-    const req = route.request();
-    const url = new URL(req.url());
-    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
-
-    if (url.pathname === '/auth/v1/token') {
-      seen.tokenPosts++;
-      const body = JSON.parse(req.postData() ?? '{}');
-      if (body.password !== s.password) {
-        return json(route, { error: 'invalid_grant', error_description: 'Invalid login credentials', code: 'invalid_credentials' }, 400);
-      }
-      return json(route, session(body.email));
-    }
-    if (url.pathname === '/auth/v1/logout') return route.fulfill({ status: 204, headers: cors });
-    if (url.pathname === '/auth/v1/user') return json(route, user());
-
-    if (url.pathname === '/rest/v1/org_members') {
-      seen.orgCalls++;
-      if (s.failOrg) return route.abort('failed');
-      return json(route, s.org ? [{ role: s.role, organizations: s.org }] : []);
-    }
-    if (url.pathname === '/rest/v1/workspace_beta') {
-      return json(route, s.beta ? [{ org_id: s.org.id }] : []);
-    }
-    return json(route, { message: `unexpected request: ${url.pathname}` }, 500);
-  });
-
-  if (signedIn) {
-    await page.addInitScript(([k, v]) => localStorage.setItem(k, v), [STORAGE_KEY, JSON.stringify(session())]);
-  }
-  await page.goto(`${BASE}/workspace.html`);
-  return { page, ctx, seen, s };
-}
-
-const visible = (page, sel) => page.locator(sel).isVisible();
-
-// ── the tests ────────────────────────────────────────────────────────────────
-const exe = process.env.CHROMIUM_PATH
-  ?? ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].find((p) => fs.existsSync(p));
-const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
-
-let passed = 0;
-async function test(name, fn) {
-  try { await fn(); passed++; console.log(`  ✓ ${name}`); }
-  catch (e) { console.log(`  ✗ ${name}\n    ${e.message.split('\n')[0]}`); await browser.close(); server.close(); process.exit(1); }
-}
+import { browser, open, test, finish, visible, STORAGE_KEY } from './harness.mjs';
 
 console.log('Signed out');
 await test('a signed-out visitor sees the sign-in form and nothing else', async () => {
@@ -277,6 +173,4 @@ await test('only one pane shows at a time, the tabs switch between them, and not
   await ctx.close();
 });
 
-console.log(`\nALL ${passed} WORKSPACE SHELL CHECKS PASSED`);
-await browser.close();
-server.close();
+await finish('WORKSPACE SHELL');
