@@ -69,13 +69,11 @@ await test('an existing session goes straight to the workspace with all three pa
   await ctx.close();
 });
 
-await test('the minutes pane is a real editor and the chat is switched off for now', async () => {
+await test('the meetings list comes first and the chat is switched off for now', async () => {
   const { page, ctx } = await open(browser);
   await page.waitForSelector('#app:visible');
-  await page.click('#editor .ProseMirror');
-  await page.keyboard.press('Control+End');
-  await page.keyboard.type(' Called to order at 7:00 PM.');
-  assert.match(await page.locator('#editor .ProseMirror').innerText(), /Called to order at 7:00 PM\./);
+  assert.equal(await visible(page, '#view-meetings'), true);
+  assert.equal(await page.locator('.menu-item[data-view=meetings]').getAttribute('aria-current'), 'page');
   assert.equal(await page.locator('#chat-input').isDisabled(), true);
   await ctx.close();
 });
@@ -112,7 +110,7 @@ await test('an organization that is not switched on is told so, and does not see
   assert.match(await page.locator('#message-title').innerText(), /not switched on/);
   assert.match(await page.locator('#message-body').innerText(), /Parkview Terrace Strata/);
   assert.equal(await visible(page, '#app'), false);
-  assert.equal(await page.locator('#editor .ProseMirror').count(), 0, 'the editor was never built');
+  assert.equal(await page.locator('#meetings-list li').count(), 0, 'no meetings were loaded or shown');
   await ctx.close();
 });
 

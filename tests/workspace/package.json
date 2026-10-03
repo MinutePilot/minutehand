@@ -4,9 +4,10 @@
   "type": "module",
   "description": "Developer-only browser tests for the workspace. Not part of the website.",
   "scripts": {
-    "test": "node shell.test.mjs && node roster.test.mjs",
+    "test": "node shell.test.mjs && node roster.test.mjs && node meetings.test.mjs",
     "test:shell": "node shell.test.mjs",
-    "test:roster": "node roster.test.mjs"
+    "test:roster": "node roster.test.mjs",
+    "test:meetings": "node meetings.test.mjs"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.0.0",

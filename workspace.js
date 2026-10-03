@@ -1,6 +1,6 @@
 // MinuteHand workspace: step 1, the shell.
 // Signs the user in, finds their organization, checks the beta switch, and shows
-// the three panes (menu, chat, minutes). Chat and the menu are placeholders here.
+// the three panes (menu, chat, and the main area). The chat is a placeholder here.
 // All text from the database is written with textContent, never as HTML.
 
 const supabaseClient = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
@@ -12,7 +12,6 @@ const $ = (id) => document.getElementById(id);
 const states = ['loading', 'signin', 'message'].map((n) => ({ name: n, el: $(`state-${n}`) }));
 const appEl = $('app');
 
-let editor = null;
 let shownForUserId = null;   // stops token refreshes from rebuilding the screen
 let busy = false;
 
@@ -74,7 +73,7 @@ async function loadWorkspace(user) {
   // The organization this user belongs to, and their role in it.
   const { data: rows, error: orgError } = await supabaseClient
     .from('org_members')
-    .select('role, organizations(id, name)')
+    .select('role, organizations(id, name, org_type)')
     .eq('user_id', user.id)
     .order('joined_at', { ascending: true })
     .limit(1);
@@ -128,20 +127,12 @@ function renderApp(user, org, role) {
 
   showApp();
   shownForUserId = user.id;
-  if (!editor) createEditor();
   Roster.init({ client: supabaseClient, orgId: org.id, canManage });
-  setView('minutes');
-}
-
-function createEditor() {
-  editor = new TT.Editor({
-    element: $('editor'),
-    extensions: [TT.StarterKit],
-    content: `
-      <h1>Meeting minutes</h1>
-      <p>Your minutes will appear here as you run a meeting. You can also type straight into this page.</p>
-    `,
+  Meetings.init({
+    client: supabaseClient, orgId: org.id, orgType: org.org_type ?? 'STRATA',
+    userId: user.id, canManage, go: setView,
   });
+  setView('meetings');
 }
 
 // ── Panes (on a phone only one shows at a time) ──────────────────────────────
@@ -157,20 +148,21 @@ document.querySelectorAll('.pane-tabs [role="tab"]').forEach((tab) => {
   tab.addEventListener('click', () => setPane(tab.dataset.pane));
 });
 
-// ── What the main area shows: the minutes, or the roster (more to come) ─────
+// ── What the main area shows: the meetings, one meeting, or the roster ──────
 
-const VIEW_LABELS = { minutes: 'Minutes', roster: 'Roster' };
+const VIEW_LABELS = { meetings: 'Meetings', meeting: 'Meeting', roster: 'Roster' };
+const MENU_FOR = { meetings: 'meetings', meeting: 'meetings', roster: 'roster' };
 
 function setView(name) {
-  $('view-minutes').classList.toggle('hidden', name !== 'minutes');
-  $('view-roster').classList.toggle('hidden', name !== 'roster');
+  Object.keys(VIEW_LABELS).forEach((v) => $(`view-${v}`).classList.toggle('hidden', v !== name));
   document.querySelectorAll('.menu-item[data-view]').forEach((b) => {
-    const current = b.dataset.view === name;
+    const current = b.dataset.view === MENU_FOR[name];
     b.classList.toggle('is-current', current);
     if (current) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
   document.querySelector('.pane-tabs [data-pane="doc"]').textContent = VIEW_LABELS[name];
   setPane('doc');                       // on a phone, jump to the main area
+  if (name === 'meetings') Meetings.openList();
   if (name === 'roster') Roster.open();
 }
 
