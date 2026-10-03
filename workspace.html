@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>MinuteHand Workspace</title>
+  <link rel="stylesheet" href="workspace.css">
+</head>
+<body>
+
+  <!-- One of these four states is visible at a time -->
+  <main id="state-loading" class="state" aria-live="polite">
+    <p class="state-text">Loading your workspace…</p>
+  </main>
+
+  <main id="state-signin" class="state hidden">
+    <form id="signin-form" class="card" novalidate>
+      <img src="images/logo-light.png" alt="MinuteHand" class="logo">
+      <h1>Sign in to your workspace</h1>
+      <label for="signin-email">Email</label>
+      <input id="signin-email" type="email" autocomplete="email" required>
+      <label for="signin-password">Password</label>
+      <input id="signin-password" type="password" autocomplete="current-password" required>
+      <p id="signin-error" class="error hidden" role="alert"></p>
+      <button id="signin-submit" type="submit" class="btn-primary">Sign in</button>
+      <p class="hint">Signed up with Google, or need an account? Use the <a href="app.html">main page</a> first, then come back here.</p>
+    </form>
+  </main>
+
+  <main id="state-message" class="state hidden">
+    <div class="card" role="status">
+      <img src="images/logo-light.png" alt="MinuteHand" class="logo">
+      <h1 id="message-title"></h1>
+      <p id="message-body"></p>
+      <div id="message-actions" class="actions"></div>
+    </div>
+  </main>
+
+  <div id="app" class="app hidden" data-pane="doc">
+    <header class="topbar">
+      <img src="images/logo-light.png" alt="MinuteHand" class="logo-small">
+      <span id="org-name" class="org-name"></span>
+      <span class="spacer"></span>
+      <span id="user-email" class="user-email"></span>
+      <button id="signout-btn" type="button" class="btn-ghost">Sign out</button>
+    </header>
+
+    <p id="role-banner" class="banner hidden" role="status"></p>
+
+    <div class="pane-tabs" role="tablist" aria-label="Workspace sections">
+      <button type="button" role="tab" data-pane="menu" aria-selected="false">Menu</button>
+      <button type="button" role="tab" data-pane="chat" aria-selected="false">Chat</button>
+      <button type="button" role="tab" data-pane="doc"  aria-selected="true">Minutes</button>
+    </div>
+
+    <div class="panes">
+      <nav id="pane-menu" class="pane pane-menu" aria-label="Menu">
+        <h2>Meetings</h2>
+        <ul>
+          <li><button type="button" class="menu-item is-current" aria-current="page">All meetings</button></li>
+          <li><button type="button" class="menu-item" disabled>Agenda <span class="soon">soon</span></button></li>
+        </ul>
+        <h2>Records</h2>
+        <ul>
+          <li><button type="button" class="menu-item" disabled>Motions <span class="soon">soon</span></button></li>
+          <li><button type="button" class="menu-item" disabled>Action items <span class="soon">soon</span></button></li>
+          <li><button type="button" class="menu-item" disabled>Roster <span class="soon">soon</span></button></li>
+          <li><button type="button" class="menu-item" disabled>Documents <span class="soon">soon</span></button></li>
+        </ul>
+      </nav>
+
+      <section id="pane-chat" class="pane pane-chat" aria-label="Chat">
+        <h2 class="pane-title">Assistant</h2>
+        <div id="chat-log" class="chat-log" aria-live="polite">
+          <p class="bubble bot">During a meeting, you will be able to tell me what happened here, for example &ldquo;Dana moved to approve the budget, Lee seconded, carried&rdquo;, and I will add it to the minutes for you to confirm.</p>
+          <p class="bubble bot">This part is still being built.</p>
+        </div>
+        <form id="chat-form" class="chat-form">
+          <label for="chat-input" class="visually-hidden">Message</label>
+          <input id="chat-input" type="text" placeholder="Coming soon" disabled>
+          <button type="submit" class="btn-primary" disabled>Send</button>
+        </form>
+      </section>
+
+      <section id="pane-doc" class="pane pane-doc" aria-label="Minutes">
+        <h2 class="pane-title">Minutes</h2>
+        <div id="editor" class="editor"></div>
+      </section>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="vendor/tiptap.bundle.js"></script>
+  <script src="workspace.js"></script>
+</body>
+</html>
