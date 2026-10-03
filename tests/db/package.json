@@ -1,0 +1,12 @@
+{
+  "name": "minutehand-db-tests",
+  "private": true,
+  "type": "module",
+  "description": "Developer-only database tests. Not part of the website.",
+  "scripts": {
+    "test": "node workspace-phase1.test.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.0"
+  }
+}
