@@ -1,0 +1,13 @@
+{
+  "name": "minutehand-workspace-tests",
+  "private": true,
+  "type": "module",
+  "description": "Developer-only browser tests for the workspace. Not part of the website.",
+  "scripts": {
+    "test": "node shell.test.mjs"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "playwright-core": "^1.50.0"
+  }
+}
