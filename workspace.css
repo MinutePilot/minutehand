@@ -191,6 +191,33 @@ input[type="email"], input[type="password"], input[type="text"] {
 .editor .ProseMirror h1 { font-size: 24px; color: var(--mh-heading); }
 .editor .ProseMirror h2 { font-size: 18px; color: var(--mh-heading); text-transform: none; letter-spacing: 0; padding: 0; }
 
+/* roster */
+.roster { padding: 8px 24px 32px; max-width: 820px; }
+.roster-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
+.roster-count { margin: 0; color: var(--mh-text-secondary); }
+.btn-small { padding: 4px 10px; font-size: 14px; }
+.required { font-weight: 400; color: var(--mh-text-secondary); font-size: 13px; }
+.optional { font-weight: 400; color: var(--mh-text-secondary); font-size: 13px; }
+
+.roster-form { margin: 12px 0 20px; padding: 16px; border: 1px solid var(--mh-border); border-radius: 10px; background: var(--mh-bg-alt); }
+.roster-form h3 { margin: 0 0 4px; font-size: 16px; color: var(--mh-heading); }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.form-grid input[type="date"] { width: 100%; padding: 9px 12px; font: inherit; border: 1px solid var(--mh-border); border-radius: 8px; background: #fff; }
+.form-actions { display: flex; gap: 8px; margin-top: 16px; }
+
+.roster-status { margin: 12px 0; padding: 8px 12px; border-radius: 8px; background: var(--mh-bg-alt); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.roster-status p { margin: 0; }
+.roster-empty { margin: 16px 0; padding: 16px; border: 1px dashed var(--mh-border); border-radius: 10px; color: var(--mh-text-secondary); }
+
+.roster-list { list-style: none; margin: 8px 0; padding: 0; }
+.roster-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid var(--mh-border); }
+.roster-info { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.roster-meta { color: var(--mh-text-secondary); font-size: 14px; }
+.roster-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.roster-ask { font-size: 14px; }
+.roster-former { margin-top: 24px; }
+.roster-former summary { cursor: pointer; font-weight: 600; color: var(--mh-text-secondary); }
+
 /* ── Phone and narrow windows: one pane at a time ─────────────────────────── */
 
 @media (max-width: 899px) {
@@ -221,5 +248,7 @@ input[type="email"], input[type="password"], input[type="text"] {
   .app[data-pane="chat"] .pane-chat { display: flex; }
 
   .user-email { display: none; }
+  .form-grid { grid-template-columns: 1fr; }
+  .roster { padding: 8px 16px 32px; }
   .editor { padding: 8px 16px 32px; }
 }

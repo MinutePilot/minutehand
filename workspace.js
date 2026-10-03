@@ -129,7 +129,8 @@ function renderApp(user, org, role) {
   showApp();
   shownForUserId = user.id;
   if (!editor) createEditor();
-  setPane('doc');
+  Roster.init({ client: supabaseClient, orgId: org.id, canManage });
+  setView('minutes');
 }
 
 function createEditor() {
@@ -154,6 +155,27 @@ function setPane(name) {
 
 document.querySelectorAll('.pane-tabs [role="tab"]').forEach((tab) => {
   tab.addEventListener('click', () => setPane(tab.dataset.pane));
+});
+
+// ── What the main area shows: the minutes, or the roster (more to come) ─────
+
+const VIEW_LABELS = { minutes: 'Minutes', roster: 'Roster' };
+
+function setView(name) {
+  $('view-minutes').classList.toggle('hidden', name !== 'minutes');
+  $('view-roster').classList.toggle('hidden', name !== 'roster');
+  document.querySelectorAll('.menu-item[data-view]').forEach((b) => {
+    const current = b.dataset.view === name;
+    b.classList.toggle('is-current', current);
+    if (current) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  document.querySelector('.pane-tabs [data-pane="doc"]').textContent = VIEW_LABELS[name];
+  setPane('doc');                       // on a phone, jump to the main area
+  if (name === 'roster') Roster.open();
+}
+
+document.querySelectorAll('.menu-item[data-view]').forEach((b) => {
+  b.addEventListener('click', () => setView(b.dataset.view));
 });
 
 // ── Sign in and out ──────────────────────────────────────────────────────────
