@@ -297,7 +297,15 @@ input[type="email"], input[type="password"], input[type="text"] {
 .doc-section { margin: 0 0 28px; }
 .doc-section-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
 .pane .doc-section-title { margin: 0; }
-.doc-section-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.doc-section-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.camera-badge { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #fff; background: #5b3f8c; border-radius: 999px; padding: 2px 10px; }
+.doc-section.is-in-camera { border-left: 4px solid #5b3f8c; padding-left: 12px; background: #f6f2fb; border-radius: 0 10px 10px 0; }
+.camera-panel { margin: 4px 0 8px; padding: 10px 12px; border: 1px dashed #5b3f8c; border-radius: 8px; background: #fff; }
+.camera-note { margin: 0 0 8px; color: #3d2a63; font-size: 14px; }
+.camera-field { display: block; margin: 6px 0; }
+.camera-field span { display: block; font-size: 13px; color: var(--mh-text-secondary); margin-bottom: 2px; }
+.camera-field input { width: 100%; padding: 7px 10px; font: inherit; border: 1px solid var(--mh-border); border-radius: 8px; background: #fff; }
+.doc-section-buttons { flex-wrap: wrap; gap: 6px; }
 .doc-section-body > p { margin: 0; padding: 2px 0 2px 12px; border-left: 3px solid var(--mh-border); overflow-wrap: anywhere; min-height: 1.6em; }
 .doc-section-body > p:first-child:has(> br:only-child)::before { content: 'Notes for this item…'; float: left; height: 0; color: var(--mh-text-secondary); pointer-events: none; }
 .doc-section-body:focus-within > p { border-left-color: var(--mh-accent); }

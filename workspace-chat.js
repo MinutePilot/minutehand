@@ -87,11 +87,12 @@ const Chat = (() => {
 
     const chosen = select.value;
     const ids = c.items.map((i) => i.id);
-    if (switched || select.options.length !== c.items.length || [...select.options].some((o, i) => o.value !== ids[i])) {
-      select.replaceChildren(...c.items.map((i) => {
+    const labels = c.items.map((i) => `${i.number}. ${i.title}${i.inCamera ? ' (in camera)' : ''}`);
+    if (switched || select.options.length !== ids.length || [...select.options].some((o, i) => o.value !== ids[i] || o.textContent !== labels[i])) {
+      select.replaceChildren(...ids.map((id, i) => {
         const o = document.createElement('option');
-        o.value = i.id;
-        o.textContent = `${i.number}. ${i.title}`;
+        o.value = id;
+        o.textContent = labels[i];
         return o;
       }));
     }
@@ -132,7 +133,7 @@ const Chat = (() => {
 
     const forMeeting = meetingId;
     const agendaId = $('chat-target').value || null;
-    const title = $('chat-target').selectedOptions[0]?.textContent.replace(/^\d+\.\s*/, '') ?? 'this item';
+    const title = $('chat-target').selectedOptions[0]?.textContent.replace(/^\d+\.\s*/, '').replace(/ \(in camera\)$/, '') ?? 'this item';
 
     say(forMeeting, 'me', message);
     pending = true;

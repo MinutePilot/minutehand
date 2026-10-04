@@ -152,7 +152,8 @@ const Minutes = (() => {
   function buildDoc(mtg, agenda, entries, motions, actions) {
     const ids = new Set(agenda.map((a) => a.id));
     const sections = agenda.map((a, i) => ({
-      type: 'section', attrs: { rowId: a.id, number: i + 1, title: a.title },
+      type: 'section',
+      attrs: { rowId: a.id, number: i + 1, title: a.title, inCamera: Boolean(a.is_in_camera), publicTitle: a.public_title ?? '', publicSummary: a.public_summary ?? '' },
       content: [...paragraphs(a.notes), ...blocksFor(a.id, motions, actions)],
     }));
     // Anything whose agenda item was removed is still shown, so nothing is ever hidden.
@@ -174,8 +175,16 @@ const Minutes = (() => {
     };
   }
 
+  // The in-camera settings of one agenda item, in the shape the database holds them.
+  const cameraRow = (inCamera, title, summary) => ({
+    is_in_camera: Boolean(inCamera),
+    public_title: oneLine(title).slice(0, 120) || null,
+    public_summary: oneLine(summary).slice(0, 300) || null,
+  });
+
   // What the document currently says, in the shape the database holds it.
   function derive(doc) {
+    const camera = new Map();
     const notes = new Map();
     const motions = [];
     const actions = [];
@@ -190,12 +199,15 @@ const Minutes = (() => {
           else if (child.type.name === 'motion') motions.push({ pos, key: child.attrs.key, id: child.attrs.rowId, row: motionFromNode(child, agendaId) });
           else if (child.type.name === 'action') actions.push({ pos, key: child.attrs.key, id: child.attrs.rowId, row: actionFromNode(child, agendaId) });
         });
-        if (agendaId) notes.set(agendaId, lines.join('\n'));
+        if (agendaId) {
+          notes.set(agendaId, lines.join('\n'));
+          camera.set(agendaId, cameraRow(node.attrs.inCamera, node.attrs.publicTitle, node.attrs.publicSummary));
+        }
       } else if (node.type.name === 'attendance') {
         entries = node.attrs.entries;
       }
     });
-    return { notes, entries, motions, actions };
+    return { notes, camera, entries, motions, actions };
   }
 
   // ── Saving ─────────────────────────────────────────────────────────────────
@@ -221,6 +233,11 @@ const Minutes = (() => {
       if (saved.notes.has(rowId) && saved.notes.get(rowId) !== text) noteUpdates.push({ rowId, text });
     });
 
+    const cameraUpdates = [];
+    desired.camera.forEach((row, rowId) => {
+      if (saved.camera.has(rowId) && !sameRow(saved.camera.get(rowId), row)) cameraUpdates.push({ rowId, row });
+    });
+
     const rows = desiredRows(desired.entries);
     const keep = new Set(rows.filter((r) => r.id).map((r) => r.id));
     const updates = [];
@@ -237,8 +254,8 @@ const Minutes = (() => {
     const m = planBlocks(desired.motions, saved.motions);
     const a = planBlocks(desired.actions, saved.actions);
     return {
-      noteUpdates, updates, deletes, inserts, motions: m, actions: a,
-      empty: !noteUpdates.length && !updates.length && !deletes.length && !inserts.length
+      noteUpdates, cameraUpdates, updates, deletes, inserts, motions: m, actions: a,
+      empty: !noteUpdates.length && !cameraUpdates.length && !updates.length && !deletes.length && !inserts.length
         && ![m, a].some((p) => p.updates.length || p.deletes.length || p.inserts.length),
     };
   }
@@ -304,6 +321,11 @@ const Minutes = (() => {
       const { error } = await db.from('agenda_items').update({ notes: n.text }).eq('id', n.rowId);
       if (error) throw error;
       saved.notes.set(n.rowId, n.text);
+    }
+    for (const c of p.cameraUpdates) {
+      const { error } = await db.from('agenda_items').update(c.row).eq('id', c.rowId);
+      if (error) throw error;
+      saved.camera.set(c.rowId, c.row);
     }
 
     // New motions and action items take the next order numbers, in the order they appear.
@@ -424,19 +446,21 @@ const Minutes = (() => {
   function restoreDraft(draft, built) {
     const old = { sections: new Map(), entries: null };
     (draft.doc?.content ?? []).forEach((n) => {
-      if (n.type === 'section') old.sections.set(n.attrs?.rowId, n.content ?? []);
+      if (n.type === 'section') old.sections.set(n.attrs?.rowId, { content: n.content ?? [], attrs: n.attrs ?? {} });
       if (n.type === 'attendance') old.entries = n.attrs?.entries;
     });
 
     const mergeSection = (section) => {
-      const draftContent = old.sections.get(section.attrs.rowId);
-      if (!draftContent) return section;
+      const draft = old.sections.get(section.attrs.rowId);
+      if (!draft) return section;
+      const draftContent = draft.content;
       const draftParagraphs = draftContent.filter((c) => c.type === 'paragraph');
       const draftBlocks = draftContent.filter((c) => c.type !== 'paragraph');
       const builtBlocks = section.content.filter((c) => c.type !== 'paragraph');
       const draftIds = new Set(draftBlocks.map((b) => b.attrs?.rowId).filter(Boolean));
       return {
         ...section,
+        attrs: { ...section.attrs, inCamera: Boolean(draft.attrs.inCamera), publicTitle: draft.attrs.publicTitle ?? '', publicSummary: draft.attrs.publicSummary ?? '' },
         content: [
           ...(draftParagraphs.length ? draftParagraphs : section.content.filter((c) => c.type === 'paragraph')),
           ...draftBlocks,
@@ -484,7 +508,7 @@ const Minutes = (() => {
     const db = ctx.client;
     const [m, a, att, r, mo, ac] = await Promise.all([
       db.from('meetings').select('id, title, meeting_date, start_time, location, status').eq('id', meetingId).maybeSingle(),
-      db.from('agenda_items').select('id, title, notes, sort_order').eq('meeting_id', meetingId)
+      db.from('agenda_items').select('id, title, notes, sort_order, is_in_camera, public_title, public_summary').eq('meeting_id', meetingId)
         .order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
       db.from('attendance').select('id, roster_id, display_name, proxy_for_lot, status').eq('meeting_id', meetingId)
         .order('created_at', { ascending: true }),
@@ -535,6 +559,7 @@ const Minutes = (() => {
     const built = buildDoc(meeting, loaded.agenda, entries, loaded.motions, loaded.actions);
     saved = {
       notes: new Map(loaded.agenda.map((a) => [a.id, a.notes ?? ''])),
+      camera: new Map(loaded.agenda.map((a) => [a.id, cameraRow(a.is_in_camera, a.public_title, a.public_summary)])),
       attendance: new Map(loaded.attendance.map((r) => [r.id, { roster_id: r.roster_id, display_name: r.display_name, status: r.status, proxy_for_lot: r.proxy_for_lot ?? null }])),
       motions: new Map(loaded.motions.map((r) => [r.id, motionFromRow(r)])),
       actions: new Map(loaded.actions.map((r) => [r.id, actionFromRow(r)])),
@@ -574,7 +599,7 @@ const Minutes = (() => {
     let currentId = null;
     const head = editor.state.selection.$from;
     editor.state.doc.forEach((n) => {
-      if (n.type.name === 'section' && !n.attrs.virtual && n.attrs.rowId) items.push({ id: n.attrs.rowId, title: n.attrs.title, number: n.attrs.number });
+      if (n.type.name === 'section' && !n.attrs.virtual && n.attrs.rowId) items.push({ id: n.attrs.rowId, title: n.attrs.title, number: n.attrs.number, inCamera: Boolean(n.attrs.inCamera) });
     });
     for (let d = head.depth; d > 0; d--) {
       const n = head.node(d);

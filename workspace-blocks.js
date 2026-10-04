@@ -98,7 +98,10 @@ const Blocks = (() => {
     const Section = TT.Node.create({
       name: 'section', group: 'block', content: 'paragraph+ (motion | action)*', isolating: true, defining: true,
       addAttributes() {
-        return { rowId: { default: null }, number: { default: 1 }, title: { default: '' }, virtual: { default: false } };
+        return {
+          rowId: { default: null }, number: { default: 1 }, title: { default: '' }, virtual: { default: false },
+          inCamera: { default: false }, publicTitle: { default: '' }, publicSummary: { default: '' },
+        };
       },
       parseHTML() { return [{ tag: 'section[data-type="section"]' }]; },
       renderHTML() { return ['section', { 'data-type': 'section' }, 0]; },
@@ -126,25 +129,63 @@ const Blocks = (() => {
           const bar = el('div', 'doc-section-bar');
           bar.contentEditable = 'false';
           const heading = el('h2', 'doc-section-title');
+          const badge = el('span', 'camera-badge', 'In camera');
           const buttons = el('div', 'doc-section-buttons');
+          const cameraToggle = UI.button('Mark as in camera', null, () => setCamera({ inCamera: !node.attrs.inCamera }));
           buttons.append(
             UI.button('Add a motion', null, () => addBlock(ed, getPos, node, 'motion')),
             UI.button('Add an action item', null, () => addBlock(ed, getPos, node, 'action')),
+            cameraToggle,
           );
-          bar.append(heading, buttons);
+          const title = el('div', 'doc-section-title-row');
+          title.append(heading, badge);
+          bar.append(title, buttons);
+
+          // What owners will see in place of an in-camera item. Only this is ever shared.
+          const camera = el('div', 'camera-panel');
+          camera.contentEditable = 'false';
+          const cameraNote = el('p', 'camera-note', 'This item is in camera. It stays in the council record, and owners will see only the title and summary below.');
+          const field = (caption, max, key, placeholder) => {
+            const wrap = el('label', 'camera-field');
+            wrap.append(el('span', null, caption));
+            const input = el('input');
+            input.type = 'text'; input.maxLength = max; input.placeholder = placeholder; input.autocomplete = 'off';
+            input.addEventListener('input', () => setCamera({ [key]: input.value }));
+            wrap.append(input);
+            return { wrap, input };
+          };
+          const titleField = field('Title owners will see', 120, 'publicTitle', 'In camera session');
+          const summaryField = field('Short summary owners will see (optional)', 300, 'publicSummary', 'For example: legal advice was received.');
+          camera.append(cameraNote, titleField.wrap, summaryField.wrap);
+
+          const setCamera = (change) => {
+            const pos = getPos();
+            if (typeof pos !== 'number') return;
+            const tr = ed.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...change }).setMeta('addToHistory', false);
+            ed.view.dispatch(tr);
+          };
+
           const body = el('div', 'doc-section-body');
-          dom.append(bar, body);
+          dom.append(bar, camera, body);
 
           const paint = () => {
+            const on = Boolean(node.attrs.inCamera) && !node.attrs.virtual;
             heading.textContent = node.attrs.virtual ? node.attrs.title : `${node.attrs.number}. ${node.attrs.title}`;
             dom.classList.toggle('is-virtual', Boolean(node.attrs.virtual));
+            dom.classList.toggle('is-in-camera', on);
             buttons.classList.toggle('hidden', Boolean(node.attrs.virtual));
+            badge.classList.toggle('hidden', !on);
+            camera.classList.toggle('hidden', !on);
+            cameraToggle.textContent = on ? 'In camera: remove' : 'Mark as in camera';
+            cameraToggle.setAttribute('aria-pressed', String(on));
+            if (titleField.input.value !== node.attrs.publicTitle) titleField.input.value = node.attrs.publicTitle;
+            if (summaryField.input.value !== node.attrs.publicSummary) summaryField.input.value = node.attrs.publicSummary;
           };
           paint();
           return {
             dom,
             contentDOM: body,
-            stopEvent: (e) => bar.contains(e.target),
+            stopEvent: (e) => bar.contains(e.target) || camera.contains(e.target),
             ignoreMutation: (m) => (m.type === 'selection' ? false : !body.contains(m.target)),
             update(n) {
               if (n.type !== node.type) return false;
