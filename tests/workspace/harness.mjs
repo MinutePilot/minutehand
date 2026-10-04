@@ -119,7 +119,8 @@ function tableApi(table, route, req, url, s, seen) {
   if (method === 'POST') {
     const list = Array.isArray(body) ? body : [body];
     const made = list.map((r) => ({ id: `${table}-${nextId++}`, created_at: new Date().toISOString(), status: 'planned',
-                                    meeting_date: null, start_time: null, location: null, ...r }));
+                                    meeting_date: null, start_time: null, location: null,
+                                    ...(table === 'agenda_items' ? { is_in_camera: false, public_title: null, public_summary: null } : {}), ...r }));
     s[store].push(...made);
     const prefer = req.headers()['prefer'] ?? '';
     if (!prefer.includes('return=representation')) return route.fulfill({ status: 201, headers: cors });
@@ -160,7 +161,7 @@ export async function open(browser, scenario = {}, { viewport = { width: 1280, h
 
   s.meetings = s.meetings.map((m, i) => ({ org_id: s.org?.id, status: 'planned', meeting_date: null, start_time: null, location: null,
                                            title: 'Meeting', created_at: `2026-02-01T00:00:0${i}Z`, id: `mt${i + 1}`, ...m }));
-  s.agenda = s.agenda.map((a, i) => ({ org_id: s.org?.id, sort_order: i, notes: '', created_at: `2026-02-01T00:01:0${i % 10}Z`, id: `ag${i + 1}`, ...a }));
+  s.agenda = s.agenda.map((a, i) => ({ org_id: s.org?.id, sort_order: i, notes: '', is_in_camera: false, public_title: null, public_summary: null, created_at: `2026-02-01T00:01:0${i % 10}Z`, id: `ag${i + 1}`, ...a }));
   s.motions = s.motions.map((m, i) => ({ org_id: s.org?.id, agenda_item_id: null, description: '', moved_by: null, seconded_by: null, mover_roster_id: null, seconder_roster_id: null,
                                          result: null, vote_tally: null, confirmed: true, sort_order: i, created_at: `2026-02-01T00:03:0${i % 10}Z`, id: `mo${i + 1}`, ...m }));
   s.actions = s.actions.map((a, i) => ({ org_id: s.org?.id, agenda_item_id: null, description: '', responsible_party: null, owner_roster_id: null, due_date_text: null,

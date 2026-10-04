@@ -4,13 +4,15 @@
   "type": "module",
   "description": "Developer-only browser tests for the workspace. Not part of the website.",
   "scripts": {
-    "test": "node shell.test.mjs && node roster.test.mjs && node meetings.test.mjs && node minutes.test.mjs && node motions.test.mjs && node chat.test.mjs",
+    "test": "node shell.test.mjs && node roster.test.mjs && node meetings.test.mjs && node minutes.test.mjs && node motions.test.mjs && node chat.test.mjs && node owner-copy.test.mjs && node in-camera.test.mjs",
     "test:shell": "node shell.test.mjs",
     "test:roster": "node roster.test.mjs",
     "test:meetings": "node meetings.test.mjs",
     "test:minutes": "node minutes.test.mjs",
     "test:motions": "node motions.test.mjs",
-    "test:chat": "node chat.test.mjs"
+    "test:chat": "node chat.test.mjs",
+    "test:owner-copy": "node owner-copy.test.mjs",
+    "test:in-camera": "node in-camera.test.mjs"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.0.0",
