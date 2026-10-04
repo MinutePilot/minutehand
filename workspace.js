@@ -135,6 +135,10 @@ function renderApp(user, org, role) {
   Minutes.init({
     client: supabaseClient, orgId: org.id, canManage, go: setView, openMeeting: (id) => Meetings.openMeeting(id),
     onMinutes: () => Chat.sync(),
+    openDraft: (id) => Draft.open(id), reopen: (id) => Draft.reopen(id),
+  });
+  Draft.init({
+    client: supabaseClient, canManage, go: setView, openMinutes: (id) => Minutes.open(id),
   });
   Chat.init({ client: supabaseClient });
   setView('meetings');
@@ -155,8 +159,8 @@ document.querySelectorAll('.pane-tabs [role="tab"]').forEach((tab) => {
 
 // ── What the main area shows: the meetings, one meeting, or the roster ──────
 
-const VIEW_LABELS = { meetings: 'Meetings', meeting: 'Meeting', minutes: 'Minutes', roster: 'Roster' };
-const MENU_FOR = { meetings: 'meetings', meeting: 'meetings', minutes: 'meetings', roster: 'roster' };
+const VIEW_LABELS = { meetings: 'Meetings', meeting: 'Meeting', minutes: 'Minutes', draft: 'Draft', roster: 'Roster' };
+const MENU_FOR = { meetings: 'meetings', meeting: 'meetings', minutes: 'meetings', draft: 'meetings', roster: 'roster' };
 
 function setView(name) {
   Object.keys(VIEW_LABELS).forEach((v) => $(`view-${v}`).classList.toggle('hidden', v !== name));

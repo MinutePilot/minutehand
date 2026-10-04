@@ -99,7 +99,8 @@ const Chat = (() => {
     // follow the cursor's agenda item; otherwise keep what was chosen, otherwise the first item
     select.value = c.currentId ?? (ids.includes(chosen) && !switched ? chosen : (ids[0] ?? ''));
 
-    if (!c.items.length) setEnabled(false, 'Add an agenda item to this meeting first');
+    if (c.locked) setEnabled(false, 'These minutes are approved. Reopen them to add more');
+    else if (!c.items.length) setEnabled(false, 'Add an agenda item to this meeting first');
     else setEnabled(true, 'What just happened?');
     if (switched) render();
   }

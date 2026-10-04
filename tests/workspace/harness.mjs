@@ -155,7 +155,7 @@ export async function open(browser, scenario = {}, { viewport = { width: 1280, h
                                        id: m.id ?? `m${i + 1}`, created_at: `2026-01-01T00:00:0${i}Z` }));
   const ctx = await browser.newContext({ viewport, locale: 'en-US', timezoneId: 'UTC' });
   const page = await ctx.newPage();
-  const seen = { tokenPosts: 0, orgCalls: 0, errors: [], pageErrors: [], rosterWrites: [], writes: [], chatCalls: [] };
+  const seen = { tokenPosts: 0, orgCalls: 0, errors: [], pageErrors: [], rosterWrites: [], writes: [], chatCalls: [], draftCalls: [] };
   page.on('console', (m) => { if (m.type() === 'error') seen.errors.push(m.text()); });
   page.on('pageerror', (e) => seen.pageErrors.push(String(e)));
 
@@ -201,6 +201,22 @@ export async function open(browser, scenario = {}, { viewport = { width: 1280, h
       if (s.chatDelay) await new Promise((r) => setTimeout(r, s.chatDelay));
       const out = typeof s.chat === 'function' ? await s.chat(body) : { body: { entries: [], unmatched: [] } };
       return json(route, out.body ?? out, out.status ?? 200);
+    }
+    // The draft-minutes function. s.draftFn is a function (body) -> { status, body } (or a plain body),
+    // or 'network'. s.draftDelay holds the answer back, in milliseconds.
+    if (url.pathname === '/functions/v1/draft-minutes') {
+      const body = JSON.parse(req.postData() ?? '{}');
+      seen.draftCalls.push({ body, authorization: req.headers()['authorization'] ?? null });
+      if (s.draftFn === 'network') return route.abort('failed');
+      if (s.draftDelay && body.action === 'draft') await new Promise((r) => setTimeout(r, s.draftDelay));
+      const out = typeof s.draftFn === 'function' ? await s.draftFn(body, s) : { body: {} };
+      return json(route, out.body ?? out, out.status ?? 200);
+    }
+    // Approved versions of the minutes: newest first.
+    if (url.pathname === '/rest/v1/meeting_versions') {
+      const id = url.searchParams.get('meeting_id')?.replace(/^eq\./, '');
+      const rows = (s.versions ?? []).filter((v) => !id || v.meeting_id === id).sort((a, b) => b.saved_at.localeCompare(a.saved_at));
+      return json(route, rows);
     }
     if (url.pathname === '/rest/v1/roster') return rosterApi(route, req, url, s, seen);
     if (url.pathname === '/rest/v1/meetings') return tableApi('meetings', route, req, url, s, seen);
