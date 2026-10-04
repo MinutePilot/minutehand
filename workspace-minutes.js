@@ -477,6 +477,7 @@ const Minutes = (() => {
     version = 0; flushedVersion = 0; flushing = false; again = false; blocked = false; retryDelay = 5000;
     $('editor').replaceChildren();
     $('minutes-draft').classList.add('hidden');
+    ctx?.onMinutes?.();
   }
 
   async function load(meetingId) {
@@ -546,6 +547,7 @@ const Minutes = (() => {
       extensions: blocks.extensions,
       content: built,
       onTransaction({ transaction }) {
+        if (transaction.selectionSet || transaction.docChanged) ctx.onMinutes?.();   // the chat follows the cursor's agenda item
         if (transaction.docChanged) blocks.refreshAll();               // e.g. a warning about someone recorded absent
         if (!transaction.docChanged || transaction.getMeta('fromSync')) return;
         version++;
@@ -557,8 +559,69 @@ const Minutes = (() => {
     });
 
     blocks.refreshAll();                                               // warnings need the attendance block, which now exists
+    ctx.onMinutes?.();
     const draft = readDraft();
     if (draft && JSON.stringify(draft.doc) !== JSON.stringify(built)) offerDraft(draft, built);
+  }
+
+  // ── The assistant (workspace-chat.js) ───────────────────────────────────────
+
+  // The agenda items the assistant can add to, and the one the cursor is in. Null when no
+  // minutes are open on screen.
+  function chatContext() {
+    if (!editor || !meeting || $('view-minutes').classList.contains('hidden')) return null;
+    const items = [];
+    let currentId = null;
+    const head = editor.state.selection.$from;
+    editor.state.doc.forEach((n) => {
+      if (n.type.name === 'section' && !n.attrs.virtual && n.attrs.rowId) items.push({ id: n.attrs.rowId, title: n.attrs.title, number: n.attrs.number });
+    });
+    for (let d = head.depth; d > 0; d--) {
+      const n = head.node(d);
+      if (n.type.name === 'section') { currentId = n.attrs.virtual ? null : n.attrs.rowId; break; }
+    }
+    return { meetingId: meeting.id, items, currentId };
+  }
+
+  // Puts what the assistant found into one agenda item, all unconfirmed. Notes go in the notes,
+  // motions and action items go at the end of the item. Returns how many of each were added.
+  function addEntries(agendaId, entries) {
+    const added = { note: 0, motion: 0, action: 0 };
+    if (!editor || !meeting) return added;
+    let at = null;
+    editor.state.doc.forEach((n, offset) => { if (n.type.name === 'section' && n.attrs.rowId === agendaId) at = { node: n, pos: offset }; });
+    if (!at) return added;
+
+    const schema = editor.schema;
+    const text = (t) => (t ? [{ type: 'text', text: t }] : undefined);
+    let tr = editor.state.tr;
+    for (const e of entries) {
+      // Look the section up again each time: the previous insert moved everything after it.
+      let sec = null;
+      tr.doc.forEach((n, offset) => { if (n.type.name === 'section' && n.attrs.rowId === agendaId) sec = { node: n, pos: offset }; });
+      const end = sec.pos + sec.node.nodeSize - 1;                    // just inside the section's end
+      if (e.kind === 'note') {
+        let lastNote = sec.pos + 1, lastNode = null;
+        sec.node.forEach((c, o) => { if (c.type.name === 'paragraph') { lastNote = sec.pos + 1 + o; lastNode = c; } });
+        if (lastNode && lastNode.content.size === 0) tr = tr.insertText(e.text, lastNote + 1);
+        else tr = tr.insert(lastNote + (lastNode ? lastNode.nodeSize : 0), schema.nodeFromJSON({ type: 'paragraph', content: text(e.text) }));
+        added.note++;
+      } else if (e.kind === 'motion') {
+        tr = tr.insert(end, schema.nodeFromJSON({
+          type: 'motion', content: text(e.text),
+          attrs: { ...Blocks.MOTION_DEFAULTS, key: Blocks.newKey(), mover: e.mover ?? '', seconder: e.seconder ?? '', result: e.result ?? '', votes: e.votes ?? '' },
+        }));
+        added.motion++;
+      } else if (e.kind === 'action') {
+        tr = tr.insert(end, schema.nodeFromJSON({
+          type: 'action', content: text(e.text),
+          attrs: { ...Blocks.ACTION_DEFAULTS, key: Blocks.newKey(), owner: e.owner ?? '', due: e.due ?? '' },
+        }));
+        added.action++;
+      }
+    }
+    editor.view.dispatch(tr.setMeta('allowBlockChange', true).setMeta('addToHistory', false));
+    return added;
   }
 
   // ── Public ─────────────────────────────────────────────────────────────────
@@ -577,5 +640,5 @@ const Minutes = (() => {
     });
   }
 
-  return { init, open, flushNow };
+  return { init, open, flushNow, chatContext, addEntries };
 })();

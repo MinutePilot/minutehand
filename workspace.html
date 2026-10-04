@@ -72,14 +72,17 @@
 
       <section id="pane-chat" class="pane pane-chat" aria-label="Chat">
         <h2 class="pane-title">Assistant</h2>
-        <div id="chat-log" class="chat-log" aria-live="polite">
-          <p class="bubble bot">During a meeting, you will be able to tell me what happened here, for example &ldquo;Dana moved to approve the budget, Lee seconded, carried&rdquo;, and I will add it to the minutes for you to confirm.</p>
-          <p class="bubble bot">This part is still being built.</p>
-        </div>
+        <div id="chat-log" class="chat-log" aria-live="polite"></div>
         <form id="chat-form" class="chat-form">
-          <label for="chat-input" class="visually-hidden">Message</label>
-          <input id="chat-input" type="text" placeholder="Coming soon" disabled>
-          <button type="submit" class="btn-primary" disabled>Send</button>
+          <div class="chat-target">
+            <label for="chat-target">Add to</label>
+            <select id="chat-target" disabled></select>
+          </div>
+          <div class="chat-send">
+            <label for="chat-input" class="visually-hidden">Message</label>
+            <input id="chat-input" type="text" maxlength="1000" autocomplete="off" disabled>
+            <button id="chat-send" type="submit" class="btn-primary" disabled>Send</button>
+          </div>
         </form>
       </section>
 
@@ -283,6 +286,7 @@
   <script src="workspace-meetings.js"></script>
   <script src="workspace-blocks.js"></script>
   <script src="workspace-minutes.js"></script>
+  <script src="workspace-chat.js"></script>
   <script src="workspace.js"></script>
 </body>
 </html>

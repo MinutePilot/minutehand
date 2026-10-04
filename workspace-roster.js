@@ -282,6 +282,7 @@ const Roster = (() => {
     closeForm();
     setStatus('');
     render();
+    $('roster-count').textContent = '';          // not known until the first load, so do not claim "0 members"
     if (wired) return;
     wired = true;
     $('roster-add').addEventListener('click', () => openForm());

@@ -134,7 +134,9 @@ function renderApp(user, org, role) {
   });
   Minutes.init({
     client: supabaseClient, orgId: org.id, canManage, go: setView, openMeeting: (id) => Meetings.openMeeting(id),
+    onMinutes: () => Chat.sync(),
   });
+  Chat.init({ client: supabaseClient });
   setView('meetings');
 }
 
@@ -167,6 +169,7 @@ function setView(name) {
   setPane('doc');                       // on a phone, jump to the main area
   if (name === 'meetings') Meetings.openList();
   if (name === 'roster') Roster.open();
+  Chat.sync();
 }
 
 document.querySelectorAll('.menu-item[data-view]').forEach((b) => {

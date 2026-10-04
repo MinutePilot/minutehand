@@ -154,7 +154,7 @@ export async function open(browser, scenario = {}, { viewport = { width: 1280, h
                                        id: m.id ?? `m${i + 1}`, created_at: `2026-01-01T00:00:0${i}Z` }));
   const ctx = await browser.newContext({ viewport, locale: 'en-US', timezoneId: 'UTC' });
   const page = await ctx.newPage();
-  const seen = { tokenPosts: 0, orgCalls: 0, errors: [], pageErrors: [], rosterWrites: [], writes: [] };
+  const seen = { tokenPosts: 0, orgCalls: 0, errors: [], pageErrors: [], rosterWrites: [], writes: [], chatCalls: [] };
   page.on('console', (m) => { if (m.type() === 'error') seen.errors.push(m.text()); });
   page.on('pageerror', (e) => seen.pageErrors.push(String(e)));
 
@@ -190,6 +190,16 @@ export async function open(browser, scenario = {}, { viewport = { width: 1280, h
       seen.orgCalls++;
       if (s.failOrg) return route.abort('failed');
       return json(route, s.org ? [{ role: s.role, organizations: s.org }] : []);
+    }
+    // The chat-entry function. s.chat is a function (body, headers) -> { status, body } (or a plain
+    // body), or 'network' to fail the connection. s.chatDelay holds the answer back, in milliseconds.
+    if (url.pathname === '/functions/v1/chat-entry') {
+      const body = JSON.parse(req.postData() ?? '{}');
+      seen.chatCalls.push({ body, authorization: req.headers()['authorization'] ?? null });
+      if (s.chat === 'network') return route.abort('failed');
+      if (s.chatDelay) await new Promise((r) => setTimeout(r, s.chatDelay));
+      const out = typeof s.chat === 'function' ? await s.chat(body) : { body: { entries: [], unmatched: [] } };
+      return json(route, out.body ?? out, out.status ?? 200);
     }
     if (url.pathname === '/rest/v1/roster') return rosterApi(route, req, url, s, seen);
     if (url.pathname === '/rest/v1/meetings') return tableApi('meetings', route, req, url, s, seen);
