@@ -5,4 +5,4 @@ export { default as Document } from '@tiptap/extension-document';
 export { default as Paragraph } from '@tiptap/extension-paragraph';
 export { default as Text } from '@tiptap/extension-text';
 export { UndoRedo } from '@tiptap/extensions';
-export { Plugin, PluginKey } from '@tiptap/pm/state';
+export { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
