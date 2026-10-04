@@ -52,15 +52,14 @@
     <div class="pane-tabs" role="tablist" aria-label="Workspace sections">
       <button type="button" role="tab" data-pane="menu" aria-selected="false">Menu</button>
       <button type="button" role="tab" data-pane="chat" aria-selected="false">Chat</button>
-      <button type="button" role="tab" data-pane="doc"  aria-selected="true">Minutes</button>
+      <button type="button" role="tab" data-pane="doc"  aria-selected="true">Meetings</button>
     </div>
 
     <div class="panes">
       <nav id="pane-menu" class="pane pane-menu" aria-label="Menu">
         <h2>Meetings</h2>
         <ul>
-          <li><button type="button" class="menu-item is-current" data-view="minutes" aria-current="page">All meetings</button></li>
-          <li><button type="button" class="menu-item" disabled>Agenda <span class="soon">soon</span></button></li>
+          <li><button type="button" class="menu-item is-current" data-view="meetings" aria-current="page">All meetings</button></li>
         </ul>
         <h2>Records</h2>
         <ul>
@@ -85,9 +84,109 @@
       </section>
 
       <section id="pane-doc" class="pane pane-doc" aria-label="Main">
-        <div id="view-minutes" class="view">
-          <h2 class="pane-title">Minutes</h2>
-          <div id="editor" class="editor"></div>
+        <div id="view-meetings" class="view">
+          <h2 class="pane-title">Meetings</h2>
+          <div class="page">
+            <div class="page-head">
+              <p id="meetings-count" class="page-count"></p>
+              <button id="meeting-new" type="button" class="btn-primary">New meeting</button>
+            </div>
+
+            <form id="meeting-form" class="panel-form hidden" novalidate>
+              <h3>New meeting</h3>
+              <div class="form-grid">
+                <div class="span-2">
+                  <label for="mf-title">Title</label>
+                  <input id="mf-title" type="text" maxlength="120" autocomplete="off">
+                </div>
+                <div>
+                  <label for="mf-date">Date <span class="required">(required)</span></label>
+                  <input id="mf-date" type="date">
+                </div>
+                <div>
+                  <label for="mf-time">Start time <span class="optional">(optional)</span></label>
+                  <input id="mf-time" type="time">
+                </div>
+                <div class="span-2">
+                  <label for="mf-place">Place <span class="optional">(optional)</span></label>
+                  <input id="mf-place" type="text" maxlength="200" autocomplete="off" placeholder="e.g. Amenity room, 4820 Oak Street">
+                </div>
+              </div>
+              <label class="check"><input id="mf-remember" type="checkbox"> Remember this time and place for next time</label>
+              <p id="meeting-form-error" class="error hidden" role="alert"></p>
+              <div class="form-actions">
+                <button id="meeting-create" type="submit" class="btn-primary">Create meeting</button>
+                <button id="meeting-form-cancel" type="button" class="btn-ghost">Cancel</button>
+              </div>
+              <p class="hint">The standard agenda for your kind of organization is added for you, and you can change it.</p>
+            </form>
+
+            <div id="meetings-status" class="status hidden" role="status"></div>
+            <p id="meetings-empty" class="empty hidden">No meetings yet. Create one and the standard agenda is built for you.</p>
+            <ul id="meetings-list" class="meeting-list"></ul>
+            <p class="hint">Minutes made with the original generator are still in the <a href="board.html">Board Plan dashboard</a>.</p>
+          </div>
+        </div>
+
+        <div id="view-meeting" class="view hidden">
+          <h2 class="pane-title">Meeting</h2>
+          <div class="page">
+            <button id="meeting-back" type="button" class="btn-link">&larr; All meetings</button>
+            <div id="meeting-status" class="status hidden" role="status"></div>
+
+            <section class="meeting-details" aria-labelledby="meeting-heading">
+              <div class="title-row">
+                <h3 id="meeting-heading"></h3>
+                <span id="meeting-badge" class="badge"></span>
+              </div>
+              <p id="meeting-summary" class="meeting-summary"></p>
+              <button id="meeting-edit" type="button" class="btn-ghost btn-small">Edit details</button>
+
+              <form id="meeting-edit-form" class="panel-form hidden" novalidate>
+                <div class="form-grid">
+                  <div class="span-2">
+                    <label for="me-title">Title</label>
+                    <input id="me-title" type="text" maxlength="120" autocomplete="off">
+                  </div>
+                  <div>
+                    <label for="me-date">Date <span class="required">(required)</span></label>
+                    <input id="me-date" type="date">
+                  </div>
+                  <div>
+                    <label for="me-time">Start time <span class="optional">(optional)</span></label>
+                    <input id="me-time" type="time">
+                  </div>
+                  <div class="span-2">
+                    <label for="me-place">Place <span class="optional">(optional)</span></label>
+                    <input id="me-place" type="text" maxlength="200" autocomplete="off">
+                  </div>
+                </div>
+                <p id="meeting-edit-error" class="error hidden" role="alert"></p>
+                <div class="form-actions">
+                  <button id="meeting-edit-save" type="submit" class="btn-primary">Save</button>
+                  <button id="meeting-edit-cancel" type="button" class="btn-ghost">Cancel</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="agenda" aria-labelledby="agenda-heading">
+              <h3 id="agenda-heading">Agenda</h3>
+              <p id="agenda-empty" class="empty hidden">
+                The agenda is empty.
+                <button id="agenda-standard" type="button" class="btn-ghost btn-small">Use the standard agenda</button>
+              </p>
+              <ol id="agenda-list" class="agenda-list"></ol>
+              <form id="agenda-add-form" class="agenda-add" novalidate>
+                <label for="agenda-add-input" class="visually-hidden">New agenda item</label>
+                <input id="agenda-add-input" type="text" maxlength="200" autocomplete="off" placeholder="Add an item, for example Roof repair quotes">
+                <button id="agenda-add-btn" type="submit" class="btn-primary">Add item</button>
+              </form>
+              <p id="agenda-error" class="error hidden" role="alert"></p>
+            </section>
+
+            <p class="hint">Running the meeting from this agenda comes in the next step.</p>
+            <div id="meeting-delete-area" class="delete-area"></div>
+          </div>
         </div>
 
         <div id="view-roster" class="view hidden">
@@ -161,8 +260,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="config.js"></script>
-  <script src="vendor/tiptap.bundle.js"></script>
+  <script src="workspace-ui.js"></script>
+  <script src="workspace-agenda-templates.js"></script>
   <script src="workspace-roster.js"></script>
+  <script src="workspace-meetings.js"></script>
   <script src="workspace.js"></script>
 </body>
 </html>

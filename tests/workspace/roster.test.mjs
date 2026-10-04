@@ -29,12 +29,12 @@ async function fillForm(page, v) {
 }
 
 console.log('Getting there');
-await test('the menu opens the roster and the minutes come back from All meetings', async () => {
+await test('the menu opens the roster and the meetings come back from All meetings', async () => {
   const { page, ctx } = await openRoster();
-  assert.equal(await visible(page, '#view-minutes'), false);
+  assert.equal(await visible(page, '#view-meetings'), false);
   assert.equal(await page.locator('.menu-item[data-view=roster]').getAttribute('aria-current'), 'page');
-  await page.click('.menu-item[data-view=minutes]');
-  assert.equal(await visible(page, '#view-minutes'), true);
+  await page.click('.menu-item[data-view=meetings]');
+  assert.equal(await visible(page, '#view-meetings'), true);
   assert.equal(await visible(page, '#view-roster'), false);
   await ctx.close();
 });

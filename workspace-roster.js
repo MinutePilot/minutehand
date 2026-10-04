@@ -25,23 +25,7 @@ const Roster = (() => {
     return error && (error.code === '42501' || error.status === 403) ? MSG.perm : MSG.save;
   }
 
-  function setStatus(text, retry) {
-    const box = $('roster-status');
-    box.replaceChildren();
-    if (!text) { box.classList.add('hidden'); return; }
-    const p = document.createElement('p');
-    p.textContent = text;
-    box.appendChild(p);
-    if (retry) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'btn-ghost';
-      b.textContent = 'Try again';
-      b.addEventListener('click', retry);
-      box.appendChild(b);
-    }
-    box.classList.remove('hidden');
-  }
+  const setStatus = (text, retry) => UI.setStatus($('roster-status'), text, retry);
 
   // ── Data ───────────────────────────────────────────────────────────────────
 
@@ -90,16 +74,8 @@ const Roster = (() => {
     return '';
   }
 
-  function button(label, aria, onClick, { primary = false, disabled = false } = {}) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = primary ? 'btn-primary btn-small' : 'btn-ghost btn-small';
-    b.textContent = label;
-    b.setAttribute('aria-label', aria);
-    b.disabled = disabled || busy;
-    b.addEventListener('click', onClick);
-    return b;
-  }
+  const button = (label, aria, onClick, { primary = false, disabled = false } = {}) =>
+    UI.button(label, aria, onClick, { primary, disabled: disabled || busy });
 
   function item(m, index, count, isFormer) {
     const li = document.createElement('li');
