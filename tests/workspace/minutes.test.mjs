@@ -33,8 +33,10 @@ async function openMinutes(scenario = {}, opts, { firstInList = false } = {}) {
   await t.page.waitForSelector('.doc-section');
   return t;
 }
-const notes = (page, n) => page.locator('.doc-notes').nth(n);
-const noteText = async (page, n) => (await notes(page, n).innerText()).trim();   // an empty paragraph reads as a line break
+const section = (page, n) => page.locator('.doc-section').nth(n);
+const noteParas = (page, n) => section(page, n).locator('.doc-section-body > p');
+const notes = (page, n) => noteParas(page, n).first();                      // where to click to type
+const noteText = async (page, n) => (await noteParas(page, n).allInnerTexts()).join('\n').trim();   // an empty paragraph reads as a line break
 async function typeNotes(page, n, text) {
   await notes(page, n).click();
   await page.keyboard.type(text);
@@ -63,8 +65,8 @@ await test('opening the minutes of a meeting that is already running does not ch
 
 await test('notes already saved are shown, one paragraph per line', async () => {
   const { page, ctx } = await openMinutes({ agenda: AGENDA.map((a, i) => (i === 1 ? { ...a, notes: 'First line\nSecond line' } : a)) });
-  assert.deepEqual(await notes(page, 1).locator('p').allInnerTexts(), ['First line', 'Second line']);
-  assert.equal(await notes(page, 0).locator('p').count(), 1);
+  assert.deepEqual(await noteParas(page, 1).allInnerTexts(), ['First line', 'Second line']);
+  assert.equal(await noteParas(page, 0).count(), 1);
   await ctx.close();
 });
 

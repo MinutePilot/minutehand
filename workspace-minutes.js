@@ -1,22 +1,21 @@
-// MinuteHand workspace: step 5 (first half), the minutes document.
+// MinuteHand workspace: step 5, the minutes document.
 // One document per meeting, built from the database rows: a header, an attendance
-// block, and a section for each agenda item with a notes area. Edits save by
-// themselves, and anything not yet saved is also kept in this browser.
-// Motions and action items join the document in the next pull request.
+// block, and for each agenda item a notes area with its motions and action items
+// (see workspace-blocks.js for the blocks themselves). Edits save by themselves, and
+// anything not yet saved is also kept in this browser.
 //
 // The rows in the database are the source of truth. The document only carries the
-// row ids it needs, and a small guard keeps the header, attendance block and agenda
-// sections from being deleted by typing, so a stray Select All and Delete cannot
-// remove them. Text from the database is written with textContent, never as HTML.
+// row ids it needs. Text from the database is written with textContent, never as HTML.
 
 const Minutes = (() => {
   const $ = (id) => document.getElementById(id);
 
   let ctx = null;              // { client, orgId, canManage, go(view), openMeeting(id) }
   let editor = null;
+  let blocks = null;           // the block definitions for the open editor
   let meeting = null;
   let roster = [];
-  let saved = null;            // what the database holds: { notes: Map, attendance: Map }
+  let saved = null;            // what the database holds
   let loadSeq = 0;             // lets a late answer from an older open() be ignored
 
   let version = 0;             // counts edits made by the person
@@ -87,207 +86,90 @@ const Minutes = (() => {
     ));
   }
 
-  // ── The blocks ─────────────────────────────────────────────────────────────
+  // ── Motions and action items: document nodes <-> database rows ─────────────
 
-  const Header = TT.Node.create({
-    name: 'header', group: 'block', atom: true, selectable: false, draggable: false,
-    addAttributes() { return { title: { default: '' }, meta: { default: '' } }; },
-    parseHTML() { return [{ tag: 'header[data-type="header"]' }]; },
-    renderHTML() { return ['header', { 'data-type': 'header' }]; },
-    addNodeView() {
-      return ({ node }) => {
-        const dom = el('header', 'doc-header');
-        dom.contentEditable = 'false';
-        const h1 = el('h1', null, node.attrs.title);
-        const meta = el('p', 'doc-meta', node.attrs.meta);
-        dom.append(h1, meta);
-        return {
-          dom,
-          update(n) {
-            if (n.type !== node.type) return false;
-            h1.textContent = n.attrs.title;
-            meta.textContent = n.attrs.meta;
-            return true;
-          },
-        };
-      };
-    },
+  const oneLine = (text) => (text ?? '').replace(/\s+/g, ' ').trim();
+  const textNode = (text) => (text ? [{ type: 'text', text }] : []);
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const longDate = (iso) => { const [y, m, d] = iso.split('-').map(Number); return `${MONTHS[m - 1]} ${d}, ${y}`; };
+
+  // The comparable shape of a motion, from a database row or from a document node.
+  const motionFromRow = (r) => ({
+    description: oneLine(r.description), moved_by: r.moved_by || null, seconded_by: r.seconded_by || null,
+    mover_roster_id: r.mover_roster_id || null, seconder_roster_id: r.seconder_roster_id || null,
+    result: r.result || null, vote_tally: r.vote_tally || null, confirmed: Boolean(r.confirmed), agenda_item_id: r.agenda_item_id ?? null,
   });
-
-  const Section = TT.Node.create({
-    name: 'section', group: 'block', content: 'paragraph+', isolating: true, defining: true,
-    addAttributes() { return { rowId: { default: null }, number: { default: 1 }, title: { default: '' } }; },
-    parseHTML() { return [{ tag: 'section[data-type="section"]' }]; },
-    renderHTML() { return ['section', { 'data-type': 'section' }, 0]; },
-    addNodeView() {
-      return ({ node }) => {
-        const dom = el('section', 'doc-section');
-        const heading = el('h2', 'doc-section-title', `${node.attrs.number}. ${node.attrs.title}`);
-        heading.contentEditable = 'false';
-        const notes = el('div', 'doc-notes');
-        dom.append(heading, notes);
-        return {
-          dom,
-          contentDOM: notes,
-          update(n) {
-            if (n.type !== node.type) return false;
-            heading.textContent = `${n.attrs.number}. ${n.attrs.title}`;
-            return true;
-          },
-        };
-      };
-    },
-  });
-
-  const Attendance = TT.Node.create({
-    name: 'attendance', group: 'block', atom: true, selectable: false, draggable: false,
-    addAttributes() { return { entries: { default: [] } }; },
-    parseHTML() { return [{ tag: 'section[data-type="attendance"]' }]; },
-    renderHTML() { return ['section', { 'data-type': 'attendance' }]; },
-    addNodeView() {
-      return ({ node: first, getPos, editor: ed }) => attendanceView(first, getPos, ed);
-    },
-  });
-
-  const STATUS_OPTIONS = [['', 'Not recorded'], ['present', 'Present'], ['regrets', 'Regrets'], ['absent', 'Absent']];
-
-  function attendanceView(first, getPos, ed) {
-    let node = first;
-    const dom = el('section', 'att');
-    dom.contentEditable = 'false';
-
-    const head = el('div', 'att-head');
-    const everyone = UI.button('Everyone on the roster is here', null, () => {
-      write(node.attrs.entries.map((e) => (!e.guest && e.status === '' ? { ...e, status: 'present' } : e)));
-    });
-    head.append(el('h2', 'att-title', 'Attendance'), everyone);
-
-    const list = el('ul', 'att-list');
-
-    const form = el('form', 'att-guest');
-    form.noValidate = true;
-    const guestName = el('input');
-    guestName.type = 'text'; guestName.maxLength = 120; guestName.placeholder = 'Guest name';
-    guestName.setAttribute('aria-label', 'Guest name');
-    const guestLot = el('input');
-    guestLot.type = 'text'; guestLot.maxLength = 40; guestLot.placeholder = 'Lot they represent (if a proxy)';
-    guestLot.setAttribute('aria-label', 'Lot the guest represents, if they are a proxy');
-    const guestAdd = UI.button('Add guest', null, () => {}, { primary: true });
-    guestAdd.type = 'submit';
-    const guestError = el('p', 'error hidden');
-    guestError.setAttribute('role', 'alert');
-    form.append(guestName, guestLot, guestAdd);
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const name = guestName.value.trim().replace(/\s+/g, ' ');
-      if (!name) { guestError.textContent = 'Type the guest’s name first.'; guestError.classList.remove('hidden'); return; }
-      guestError.classList.add('hidden');
-      const lot = guestLot.value.trim().replace(/\s+/g, ' ');
-      const key = `g:new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      write([...node.attrs.entries, { k: key, id: null, roster_id: null, name, role: '', status: 'present',
-                                      proxy_for_lot: lot || null, guest: true, former: false }]);
-      guestName.value = ''; guestLot.value = '';
-      guestName.focus();
-    });
-
-    dom.append(head, list, form, guestError);
-
-    function write(entries) {
-      const pos = getPos();
-      if (typeof pos !== 'number') return;
-      ed.view.dispatch(ed.state.tr
-        .setNodeMarkup(pos, undefined, { ...node.attrs, entries })
-        .setMeta('addToHistory', false));
-    }
-
-    function render() {
-      const entries = node.attrs.entries;
-      everyone.classList.toggle('hidden', !entries.some((e) => !e.guest && e.status === ''));
-      if (entries.length === 0) {
-        list.replaceChildren(el('li', 'att-empty', 'No one is on the roster yet. Add members on the Roster screen, or add guests below.'));
-        return;
-      }
-      list.replaceChildren(...entries.map((e) => {
-        const li = el('li', 'att-item');
-        li.dataset.key = e.k;
-        const label = el('span', 'att-name');
-        label.append(el('strong', null, e.name));
-        const bits = [e.role, e.former && 'former member', e.guest && (e.proxy_for_lot ? `guest, proxy for Lot ${e.proxy_for_lot.replace(/^lot\s+/i, '')}` : 'guest')].filter(Boolean);
-        if (bits.length) label.append(el('span', 'att-meta', bits.join(' · ')));
-        li.appendChild(label);
-
-        if (!e.guest) {
-          const select = el('select');
-          select.setAttribute('aria-label', `Attendance for ${e.name}`);
-          STATUS_OPTIONS.forEach(([value, text]) => {
-            // Only an admin can clear a saved record, because only an admin can delete rows.
-            if (value === '' && e.id && !ctx.canManage) return;
-            const opt = el('option', null, text);
-            opt.value = value;
-            select.appendChild(opt);
-          });
-          select.value = e.status;
-          select.addEventListener('change', () => {
-            write(node.attrs.entries.map((x) => (x.k === e.k ? { ...x, status: select.value } : x)));
-          });
-          li.appendChild(select);
-        } else if (ctx.canManage || !e.id) {
-          li.appendChild(UI.button('Remove', `Remove ${e.name}`, () => write(node.attrs.entries.filter((x) => x.k !== e.k))));
-        }
-        return li;
-      }));
-    }
-    render();
-
+  const motionFromNode = (node, agendaId) => {
+    const a = node.attrs;
     return {
-      dom,
-      stopEvent: () => true,
-      ignoreMutation: () => true,
-      update(n) {
-        if (n.type !== node.type) return false;
-        node = n;
-        render();
-        return true;
-      },
+      description: oneLine(node.textContent), moved_by: a.moverName || null, seconded_by: a.seconderName || null,
+      mover_roster_id: a.mover || null, seconder_roster_id: a.seconder || null,
+      result: a.result || null, vote_tally: a.votes.trim() || null, confirmed: Boolean(a.confirmed), agenda_item_id: agendaId,
     };
-  }
+  };
+  const actionFromRow = (r) => ({
+    description: oneLine(r.description), responsible_party: r.responsible_party || null, owner_roster_id: r.owner_roster_id || null,
+    due_date_text: r.due_date_text || null, due_date_parsed: r.due_date_parsed || null,
+    confirmed: Boolean(r.confirmed), agenda_item_id: r.agenda_item_id ?? null,
+  });
+  const actionFromNode = (node, agendaId) => {
+    const a = node.attrs;
+    return {
+      description: oneLine(node.textContent), responsible_party: a.ownerName || null, owner_roster_id: a.owner || null,
+      due_date_text: a.due ? longDate(a.due) : (a.dueText || null), due_date_parsed: a.due || null,
+      confirmed: Boolean(a.confirmed), agenda_item_id: agendaId,
+    };
+  };
 
-  // Header, attendance and sections may be typed in but never deleted or added by typing.
-  const Guard = TT.Extension.create({
-    name: 'structureGuard',
-    addProseMirrorPlugins() {
-      const count = (doc) => {
-        const n = { header: 0, attendance: 0, section: 0 };
-        doc.forEach((child) => { if (child.type.name in n) n[child.type.name]++; });
-        return n;
-      };
-      return [new TT.Plugin({
-        key: new TT.PluginKey('structureGuard'),
-        filterTransaction(tr, state) {
-          if (!tr.docChanged) return true;
-          const a = count(state.doc);
-          const b = count(tr.doc);
-          return a.header === b.header && a.attendance === b.attendance && a.section === b.section;
-        },
-      })];
-    },
+  const motionNode = (r) => ({
+    type: 'motion',
+    attrs: { rowId: r.id, key: `m:${r.id}`, mover: r.mover_roster_id ?? '', moverName: r.moved_by ?? '',
+             seconder: r.seconder_roster_id ?? '', seconderName: r.seconded_by ?? '', result: r.result ?? '',
+             votes: r.vote_tally ?? '', confirmed: Boolean(r.confirmed) },
+    content: textNode(oneLine(r.description)),
+  });
+  const actionNode = (r) => ({
+    type: 'action',
+    attrs: { rowId: r.id, key: `a:${r.id}`, owner: r.owner_roster_id ?? '', ownerName: r.responsible_party ?? '',
+             due: r.due_date_parsed ?? '', dueText: r.due_date_parsed ? '' : (r.due_date_text ?? ''), confirmed: Boolean(r.confirmed) },
+    content: textNode(oneLine(r.description)),
   });
 
-  const MinutesDocument = TT.Document.extend({ content: 'header attendance section*' });
-
-  // ── Building and reading the document ──────────────────────────────────────
+  // ── Building the document ──────────────────────────────────────────────────
 
   const paragraphs = (text) => (text ?? '').split('\n').map((line) => (
     line ? { type: 'paragraph', content: [{ type: 'text', text: line }] } : { type: 'paragraph' }
   ));
 
-  function buildDoc(mtg, agenda, entries) {
+  // The motions and action items for one agenda item, in the order they were added.
+  function blocksFor(agendaId, motions, actions) {
+    return [
+      ...motions.filter((m) => (m.agenda_item_id ?? null) === agendaId).map((r) => ({ order: r.sort_order, node: motionNode(r) })),
+      ...actions.filter((a) => (a.agenda_item_id ?? null) === agendaId).map((r) => ({ order: r.sort_order, node: actionNode(r) })),
+    ].sort((x, y) => x.order - y.order).map((b) => b.node);
+  }
+
+  function buildDoc(mtg, agenda, entries, motions, actions) {
+    const ids = new Set(agenda.map((a) => a.id));
+    const sections = agenda.map((a, i) => ({
+      type: 'section', attrs: { rowId: a.id, number: i + 1, title: a.title },
+      content: [...paragraphs(a.notes), ...blocksFor(a.id, motions, actions)],
+    }));
+    // Anything whose agenda item was removed is still shown, so nothing is ever hidden.
+    const stray = (r) => !ids.has(r.agenda_item_id);
+    if (motions.some(stray) || actions.some(stray)) {
+      sections.push({
+        type: 'section', attrs: { rowId: null, number: 0, title: 'Other items', virtual: true },
+        content: [{ type: 'paragraph' }, ...blocksFor(null, motions.filter(stray).map((m) => ({ ...m, agenda_item_id: null })),
+                                                      actions.filter(stray).map((a) => ({ ...a, agenda_item_id: null })))],
+      });
+    }
     return {
       type: 'doc',
       content: [
         { type: 'header', attrs: { title: mtg.title || 'Untitled meeting', meta: Meetings.summary(mtg) } },
         { type: 'attendance', attrs: { entries } },
-        ...agenda.map((a, i) => ({ type: 'section', attrs: { rowId: a.id, number: i + 1, title: a.title }, content: paragraphs(a.notes) })),
+        ...sections,
       ],
     };
   }
@@ -295,20 +177,43 @@ const Minutes = (() => {
   // What the document currently says, in the shape the database holds it.
   function derive(doc) {
     const notes = new Map();
+    const motions = [];
+    const actions = [];
     let entries = [];
-    doc.forEach((node) => {
+    doc.forEach((node, offset) => {
       if (node.type.name === 'section') {
+        const agendaId = node.attrs.rowId;
         const lines = [];
-        node.forEach((p) => lines.push(p.textContent));
-        notes.set(node.attrs.rowId, lines.join('\n'));
+        node.forEach((child, childOffset) => {
+          const pos = offset + 1 + childOffset;            // where it sits in the document, to keep new rows in order
+          if (child.type.name === 'paragraph') lines.push(child.textContent);
+          else if (child.type.name === 'motion') motions.push({ pos, key: child.attrs.key, id: child.attrs.rowId, row: motionFromNode(child, agendaId) });
+          else if (child.type.name === 'action') actions.push({ pos, key: child.attrs.key, id: child.attrs.rowId, row: actionFromNode(child, agendaId) });
+        });
+        if (agendaId) notes.set(agendaId, lines.join('\n'));
       } else if (node.type.name === 'attendance') {
         entries = node.attrs.entries;
       }
     });
-    return { notes, entries };
+    return { notes, entries, motions, actions };
   }
 
   // ── Saving ─────────────────────────────────────────────────────────────────
+
+  const sameRow = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+  // A block nobody has typed anything into yet is not worth a row.
+  const isBlankRow = (r) => !r.description && !r.moved_by && !r.seconded_by && !r.mover_roster_id && !r.seconder_roster_id
+    && !r.result && !r.vote_tally && !r.responsible_party && !r.owner_roster_id && !r.due_date_text && !r.due_date_parsed;
+
+  function planBlocks(desired, savedMap) {
+    const keep = new Set(desired.filter((d) => d.id).map((d) => d.id));
+    return {
+      updates: desired.filter((d) => d.id && savedMap.has(d.id) && !sameRow(savedMap.get(d.id), d.row)),
+      deletes: [...savedMap.keys()].filter((id) => !keep.has(id)),
+      inserts: desired.filter((d) => !d.id && !isBlankRow(d.row)),
+    };
+  }
 
   function plan(desired) {
     const noteUpdates = [];
@@ -328,10 +233,46 @@ const Minutes = (() => {
       }
     });
     const deletes = [...saved.attendance.keys()].filter((id) => !keep.has(id));
-    return { noteUpdates, updates, deletes, inserts, empty: !noteUpdates.length && !updates.length && !deletes.length && !inserts.length };
+
+    const m = planBlocks(desired.motions, saved.motions);
+    const a = planBlocks(desired.actions, saved.actions);
+    return {
+      noteUpdates, updates, deletes, inserts, motions: m, actions: a,
+      empty: !noteUpdates.length && !updates.length && !deletes.length && !inserts.length
+        && ![m, a].some((p) => p.updates.length || p.deletes.length || p.inserts.length),
+    };
   }
 
-  async function apply(p) {
+  // Updates, then deletes, then inserts, for one table of blocks.
+  async function applyBlocks(table, p, savedMap, rememberFor, order) {
+    const db = ctx.client;
+    for (const u of p.updates) {
+      const { error } = await db.from(table).update(u.row).eq('id', u.id);
+      if (error) throw error;
+      savedMap.set(u.id, u.row);
+    }
+    for (const id of p.deletes) {
+      const { error } = await db.from(table).delete().eq('id', id);
+      if (error) throw error;
+      savedMap.delete(id);
+    }
+    if (p.inserts.length) {
+      const { data, error } = await db.from(table)
+        .insert(p.inserts.map((d) => ({ ...d.row, meeting_id: meeting.id, org_id: ctx.orgId, sort_order: order.get(d.key) })))
+        .select('id');
+      if (error) throw error;
+      const ids = new Map();
+      p.inserts.forEach((d, i) => {
+        const id = data?.[i]?.id;
+        if (!id) return;
+        ids.set(d.key, id);
+        savedMap.set(id, d.row);
+      });
+      rememberFor(ids);
+    }
+  }
+
+  async function apply(p, desired) {
     const db = ctx.client;
     for (const u of p.updates) {
       const { error } = await db.from('attendance')
@@ -357,18 +298,27 @@ const Minutes = (() => {
         ids.set(r.key, id);
         saved.attendance.set(id, { roster_id: r.roster_id, display_name: r.display_name, status: r.status, proxy_for_lot: r.proxy_for_lot });
       });
-      rememberIds(ids);
+      rememberEntryIds(ids);
     }
     for (const n of p.noteUpdates) {
       const { error } = await db.from('agenda_items').update({ notes: n.text }).eq('id', n.rowId);
       if (error) throw error;
       saved.notes.set(n.rowId, n.text);
     }
+
+    // New motions and action items take the next order numbers, in the order they appear.
+    const order = new Map();
+    let next = saved.maxOrder + 1;
+    [...p.motions.inserts, ...p.actions.inserts].sort((x, y) => x.pos - y.pos)
+      .forEach((d) => { order.set(d.key, next++); });
+    await applyBlocks('motions', p.motions, saved.motions, (ids) => rememberBlockIds(ids), order);
+    await applyBlocks('action_items', p.actions, saved.actions, (ids) => rememberBlockIds(ids), order);
+    saved.maxOrder = Math.max(saved.maxOrder, next - 1);
   }
 
-  // New rows get their ids written back into the attendance block, matched by key
-  // so changes made while saving are not overwritten.
-  function rememberIds(ids) {
+  // New rows get their ids written back into the document, matched by key so changes made
+  // while saving are not overwritten.
+  function rememberEntryIds(ids) {
     let target = null;
     editor.state.doc.forEach((node, offset) => { if (node.type.name === 'attendance') target = { node, offset }; });
     if (!target) return;
@@ -376,6 +326,16 @@ const Minutes = (() => {
     editor.view.dispatch(editor.state.tr
       .setNodeMarkup(target.offset, undefined, { ...target.node.attrs, entries })
       .setMeta('addToHistory', false).setMeta('fromSync', true));
+  }
+
+  function rememberBlockIds(ids) {
+    let tr = editor.state.tr;
+    editor.state.doc.descendants((node, pos) => {
+      if ((node.type.name === 'motion' || node.type.name === 'action') && ids.has(node.attrs.key)) {
+        tr = tr.setNodeMarkup(pos, undefined, { ...node.attrs, rowId: ids.get(node.attrs.key) });
+      }
+    });
+    editor.view.dispatch(tr.setMeta('addToHistory', false).setMeta('fromSync', true));
   }
 
   async function flush() {
@@ -388,8 +348,9 @@ const Minutes = (() => {
       do {
         again = false;
         const atVersion = version;
-        const p = plan(derive(editor.state.doc));
-        if (!p.empty) { setSaveState('saving'); await apply(p); }
+        const desired = derive(editor.state.doc);
+        const p = plan(desired);
+        if (!p.empty) { setSaveState('saving'); await apply(p, desired); }
         flushedVersion = atVersion;
       } while (again || version !== flushedVersion);
       retryDelay = 5000;
@@ -457,28 +418,54 @@ const Minutes = (() => {
     box.classList.remove('hidden');
   }
 
-  // Put the unsaved notes and attendance back onto the freshly loaded document, matched
-  // by agenda item, so an agenda that changed in the meantime cannot break anything.
+  // Lay the unsaved work over the freshly loaded document, matched by id. Anything that is
+  // in the database but not in the draft is kept, so putting a draft back can never delete
+  // something that was saved from another tab or device in the meantime.
   function restoreDraft(draft, built) {
-    const oldSections = new Map();
-    let oldEntries = null;
+    const old = { sections: new Map(), entries: null };
     (draft.doc?.content ?? []).forEach((n) => {
-      if (n.type === 'section') oldSections.set(n.attrs?.rowId, n.content);
-      if (n.type === 'attendance') oldEntries = n.attrs?.entries;
+      if (n.type === 'section') old.sections.set(n.attrs?.rowId, n.content ?? []);
+      if (n.type === 'attendance') old.entries = n.attrs?.entries;
     });
+
+    const mergeSection = (section) => {
+      const draftContent = old.sections.get(section.attrs.rowId);
+      if (!draftContent) return section;
+      const draftParagraphs = draftContent.filter((c) => c.type === 'paragraph');
+      const draftBlocks = draftContent.filter((c) => c.type !== 'paragraph');
+      const builtBlocks = section.content.filter((c) => c.type !== 'paragraph');
+      const draftIds = new Set(draftBlocks.map((b) => b.attrs?.rowId).filter(Boolean));
+      return {
+        ...section,
+        content: [
+          ...(draftParagraphs.length ? draftParagraphs : section.content.filter((c) => c.type === 'paragraph')),
+          ...draftBlocks,
+          ...builtBlocks.filter((b) => !draftIds.has(b.attrs.rowId)),
+        ],
+      };
+    };
+
+    const mergeEntries = (entries) => {
+      if (!Array.isArray(old.entries)) return entries;
+      const byKey = new Map(old.entries.map((e) => [e.k, e]));
+      const merged = entries.map((e) => byKey.get(e.k) ?? e);
+      old.entries.forEach((e) => { if (!entries.some((x) => x.k === e.k)) merged.push(e); });
+      return merged;
+    };
+
     const merged = {
       ...built,
       content: built.content.map((n) => {
-        if (n.type === 'section' && oldSections.has(n.attrs.rowId)) return { ...n, content: oldSections.get(n.attrs.rowId) };
-        if (n.type === 'attendance' && Array.isArray(oldEntries)) return { ...n, attrs: { entries: oldEntries } };
+        if (n.type === 'section' && n.attrs.rowId) return mergeSection(n);
+        if (n.type === 'attendance') return { ...n, attrs: { entries: mergeEntries(n.attrs.entries) } };
         return n;
       }),
     };
-    editor.commands.setContent(merged);
-    version++;
+    const tr = editor.state.tr
+      .replaceWith(0, editor.state.doc.content.size, editor.schema.nodeFromJSON(merged).content)
+      .setMeta('allowBlockChange', true);
+    editor.view.dispatch(tr);
     setSaveState('dirty');
-    writeDraft();
-    scheduleFlush();
   }
 
   // ── Opening a meeting ──────────────────────────────────────────────────────
@@ -486,7 +473,7 @@ const Minutes = (() => {
   function destroyEditor() {
     clearTimeout(saveTimer); clearTimeout(draftTimer); clearTimeout(retryTimer);
     if (editor) { editor.destroy(); editor = null; }
-    saved = null; meeting = null;
+    blocks = null; saved = null; meeting = null;
     version = 0; flushedVersion = 0; flushing = false; again = false; blocked = false; retryDelay = 5000;
     $('editor').replaceChildren();
     $('minutes-draft').classList.add('hidden');
@@ -494,7 +481,7 @@ const Minutes = (() => {
 
   async function load(meetingId) {
     const db = ctx.client;
-    const [m, a, att, r] = await Promise.all([
+    const [m, a, att, r, mo, ac] = await Promise.all([
       db.from('meetings').select('id, title, meeting_date, start_time, location, status').eq('id', meetingId).maybeSingle(),
       db.from('agenda_items').select('id, title, notes, sort_order').eq('meeting_id', meetingId)
         .order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
@@ -502,10 +489,20 @@ const Minutes = (() => {
         .order('created_at', { ascending: true }),
       db.from('roster').select('id, name, role').eq('org_id', ctx.orgId).eq('status', 'active')
         .order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
+      db.from('motions').select('id, agenda_item_id, description, moved_by, seconded_by, mover_roster_id, seconder_roster_id, result, vote_tally, confirmed, sort_order')
+        .eq('meeting_id', meetingId).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
+      db.from('action_items').select('id, agenda_item_id, description, responsible_party, owner_roster_id, due_date_text, due_date_parsed, confirmed, sort_order')
+        .eq('meeting_id', meetingId).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
     ]);
-    for (const res of [m, a, att, r]) if (res.error) throw res.error;
-    return { meeting: m.data, agenda: a.data ?? [], attendance: att.data ?? [], roster: r.data ?? [] };
+    for (const res of [m, a, att, r, mo, ac]) if (res.error) throw res.error;
+    return { meeting: m.data, agenda: a.data ?? [], attendance: att.data ?? [], roster: r.data ?? [], motions: mo.data ?? [], actions: ac.data ?? [] };
   }
+
+  const currentEntries = () => {
+    let entries = [];
+    editor?.state.doc.forEach((n) => { if (n.type.name === 'attendance') entries = n.attrs.entries; });
+    return entries;
+  };
 
   async function open(meetingId) {
     const seq = ++loadSeq;
@@ -534,17 +531,22 @@ const Minutes = (() => {
     roster = loaded.roster;
 
     const entries = buildEntries(roster, loaded.attendance);
-    const built = buildDoc(meeting, loaded.agenda, entries);
+    const built = buildDoc(meeting, loaded.agenda, entries, loaded.motions, loaded.actions);
     saved = {
       notes: new Map(loaded.agenda.map((a) => [a.id, a.notes ?? ''])),
       attendance: new Map(loaded.attendance.map((r) => [r.id, { roster_id: r.roster_id, display_name: r.display_name, status: r.status, proxy_for_lot: r.proxy_for_lot ?? null }])),
+      motions: new Map(loaded.motions.map((r) => [r.id, motionFromRow(r)])),
+      actions: new Map(loaded.actions.map((r) => [r.id, actionFromRow(r)])),
+      maxOrder: Math.max(-1, ...loaded.motions.map((r) => r.sort_order), ...loaded.actions.map((r) => r.sort_order)),
     };
 
+    blocks = Blocks.create({ canManage: () => ctx.canManage, roster: () => roster, entries: currentEntries });
     editor = new TT.Editor({
       element: $('editor'),
-      extensions: [MinutesDocument, TT.Paragraph, TT.Text, TT.UndoRedo, Header, Attendance, Section, Guard],
+      extensions: blocks.extensions,
       content: built,
       onTransaction({ transaction }) {
+        if (transaction.docChanged) blocks.refreshAll();               // e.g. a warning about someone recorded absent
         if (!transaction.docChanged || transaction.getMeta('fromSync')) return;
         version++;
         blocked = false;
@@ -554,6 +556,7 @@ const Minutes = (() => {
       },
     });
 
+    blocks.refreshAll();                                               // warnings need the attendance block, which now exists
     const draft = readDraft();
     if (draft && JSON.stringify(draft.doc) !== JSON.stringify(built)) offerDraft(draft, built);
   }
