@@ -1,0 +1,16 @@
+{
+  "name": "minutehand-draft-tests",
+  "private": true,
+  "type": "module",
+  "description": "Developer-only tests for the draft-minutes function. Not part of the website.",
+  "scripts": {
+    "test": "node logic.test.mjs && node handler.test.mjs && node cap.test.mjs",
+    "test:logic": "node logic.test.mjs",
+    "test:handler": "node handler.test.mjs",
+    "test:cap": "node cap.test.mjs",
+    "test:live": "node live.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.0"
+  }
+}

@@ -201,10 +201,39 @@
             <div class="minutes-bar">
               <button id="minutes-back" type="button" class="btn-link">&larr; Back to the meeting</button>
               <span id="minutes-saved" class="save-state" role="status" aria-live="polite" data-state="saved"></span>
+              <button id="minutes-draft-btn" type="button" class="btn-primary btn-small hidden">Draft the minutes</button>
+            </div>
+            <div id="minutes-approved" class="status approved hidden">
+              <p>These minutes are approved, so they are locked. To change them, reopen them. Owners keep seeing the last approved version until you approve again.</p>
+              <button id="minutes-reopen" type="button" class="btn-ghost">Reopen to make changes</button>
             </div>
             <div id="minutes-status" class="status hidden" role="status"></div>
             <div id="minutes-draft" class="status hidden" role="status"></div>
             <div id="editor" class="editor"></div>
+          </div>
+        </div>
+
+        <div id="view-draft" class="view hidden">
+          <h2 class="pane-title">Draft minutes</h2>
+          <div class="page draft-page">
+            <div class="minutes-bar">
+              <button id="draft-back" type="button" class="btn-link">&larr; Back to the minutes</button>
+            </div>
+            <div id="draft-status" class="status hidden" role="status"></div>
+            <div id="draft-recover" class="status hidden" role="status"></div>
+            <div id="draft-approved" class="status approved hidden">
+              <p id="draft-approved-text"></p>
+              <button id="draft-reopen" type="button" class="btn-ghost">Reopen to make changes</button>
+            </div>
+            <div id="draft-body" class="hidden">
+              <div id="draft-gaps"></div>
+              <div id="draft-doc" class="draft-doc"></div>
+              <div class="draft-actions">
+                <button id="draft-approve" type="button" class="btn-primary">Approve the minutes</button>
+                <button id="draft-again" type="button" class="btn-ghost">Draft again</button>
+              </div>
+              <p id="draft-why" class="hint"></p>
+            </div>
           </div>
         </div>
 
@@ -287,6 +316,7 @@
   <script src="workspace-owner-copy.js"></script>
   <script src="workspace-blocks.js"></script>
   <script src="workspace-minutes.js"></script>
+  <script src="workspace-draft.js"></script>
   <script src="workspace-chat.js"></script>
   <script src="workspace.js"></script>
 </body>

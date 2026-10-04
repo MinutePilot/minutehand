@@ -399,6 +399,23 @@ const Minutes = (() => {
     saveTimer = setTimeout(flush, DEBOUNCE_MS);
   }
 
+  // True when everything the person has done is in the database (or nothing is open).
+  const isSaved = () => !editor || (version === flushedVersion && !flushing && !blocked);
+
+  // Approved minutes are locked so the approved record cannot change by accident. Nothing in the
+  // editor can be reached while locked; Reopen is the deliberate way back.
+  const isLocked = () => meeting?.status === 'approved';
+  function paintLock() {
+    const locked = isLocked();
+    $('minutes-approved').classList.toggle('hidden', !locked);
+    $('editor').inert = locked;
+    if (editor) editor.setEditable(!locked);
+    $('minutes-draft-btn').textContent = locked ? 'See the approved minutes' : 'Draft the minutes';
+    $('minutes-draft-btn').classList.toggle('hidden', !ctx?.canManage);
+    $('minutes-reopen').classList.toggle('hidden', !ctx?.canManage);
+    ctx?.onMinutes?.();
+  }
+
   // Also called by the page before signing out.
   async function flushNow() {
     clearTimeout(saveTimer);
@@ -501,6 +518,8 @@ const Minutes = (() => {
     version = 0; flushedVersion = 0; flushing = false; again = false; blocked = false; retryDelay = 5000;
     $('editor').replaceChildren();
     $('minutes-draft').classList.add('hidden');
+    $('minutes-approved').classList.add('hidden');
+    $('editor').inert = false;
     ctx?.onMinutes?.();
   }
 
@@ -584,7 +603,7 @@ const Minutes = (() => {
     });
 
     blocks.refreshAll();                                               // warnings need the attendance block, which now exists
-    ctx.onMinutes?.();
+    paintLock();
     const draft = readDraft();
     if (draft && JSON.stringify(draft.doc) !== JSON.stringify(built)) offerDraft(draft, built);
   }
@@ -605,14 +624,14 @@ const Minutes = (() => {
       const n = head.node(d);
       if (n.type.name === 'section') { currentId = n.attrs.virtual ? null : n.attrs.rowId; break; }
     }
-    return { meetingId: meeting.id, items, currentId };
+    return { meetingId: meeting.id, items, currentId, locked: isLocked() };
   }
 
   // Puts what the assistant found into one agenda item, all unconfirmed. Notes go in the notes,
   // motions and action items go at the end of the item. Returns how many of each were added.
   function addEntries(agendaId, entries) {
     const added = { note: 0, motion: 0, action: 0 };
-    if (!editor || !meeting) return added;
+    if (!editor || !meeting || isLocked()) return added;
     let at = null;
     editor.state.doc.forEach((n, offset) => { if (n.type.name === 'section' && n.attrs.rowId === agendaId) at = { node: n, pos: offset }; });
     if (!at) return added;
@@ -659,11 +678,20 @@ const Minutes = (() => {
     if (wired) return;
     wired = true;
     $('minutes-back').addEventListener('click', () => { if (meeting) ctx.openMeeting(meeting.id); else ctx.go('meetings'); });
+    $('minutes-draft-btn').addEventListener('click', () => { if (meeting) ctx.openDraft(meeting.id); });
+    $('minutes-reopen').addEventListener('click', async () => {
+      if (!meeting || $('minutes-reopen').disabled) return;
+      const id = meeting.id;
+      $('minutes-reopen').disabled = true;
+      const result = await ctx.reopen(id);
+      $('minutes-reopen').disabled = false;
+      if (result.ok) open(id); else status(result.message);
+    });
     window.addEventListener('online', () => { if (editor && version !== flushedVersion && !blocked) flush(); });
     window.addEventListener('beforeunload', (e) => {
       if (editor && (version !== flushedVersion || flushing)) { e.preventDefault(); e.returnValue = ''; }
     });
   }
 
-  return { init, open, flushNow, chatContext, addEntries };
+  return { init, open, flushNow, isSaved, chatContext, addEntries };
 })();
