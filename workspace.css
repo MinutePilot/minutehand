@@ -260,6 +260,40 @@ input[type="email"], input[type="password"], input[type="text"] {
 .agenda-add input { flex: 1; min-width: 0; }
 .delete-area { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 24px; }
 
+/* the minutes document */
+.title-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.minutes-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.save-state { font-size: 14px; color: var(--mh-text-secondary); }
+.save-state[data-state="saved"] { color: var(--mh-link-hover); }
+.save-state[data-state="dirty"], .save-state[data-state="saving"] { color: var(--mh-text-secondary); }
+.save-state[data-state="error"], .save-state[data-state="blocked"] { color: var(--mh-error); font-weight: 600; }
+#minutes-draft { flex-wrap: wrap; justify-content: flex-start; }
+#minutes-draft p { flex: 1 1 100%; }
+
+.editor { padding: 4px 0 40px; }
+.editor .ProseMirror { outline: none; }
+.doc-header h1 { margin: 12px 0 4px; font-size: 24px; color: var(--mh-heading); overflow-wrap: anywhere; }
+.doc-meta { margin: 0 0 16px; color: var(--mh-text-secondary); overflow-wrap: anywhere; }
+
+.att { margin: 8px 0 24px; padding: 12px 16px; border: 1px solid var(--mh-border); border-radius: 10px; background: var(--mh-bg-alt); }
+.att-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.pane .att-title, .pane .doc-section-title { margin: 0; padding: 0; font-size: 18px; letter-spacing: 0; text-transform: none; color: var(--mh-heading); }
+.att-list { list-style: none; margin: 8px 0; padding: 0; }
+.att-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--mh-border); }
+.att-name { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.att-meta { font-size: 14px; color: var(--mh-text-secondary); }
+.att-empty { color: var(--mh-text-secondary); padding: 6px 0; }
+.att select { padding: 6px 8px; font: inherit; border: 1px solid var(--mh-border); border-radius: 8px; background: #fff; }
+.att-guest { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.att-guest input { flex: 1 1 160px; min-width: 0; padding: 7px 10px; font: inherit; border: 1px solid var(--mh-border); border-radius: 8px; background: #fff; }
+
+.doc-section { margin: 0 0 24px; }
+.pane .doc-section-title { margin-bottom: 6px; }
+.doc-notes { min-height: 3em; padding: 4px 0; border-left: 3px solid var(--mh-border); padding-left: 12px; }
+.doc-notes p { margin: 0 0 8px; overflow-wrap: anywhere; }
+.doc-notes p:only-child:has(> br:only-child)::before { content: 'Notes for this item…'; float: left; height: 0; color: var(--mh-text-secondary); pointer-events: none; }
+.doc-notes:focus-within { border-left-color: var(--mh-accent); }
+
 /* ── Phone and narrow windows: one pane at a time ─────────────────────────── */
 
 @media (max-width: 899px) {

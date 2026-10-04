@@ -123,7 +123,7 @@ await test('a meeting needs a date, and a blank title falls back to the standard
   await page.fill('#mf-date', '2026-11-04');
   await page.fill('#mf-title', '   ');
   await page.click('#meeting-create');
-  await page.waitForSelector('#view-meeting:visible');
+  await page.waitForSelector('#agenda-list li');
   assert.equal(await page.locator('#meeting-heading').innerText(), 'Council Meeting');
   await ctx.close();
 });

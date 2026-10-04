@@ -47,7 +47,7 @@ const Meetings = (() => {
 
   // ── Guarding against double clicks ─────────────────────────────────────────
 
-  const STATIC_BUTTONS = ['meeting-new', 'meeting-create', 'meeting-form-cancel', 'meeting-back', 'meeting-edit',
+  const STATIC_BUTTONS = ['meeting-run', 'meeting-new', 'meeting-create', 'meeting-form-cancel', 'meeting-back', 'meeting-edit',
                           'meeting-edit-save', 'meeting-edit-cancel', 'agenda-standard', 'agenda-add-btn'];
 
   function setBusy(on) {
@@ -238,6 +238,7 @@ const Meetings = (() => {
 
     $('meeting-heading').textContent = current.title || 'Untitled meeting';
     $('meeting-summary').textContent = summary(current);
+    $('meeting-run').textContent = current.status === 'planned' ? 'Start the meeting' : 'Open the minutes';
     const badge = $('meeting-badge');
     badge.textContent = STATUS_LABELS[current.status] ?? current.status;
     badge.className = `badge badge-${current.status}`;
@@ -380,6 +381,19 @@ const Meetings = (() => {
     });
   }
 
+  // Starting moves a planned meeting to "in progress", then opens the minutes.
+  async function runMeeting() {
+    if (busy) return;
+    let ok = true;
+    await guarded(async () => {
+      if (current.status !== 'planned') return;
+      const { error } = await ctx.client.from('meetings').update({ status: 'in_progress' }).eq('id', current.id);
+      if (error) { console.error(error); meetingStatus(UI.saveFailure(error, 'that')); ok = false; return; }
+      current.status = 'in_progress';
+    });
+    if (ok) ctx.openMinutes(current.id);
+  }
+
   // ── Meeting details and deleting ───────────────────────────────────────────
 
   const editError = (text) => { $('meeting-edit-error').textContent = text ?? ''; $('meeting-edit-error').classList.toggle('hidden', !text); };
@@ -456,6 +470,7 @@ const Meetings = (() => {
     $('meeting-form-cancel').addEventListener('click', closeNewForm);
     $('meeting-form').addEventListener('submit', createMeeting);
     $('meeting-back').addEventListener('click', () => ctx.go('meetings'));
+    $('meeting-run').addEventListener('click', runMeeting);
     $('meeting-edit').addEventListener('click', openEditForm);
     $('meeting-edit-cancel').addEventListener('click', () => $('meeting-edit-form').classList.add('hidden'));
     $('meeting-edit-form').addEventListener('submit', saveDetails);
@@ -463,5 +478,5 @@ const Meetings = (() => {
     $('agenda-standard').addEventListener('click', useStandardAgenda);
   }
 
-  return { init, openList };
+  return { init, openList, openMeeting, summary };
 })();
