@@ -140,7 +140,10 @@
                 <span id="meeting-badge" class="badge"></span>
               </div>
               <p id="meeting-summary" class="meeting-summary"></p>
-              <button id="meeting-edit" type="button" class="btn-ghost btn-small">Edit details</button>
+              <div class="title-actions">
+                <button id="meeting-run" type="button" class="btn-primary">Start the meeting</button>
+                <button id="meeting-edit" type="button" class="btn-ghost btn-small">Edit details</button>
+              </div>
 
               <form id="meeting-edit-form" class="panel-form hidden" novalidate>
                 <div class="form-grid">
@@ -184,8 +187,21 @@
               <p id="agenda-error" class="error hidden" role="alert"></p>
             </section>
 
-            <p class="hint">Running the meeting from this agenda comes in the next step.</p>
+            <p class="hint">Start the meeting when everyone is ready. You can come back to the agenda at any time.</p>
             <div id="meeting-delete-area" class="delete-area"></div>
+          </div>
+        </div>
+
+        <div id="view-minutes" class="view hidden">
+          <h2 class="pane-title">Minutes</h2>
+          <div class="page minutes-page">
+            <div class="minutes-bar">
+              <button id="minutes-back" type="button" class="btn-link">&larr; Back to the meeting</button>
+              <span id="minutes-saved" class="save-state" role="status" aria-live="polite" data-state="saved"></span>
+            </div>
+            <div id="minutes-status" class="status hidden" role="status"></div>
+            <div id="minutes-draft" class="status hidden" role="status"></div>
+            <div id="editor" class="editor"></div>
           </div>
         </div>
 
@@ -263,7 +279,9 @@
   <script src="workspace-ui.js"></script>
   <script src="workspace-agenda-templates.js"></script>
   <script src="workspace-roster.js"></script>
+  <script src="vendor/tiptap.bundle.js"></script>
   <script src="workspace-meetings.js"></script>
+  <script src="workspace-minutes.js"></script>
   <script src="workspace.js"></script>
 </body>
 </html>

@@ -130,7 +130,10 @@ function renderApp(user, org, role) {
   Roster.init({ client: supabaseClient, orgId: org.id, canManage });
   Meetings.init({
     client: supabaseClient, orgId: org.id, orgType: org.org_type ?? 'STRATA',
-    userId: user.id, canManage, go: setView,
+    userId: user.id, canManage, go: setView, openMinutes: (id) => Minutes.open(id),
+  });
+  Minutes.init({
+    client: supabaseClient, orgId: org.id, canManage, go: setView, openMeeting: (id) => Meetings.openMeeting(id),
   });
   setView('meetings');
 }
@@ -150,8 +153,8 @@ document.querySelectorAll('.pane-tabs [role="tab"]').forEach((tab) => {
 
 // ── What the main area shows: the meetings, one meeting, or the roster ──────
 
-const VIEW_LABELS = { meetings: 'Meetings', meeting: 'Meeting', roster: 'Roster' };
-const MENU_FOR = { meetings: 'meetings', meeting: 'meetings', roster: 'roster' };
+const VIEW_LABELS = { meetings: 'Meetings', meeting: 'Meeting', minutes: 'Minutes', roster: 'Roster' };
+const MENU_FOR = { meetings: 'meetings', meeting: 'meetings', minutes: 'meetings', roster: 'roster' };
 
 function setView(name) {
   Object.keys(VIEW_LABELS).forEach((v) => $(`view-${v}`).classList.toggle('hidden', v !== name));
@@ -216,6 +219,7 @@ signinForm.addEventListener('submit', async (e) => {
 });
 
 async function signOut() {
+  try { await Minutes.flushNow(); } catch (err) { console.error(err); }   // save what can be saved first
   try { await supabaseClient.auth.signOut(); } catch (err) { console.error(err); }
   shownForUserId = null;
   showState('signin');

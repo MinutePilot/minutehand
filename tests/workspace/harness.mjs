@@ -55,7 +55,7 @@ function rosterApi(route, req, url, s, seen) {
   const eq = (col) => { const v = url.searchParams.get(col); return v?.startsWith('eq.') ? v.slice(3) : null; };
   if (method === 'GET') {
     if (s.rosterReadFail) return route.abort('failed');
-    const rows = s.roster.filter((m) => !eq('org_id') || eq('org_id') === s.org.id)
+    const rows = s.roster.filter((m) => (!eq('org_id') || eq('org_id') === s.org.id) && (!eq('status') || eq('status') === m.status))
       .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
     return json(route, rows);
   }
@@ -80,7 +80,7 @@ function rosterApi(route, req, url, s, seen) {
 let nextId = 1000;
 function tableApi(table, route, req, url, s, seen) {
   const method = req.method();
-  const store = table === 'meetings' ? 'meetings' : 'agenda';
+  const store = table === 'meetings' ? 'meetings' : table === 'attendance' ? 'attendance' : 'agenda';
   const eqs = [...url.searchParams].filter(([k, v]) => v.startsWith('eq.')).map(([k, v]) => [k, v.slice(3)]);
   const matches = (row) => eqs.every(([k, v]) => String(row[k]) === v);
   const wantsObject = (req.headers()['accept'] ?? '').includes('vnd.pgrst.object');
@@ -129,7 +129,7 @@ function tableApi(table, route, req, url, s, seen) {
   if (method === 'DELETE') {
     const gone = s[store].filter(matches).map((r) => r.id);
     s[store] = s[store].filter((r) => !gone.includes(r.id));
-    if (table === 'meetings') s.agenda = s.agenda.filter((a) => !gone.includes(a.meeting_id));   // cascade
+    if (table === 'meetings') { s.agenda = s.agenda.filter((a) => !gone.includes(a.meeting_id)); s.attendance = s.attendance.filter((a) => !gone.includes(a.meeting_id)); }   // cascade
     return route.fulfill({ status: 204, headers: cors });
   }
   return json(route, { message: 'unexpected call' }, 500);
@@ -147,7 +147,7 @@ function orgApi(route, req, s, seen) {
 
 export async function open(browser, scenario = {}, { viewport = { width: 1280, height: 800 }, signedIn = true } = {}) {
   const s = { org: { id: 'org-1', name: 'Parkview Terrace Strata', org_type: 'STRATA' }, role: 'owner', beta: true,
-              password: 'correct-horse', roster: [], meetings: [], agenda: [], orgDefaults: { default_meeting_time: null, default_location: null },
+              password: 'correct-horse', roster: [], meetings: [], agenda: [], attendance: [], orgDefaults: { default_meeting_time: null, default_location: null },
               fail: {}, ...scenario };
   s.roster = s.roster.map((m, i) => ({ role: 'Director', strata_lot: null, email: null, term_start: null,
                                        term_end: null, status: 'active', sort_order: i, ...m,
@@ -160,7 +160,8 @@ export async function open(browser, scenario = {}, { viewport = { width: 1280, h
 
   s.meetings = s.meetings.map((m, i) => ({ org_id: s.org?.id, status: 'planned', meeting_date: null, start_time: null, location: null,
                                            title: 'Meeting', created_at: `2026-02-01T00:00:0${i}Z`, id: `mt${i + 1}`, ...m }));
-  s.agenda = s.agenda.map((a, i) => ({ org_id: s.org?.id, sort_order: i, created_at: `2026-02-01T00:01:0${i % 10}Z`, id: `ag${i + 1}`, ...a }));
+  s.agenda = s.agenda.map((a, i) => ({ org_id: s.org?.id, sort_order: i, notes: '', created_at: `2026-02-01T00:01:0${i % 10}Z`, id: `ag${i + 1}`, ...a }));
+  s.attendance = s.attendance.map((a, i) => ({ org_id: s.org?.id, roster_id: null, proxy_for_lot: null, status: 'present', created_at: `2026-02-01T00:02:0${i % 10}Z`, id: `at${i + 1}`, ...a }));
 
   await page.route('https://cdn.jsdelivr.net/**', (route) =>
     route.fulfill({ status: 200, contentType: 'text/javascript', body: fs.readFileSync(umd) }));
@@ -189,6 +190,7 @@ export async function open(browser, scenario = {}, { viewport = { width: 1280, h
     if (url.pathname === '/rest/v1/roster') return rosterApi(route, req, url, s, seen);
     if (url.pathname === '/rest/v1/meetings') return tableApi('meetings', route, req, url, s, seen);
     if (url.pathname === '/rest/v1/agenda_items') return tableApi('agenda_items', route, req, url, s, seen);
+    if (url.pathname === '/rest/v1/attendance') return tableApi('attendance', route, req, url, s, seen);
     if (url.pathname === '/rest/v1/organizations') return orgApi(route, req, s, seen);
     if (url.pathname === '/rest/v1/workspace_beta') {
       return json(route, s.beta ? [{ org_id: s.org.id }] : []);
